@@ -1,63 +1,27 @@
-import { useScenarioStore } from '@/store/scenarioStore';
-
 export function StructureForm() {
-  const { scenario, updateStructure } = useScenarioStore();
-  const structure = scenario.structures[0];
-
-  if (!structure) return null;
-
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-gray-900">Structure juridique</h3>
+      <h3 className="text-lg font-semibold text-gray-900">Comparaison de scenarios</h3>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Nom de la structure
-          </label>
-          <input
-            type="text"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            value={structure.name}
-            onChange={(e) => updateStructure(0, { name: e.target.value })}
-          />
+      <div className="space-y-3">
+        <div className="p-3 rounded-md bg-blue-50 border border-blue-200">
+          <p className="text-sm font-medium text-blue-900">Scenario A — Holding + SCI a l'IS</p>
+          <p className="text-xs text-blue-700 mt-1">
+            Holding detient 95% d'une SCI soumise a l'IS. Amortissement deductible, dividendes via regime mere-fille.
+          </p>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Type
-          </label>
-          <select
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            value={structure.type}
-            onChange={(e) => {
-              const type = e.target.value as 'SCI_IS' | 'SCI_IR' | 'HOLDING' | 'INDIVIDUAL';
-              const taxRegime = (type === 'SCI_IR' || type === 'INDIVIDUAL') ? 'IR' : 'IS';
-              updateStructure(0, { type, taxRegime });
-            }}
-          >
-            <option value="SCI_IS">SCI a l'IS</option>
-            <option value="SCI_IR">SCI a l'IR</option>
-            <option value="HOLDING">Holding</option>
-            <option value="INDIVIDUAL">Nom propre</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Part de detention (%)
-          </label>
-          <input
-            type="number"
-            min={0}
-            max={100}
-            step={1}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-            value={Math.round((structure.ownershipShare ?? 1) * 100)}
-            onChange={(e) => updateStructure(0, { ownershipShare: (parseInt(e.target.value) || 100) / 100 })}
-          />
+        <div className="p-3 rounded-md bg-amber-50 border border-amber-200">
+          <p className="text-sm font-medium text-amber-900">Scenario B — SCI a l'IR (transparence)</p>
+          <p className="text-xs text-amber-700 mt-1">
+            SCI soumise a l'IR en direct. Pas d'amortissement, imposition au bareme progressif + prelevements sociaux.
+          </p>
         </div>
       </div>
+
+      <p className="text-xs text-gray-500">
+        Les deux scenarios partagent le meme bien, le meme pret et le meme profil fiscal.
+      </p>
     </div>
   );
 }

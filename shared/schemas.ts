@@ -83,6 +83,7 @@ export const SimulationParamsSchema = z.object({
   rentGrowthRate: z.number().min(0).max(0.2).default(0.02),
   chargesGrowthRate: z.number().min(0).max(0.2).default(0.02),
   propertyTaxGrowthRate: z.number().min(0).max(0.2).default(0.02),
+  dividendDistributionRate: z.number().min(0).max(1).default(0),
 });
 export type SimulationParams = z.infer<typeof SimulationParamsSchema>;
 

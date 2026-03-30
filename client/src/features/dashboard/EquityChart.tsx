@@ -11,23 +11,36 @@ import {
 import type { SimulationResult } from '@shared/schemas.js';
 
 interface EquityChartProps {
-  result: SimulationResult;
+  resultA: SimulationResult;
+  resultB?: SimulationResult | null;
 }
 
-export function EquityChart({ result }: EquityChartProps) {
-  const entityName = Object.keys(result.yearlyData[0]?.entities ?? {})[0];
-  if (!entityName) return null;
+function getEntityValues(result: SimulationResult, year: number) {
+  const yearData = result.yearlyData.find(y => y.year === year);
+  if (!yearData) return { marketValue: 0, debt: 0 };
 
-  const data = result.yearlyData.map((y) => {
-    const entity = y.entities[entityName];
-    const marketValue = parseFloat(entity?.assetMarketValue ?? '0');
-    const debt = parseFloat(entity?.remainingDebt ?? '0');
-    return {
+  let marketValue = 0;
+  let debt = 0;
+  for (const entity of Object.values(yearData.entities)) {
+    marketValue += parseFloat(entity.assetMarketValue);
+    debt += parseFloat(entity.remainingDebt);
+  }
+  return { marketValue, debt };
+}
+
+export function EquityChart({ resultA, resultB }: EquityChartProps) {
+  const data = resultA.yearlyData.map((y) => {
+    const a = getEntityValues(resultA, y.year);
+    const row: Record<string, number> = {
       annee: y.year,
-      'Valeur de marche': marketValue,
-      'Capital restant du': debt,
-      'Equity nette': marketValue - debt,
+      'Valeur de marche': a.marketValue,
+      'IS — Equity nette': a.marketValue - a.debt,
     };
+    if (resultB) {
+      const b = getEntityValues(resultB, y.year);
+      row['IR — Equity nette'] = b.marketValue - b.debt;
+    }
+    return row;
   });
 
   const formatEur = (val: number) =>
@@ -43,9 +56,11 @@ export function EquityChart({ result }: EquityChartProps) {
           <YAxis tickFormatter={formatEur} width={100} />
           <Tooltip formatter={(val: number) => formatEur(val)} />
           <Legend />
-          <Area type="monotone" dataKey="Valeur de marche" fill="#bfdbfe" stroke="#3b82f6" />
-          <Area type="monotone" dataKey="Capital restant du" fill="#fecaca" stroke="#ef4444" />
-          <Area type="monotone" dataKey="Equity nette" fill="#bbf7d0" stroke="#22c55e" strokeWidth={2} />
+          <Area type="monotone" dataKey="Valeur de marche" fill="#e0e7ff" stroke="#a5b4fc" strokeDasharray="5 5" />
+          <Area type="monotone" dataKey="IS — Equity nette" fill="#bfdbfe" stroke="#3b82f6" strokeWidth={2} fillOpacity={0.4} />
+          {resultB && (
+            <Area type="monotone" dataKey="IR — Equity nette" fill="#fef3c7" stroke="#f59e0b" strokeWidth={2} fillOpacity={0.4} />
+          )}
         </AreaChart>
       </ResponsiveContainer>
     </div>

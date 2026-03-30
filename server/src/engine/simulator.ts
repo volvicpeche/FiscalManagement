@@ -126,6 +126,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
   const chargesGrowth = d(params.chargesGrowthRate ?? 0.02);
   const propTaxGrowth = d(params.propertyTaxGrowthRate ?? 0.02);
   const propertyGrowth = d(params.propertyGrowth ?? 0.015);
+  const dividendRate = d(params.dividendDistributionRate ?? 0);
 
   // Flatten the structure tree
   const flatEntities = flattenStructures(structures);
@@ -312,14 +313,43 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       totalTaxPaid = totalTaxPaid.plus(userIRTax).plus(userPSTax);
     }
 
-    // ── User net dividend (simplified: no distribution in this version) ──────
-    // TODO: Add dividend distribution slider logic
-    const userNetDividend = d(0);
+    // ── User net dividend (Holding -> User distribution) ────────────────────
+    let userNetDividend = d(0);
+    let dividendTax = d(0);
+
+    if (dividendRate.gt(0)) {
+      // Find top-level IS entities (Holdings or standalone SCI IS) with positive cash
+      for (const [, state] of entityStates) {
+        const isTopLevel = !parentMap.has(state.name);
+        if (isTopLevel && state.taxRegime === 'IS' && state.accumulatedCash.gt(0)) {
+          const grossDividend = state.accumulatedCash.mul(dividendRate);
+          if (grossDividend.gt(0)) {
+            // Compare PFU vs Bareme, pick cheapest
+            const regime = userProfile.socialChargeRegime ?? 'STANDARD';
+            const pfuTax = computePFU(grossDividend, regime);
+            const baremeTax = computeDividendBareme(
+              grossDividend,
+              yearIRFoncierIncome, // other income for marginal rate
+              userProfile.maritalStatus,
+              userProfile.childrenCount,
+              regime,
+            );
+            const bestTax = Decimal.min(pfuTax, baremeTax);
+
+            userNetDividend = userNetDividend.plus(grossDividend.minus(bestTax));
+            dividendTax = dividendTax.plus(bestTax);
+            state.accumulatedCash = state.accumulatedCash.minus(grossDividend);
+          }
+        }
+      }
+      totalTaxPaid = totalTaxPaid.plus(dividendTax);
+    }
 
     yearTotalNetCashFlow = yearTotalNetCashFlow
       .minus(ifiTax)
       .minus(userIRTax)
-      .minus(userPSTax);
+      .minus(userPSTax)
+      .plus(userNetDividend);
 
     yearlyData.push({
       year,

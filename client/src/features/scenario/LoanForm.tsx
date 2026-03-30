@@ -1,8 +1,9 @@
-import { useScenarioStore } from '@/store/scenarioStore';
+import { useScenarioStore, getFirstAsset } from '@/store/scenarioStore';
 
 export function LoanForm() {
-  const { scenario, updateLoan } = useScenarioStore();
-  const loan = scenario.structures[0]?.assets[0]?.loan;
+  const { scenarioA, updateLoanA } = useScenarioStore();
+  const asset = getFirstAsset(scenarioA);
+  const loan = asset?.loan;
 
   if (!loan) return null;
 
@@ -22,7 +23,7 @@ export function LoanForm() {
             value={parseFloat(loan.principal)}
             onChange={(e) => {
               const num = parseFloat(e.target.value);
-              if (!isNaN(num)) updateLoan(0, 0, { principal: num.toFixed(2) });
+              if (!isNaN(num)) updateLoanA(0, 0, { principal: num.toFixed(2) });
             }}
           />
         </div>
@@ -40,7 +41,7 @@ export function LoanForm() {
             value={((loan.interestRate ?? 0) * 100).toFixed(2)}
             onChange={(e) => {
               const pct = parseFloat(e.target.value);
-              if (!isNaN(pct)) updateLoan(0, 0, { interestRate: pct / 100 });
+              if (!isNaN(pct)) updateLoanA(0, 0, { interestRate: pct / 100 });
             }}
           />
         </div>
@@ -58,7 +59,7 @@ export function LoanForm() {
             value={((loan.insuranceRate ?? 0) * 100).toFixed(2)}
             onChange={(e) => {
               const pct = parseFloat(e.target.value);
-              if (!isNaN(pct)) updateLoan(0, 0, { insuranceRate: pct / 100 });
+              if (!isNaN(pct)) updateLoanA(0, 0, { insuranceRate: pct / 100 });
             }}
           />
         </div>
@@ -76,7 +77,7 @@ export function LoanForm() {
             value={Math.round((loan.durationMonths ?? 240) / 12)}
             onChange={(e) => {
               const years = parseInt(e.target.value);
-              if (!isNaN(years)) updateLoan(0, 0, { durationMonths: years * 12 });
+              if (!isNaN(years)) updateLoanA(0, 0, { durationMonths: years * 12 });
             }}
           />
         </div>
@@ -88,7 +89,7 @@ export function LoanForm() {
           <select
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
             value={loan.type}
-            onChange={(e) => updateLoan(0, 0, { type: e.target.value as 'AMORTISSABLE' | 'INFINE' })}
+            onChange={(e) => updateLoanA(0, 0, { type: e.target.value as 'AMORTISSABLE' | 'INFINE' })}
           >
             <option value="AMORTISSABLE">Amortissable</option>
             <option value="INFINE">In fine</option>

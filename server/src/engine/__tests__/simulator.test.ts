@@ -45,6 +45,7 @@ const baseRequest: SimulationRequest = {
     rentGrowthRate: 0.02,
     chargesGrowthRate: 0.02,
     propertyTaxGrowthRate: 0.02,
+    dividendDistributionRate: 0,
   },
 };
 
@@ -150,5 +151,61 @@ describe('runSimulation', () => {
     // Net real estate > 1.3M, so IFI should be > 0
     const ifiYear1 = parseFloat(result.yearlyData[0].ifiTax);
     expect(ifiYear1).toBeGreaterThan(0);
+  });
+
+  it('should distribute dividends when dividendDistributionRate > 0', () => {
+    // High-rent asset so entity accumulates positive cash quickly
+    const divRequest: SimulationRequest = {
+      ...baseRequest,
+      structures: [
+        {
+          ...baseRequest.structures[0],
+          assets: [
+            {
+              ...baseRequest.structures[0].assets[0],
+              annualRent: '24000.00', // High rent to ensure positive cash
+            },
+          ],
+        },
+      ],
+      params: {
+        ...baseRequest.params,
+        horizonYears: 10,
+        dividendDistributionRate: 0.5,
+      },
+    };
+
+    const result = runSimulation(divRequest);
+    // With high rent, entity should have positive cash and distribute dividends
+    const hasDividends = result.yearlyData.some(y => parseFloat(y.userNetDividend) > 0);
+    expect(hasDividends).toBe(true);
+  });
+
+  it('should handle Holding + SCI hierarchy with Mere-Fille', () => {
+    const holdingRequest: SimulationRequest = {
+      userProfile: baseRequest.userProfile,
+      structures: [
+        {
+          name: 'Holding',
+          type: 'HOLDING',
+          taxRegime: 'IS',
+          ownershipShare: 1.0,
+          assets: [],
+          subsidiaries: [
+            {
+              ...baseRequest.structures[0],
+              name: 'SCI Fille',
+              ownershipShare: 0.95,
+            },
+          ],
+        },
+      ],
+      params: { ...baseRequest.params, horizonYears: 10, dividendDistributionRate: 0.3 },
+    };
+
+    const result = runSimulation(holdingRequest);
+    expect(result.yearlyData).toHaveLength(10);
+    expect(result.yearlyData[0].entities['SCI Fille']).toBeDefined();
+    expect(result.yearlyData[0].entities['Holding']).toBeDefined();
   });
 });

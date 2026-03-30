@@ -1,8 +1,8 @@
 import { useScenarioStore } from '@/store/scenarioStore';
 
 export function ParamsForm() {
-  const { scenario, updateParams } = useScenarioStore();
-  const params = scenario.params;
+  const { scenarioA, updateParamsA } = useScenarioStore();
+  const params = scenarioA.params;
 
   const pctField = (
     label: string,
@@ -20,7 +20,7 @@ export function ParamsForm() {
         value={(((params[key] as number) ?? 0) * 100).toFixed(1)}
         onChange={(e) => {
           const pct = parseFloat(e.target.value);
-          if (!isNaN(pct)) updateParams({ [key]: pct / 100 });
+          if (!isNaN(pct)) updateParamsA({ [key]: pct / 100 });
         }}
       />
     </div>
@@ -43,7 +43,7 @@ export function ParamsForm() {
             value={params.horizonYears}
             onChange={(e) => {
               const v = parseInt(e.target.value);
-              if (!isNaN(v)) updateParams({ horizonYears: v });
+              if (!isNaN(v)) updateParamsA({ horizonYears: v });
             }}
           />
         </div>
@@ -53,6 +53,26 @@ export function ParamsForm() {
         {pctField('Evolution taxe fonciere (%)', 'propertyTaxGrowthRate')}
         {pctField('Croissance immobiliere (%)', 'propertyGrowth')}
         {pctField('Inflation generale (%)', 'inflationRate')}
+      </div>
+
+      {/* Dividend slider */}
+      <div className="pt-2 border-t">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Distribution de dividendes (Holding → Associe) : {Math.round(((params.dividendDistributionRate as number) ?? 0) * 100)}%
+        </label>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={5}
+          className="w-full accent-blue-600"
+          value={Math.round(((params.dividendDistributionRate as number) ?? 0) * 100)}
+          onChange={(e) => updateParamsA({ dividendDistributionRate: parseInt(e.target.value) / 100 })}
+        />
+        <div className="flex justify-between text-xs text-gray-400 mt-1">
+          <span>0% (capitalisation)</span>
+          <span>100% (distribution totale)</span>
+        </div>
       </div>
     </div>
   );
