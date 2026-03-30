@@ -1,11 +1,14 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import { simulationRoutes } from './routes/simulation.js';
 
 const server = Fastify({ logger: true });
 
 await server.register(cors, {
   origin: 'http://localhost:5173',
 });
+
+await server.register(simulationRoutes);
 
 server.get('/api/health', async () => {
   return { status: 'ok' };
