@@ -1,0 +1,141 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ─── User ────────────────────────────────────────────────────────────────────
+
+model User {
+  id                 String             @id @default(uuid())
+  email              String             @unique
+  passwordHash       String
+  createdAt          DateTime           @default(now())
+
+  // Tax Profile
+  marginalTaxRate    Float              @default(0.30)
+  maritalStatus      MaritalStatus      @default(SINGLE)
+  childrenCount      Int                @default(0)
+  birthDate          DateTime?
+  socialChargeRegime SocialChargeRegime @default(STANDARD)
+
+  structures         Structure[]
+  simulations        Simulation[]
+}
+
+// ─── Corporate Structures ────────────────────────────────────────────────────
+
+model Structure {
+  id             String        @id @default(uuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id])
+
+  name           String
+  type           StructureType
+  taxRegime      TaxRegime     @default(IS)
+
+  // Hierarchy for Holding -> SCI ownership
+  parentId       String?
+  parent         Structure?    @relation("Hierarchy", fields: [parentId], references: [id])
+  subsidiaries   Structure[]   @relation("Hierarchy")
+  ownershipShare Float         @default(1.0)
+
+  assets         Asset[]
+}
+
+// ─── Assets ──────────────────────────────────────────────────────────────────
+
+model Asset {
+  id              String    @id @default(uuid())
+  structureId     String
+  structure       Structure @relation(fields: [structureId], references: [id])
+
+  type            AssetType @default(REAL_ESTATE)
+  label           String
+  purchasePrice   Decimal   @db.Decimal(20, 2)
+  notaryFees      Decimal   @db.Decimal(20, 2)
+  renovationCosts Decimal   @db.Decimal(20, 2)
+  acquisitionDate DateTime
+
+  // Real Estate Specifics
+  annualRent      Decimal   @db.Decimal(20, 2)
+  chargesYearly   Decimal   @db.Decimal(20, 2)
+  propertyTax     Decimal   @db.Decimal(20, 2)
+
+  loan            Loan?
+}
+
+// ─── Loans ───────────────────────────────────────────────────────────────────
+
+model Loan {
+  id            String   @id @default(uuid())
+  assetId       String   @unique
+  asset         Asset    @relation(fields: [assetId], references: [id])
+
+  principal     Decimal  @db.Decimal(20, 2)
+  interestRate  Float
+  insuranceRate Float
+  durationMonths Int
+  startDate     DateTime
+  type          LoanType @default(AMORTISSABLE)
+}
+
+// ─── Simulations ─────────────────────────────────────────────────────────────
+
+model Simulation {
+  id                    String   @id @default(uuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id])
+  name                  String
+  createdAt             DateTime @default(now())
+
+  // Simulation parameters
+  horizonYears          Int      @default(30)
+  inflationRate         Float    @default(0.02)
+  propertyGrowth        Float    @default(0.015)
+  rentGrowthRate        Float    @default(0.02)
+  chargesGrowthRate     Float    @default(0.02)
+  propertyTaxGrowthRate Float    @default(0.02)
+
+  // Cached result of the engine run
+  results               Json?
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum StructureType {
+  HOLDING
+  SCI_IS
+  SCI_IR
+  INDIVIDUAL
+}
+
+enum TaxRegime {
+  IS
+  IR
+}
+
+enum AssetType {
+  REAL_ESTATE
+  FINANCIAL
+  CASH
+}
+
+enum LoanType {
+  AMORTISSABLE
+  INFINE
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  PACSED
+}
+
+enum SocialChargeRegime {
+  STANDARD
+  SWISS_EXEMPT
+}
