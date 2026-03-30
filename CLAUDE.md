@@ -93,6 +93,11 @@ The entire UI must be in **French** — all labels, buttons, tooltips, error mes
 - Structures support parent-child hierarchy (Holding → SCI) with ownership shares.
 - All API inputs must be validated with Zod schemas.
 
+## Git Workflow
+
+- **Create a new branch for each implementation phase** (e.g., `dev/phase1-setup`, `dev/phase2-engine`, `dev/phase3-api`, `dev/phase4-frontend`).
+- Commit and push at the end of each phase before starting the next one.
+
 ## Implementation Order
 
 Follow the phased approach: (1) Database & shared types → (2) Core engine with tests (do not proceed until math tests pass) → (3) Backend API → (4) Frontend.
