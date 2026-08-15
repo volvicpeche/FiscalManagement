@@ -1,4 +1,4 @@
-import { useScenarioStore, getFirstAsset } from '@/store/scenarioStore';
+import { useScenarioStore } from '@/store/scenarioStore';
 
 function toDecimalStr(value: string): string {
   const num = parseFloat(value);
@@ -7,13 +7,12 @@ function toDecimalStr(value: string): string {
 }
 
 export function AssetForm() {
-  const { scenarioA, updateAssetA } = useScenarioStore();
-  const asset = getFirstAsset(scenarioA);
+  const { asset, updateAsset } = useScenarioStore();
 
   if (!asset) return null;
 
   const handleChange = (field: string, value: string) => {
-    updateAssetA(0, 0, { [field]: toDecimalStr(value) });
+    updateAsset({ [field]: toDecimalStr(value) });
   };
 
   return (
@@ -29,7 +28,7 @@ export function AssetForm() {
             type="text"
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
             value={asset.label}
-            onChange={(e) => updateAssetA(0, 0, { label: e.target.value })}
+            onChange={(e) => updateAsset({ label: e.target.value })}
           />
         </div>
 

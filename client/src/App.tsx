@@ -1,38 +1,84 @@
-import { useScenarioStore } from '@/store/scenarioStore';
+import type { ScenarioProfile } from '@shared/schemas.js';
+import {
+  useScenarioStore,
+  selectSharedInputs,
+  buildScenario,
+  partsAreValid,
+  hasAnyResult,
+} from '@/store/scenarioStore';
 import { useSimulation } from '@/hooks/useSimulation';
-import { UserProfileForm, StructureForm, AssetForm, LoanForm, ParamsForm } from '@/features/scenario';
-import { KpiCards, CashFlowChart, EquityChart, TaxBreakdownChart } from '@/features/dashboard';
+import { PROFILE_ORDER } from '@/lib/profiles';
+import {
+  UserProfileForm,
+  StructureForm,
+  AssociesForm,
+  AssetForm,
+  LoanForm,
+  CostsForm,
+  SuccessionForm,
+  ParamsForm,
+} from '@/features/scenario';
+import {
+  KpiCards,
+  CashFlowChart,
+  EquityChart,
+  TaxBreakdownChart,
+  CostsChart,
+  SuccessionCard,
+} from '@/features/dashboard';
+
+function Panel({ children }: { children: React.ReactNode }) {
+  return <div className="bg-white rounded-lg border p-4">{children}</div>;
+}
 
 function App() {
-  const { scenarioA, scenarioB, resultA, resultB, setResultA, setResultB, syncSharedFields } = useScenarioStore();
-  const simA = useSimulation();
-  const simB = useSimulation();
+  const store = useScenarioStore();
+  const { associes, results, setResult } = store;
 
-  const isPending = simA.isPending || simB.isPending;
-
-  const handleRun = () => {
-    syncSharedFields();
-    simA.mutate(scenarioA, { onSuccess: (data) => setResultA(data) });
-    simB.mutate(scenarioB, { onSuccess: (data) => setResultB(data) });
+  // One mutation per profile so they run in parallel and report independently.
+  const simulations: Record<ScenarioProfile, ReturnType<typeof useSimulation>> = {
+    SCI_IR: useSimulation(),
+    SCI_IS_SEULE: useSimulation(),
+    SCI_IS_HOLDING: useSimulation(),
   };
 
-  const error = simA.error || simB.error;
+  const isPending = PROFILE_ORDER.some((p) => simulations[p].isPending);
+  const error = PROFILE_ORDER.map((p) => simulations[p].error).find(Boolean);
+  const validParts = partsAreValid(associes);
+
+  const handleRun = () => {
+    const shared = selectSharedInputs(store);
+    for (const profile of PROFILE_ORDER) {
+      simulations[profile].mutate(buildScenario(profile, shared), {
+        onSuccess: (data) => setResult(profile, data),
+      });
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+      <header className="bg-white shadow-sm border-b sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Patrimonia</h1>
-            <p className="text-sm text-gray-500">Simulateur de strategie patrimoniale — IS vs IR</p>
+            <p className="text-sm text-gray-500">
+              Simulateur de SCI — creation, cout de fonctionnement, fiscalite et transmission
+            </p>
           </div>
-          <button
-            onClick={handleRun}
-            disabled={isPending}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {isPending ? 'Calcul en cours...' : 'Comparer IS vs IR'}
-          </button>
+          <div className="flex flex-col items-end gap-1">
+            <button
+              onClick={handleRun}
+              disabled={isPending || !validParts}
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isPending ? 'Calcul en cours...' : 'Comparer les 3 montages'}
+            </button>
+            {!validParts && (
+              <span className="text-xs text-red-600">
+                La repartition des parts doit totaliser 100 %.
+              </span>
+            )}
+          </div>
         </div>
       </header>
 
@@ -44,38 +90,37 @@ function App() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left panel: forms */}
+          {/* Left panel: inputs */}
           <div className="lg:col-span-1 space-y-4">
-            <div className="bg-white rounded-lg border p-4">
-              <StructureForm />
-            </div>
-            <div className="bg-white rounded-lg border p-4">
-              <UserProfileForm />
-            </div>
-            <div className="bg-white rounded-lg border p-4">
-              <AssetForm />
-            </div>
-            <div className="bg-white rounded-lg border p-4">
-              <LoanForm />
-            </div>
-            <div className="bg-white rounded-lg border p-4">
-              <ParamsForm />
-            </div>
+            <Panel><StructureForm /></Panel>
+            <Panel><AssociesForm /></Panel>
+            <Panel><AssetForm /></Panel>
+            <Panel><LoanForm /></Panel>
+            <Panel><CostsForm /></Panel>
+            <Panel><SuccessionForm /></Panel>
+            <Panel><UserProfileForm /></Panel>
+            <Panel><ParamsForm /></Panel>
           </div>
 
           {/* Right panel: results */}
           <div className="lg:col-span-2 space-y-6">
-            {resultA ? (
+            {hasAnyResult(results) ? (
               <>
-                <KpiCards resultA={resultA} resultB={resultB} />
-                <CashFlowChart resultA={resultA} resultB={resultB} />
-                <EquityChart resultA={resultA} resultB={resultB} />
-                <TaxBreakdownChart resultA={resultA} resultB={resultB} />
+                <KpiCards results={results} />
+                <CashFlowChart results={results} />
+                <CostsChart results={results} />
+                <SuccessionCard results={results} />
+                <EquityChart results={results} />
+                <TaxBreakdownChart results={results} />
               </>
             ) : (
               <div className="bg-white rounded-lg border p-12 text-center text-gray-400">
-                <p className="text-lg">Cliquez sur "Comparer IS vs IR" pour lancer la simulation</p>
-                <p className="text-sm mt-2">Scenario A (Holding + SCI IS) vs Scenario B (SCI IR) sur 30 ans</p>
+                <p className="text-lg">
+                  Cliquez sur « Comparer les 3 montages » pour lancer la simulation
+                </p>
+                <p className="text-sm mt-2">
+                  SCI a l’IR · SCI a l’IS · Holding + SCI a l’IS, sur {store.params.horizonYears} ans
+                </p>
               </div>
             )}
           </div>

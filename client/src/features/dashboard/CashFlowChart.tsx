@@ -6,39 +6,50 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  ReferenceLine,
   ResponsiveContainer,
 } from 'recharts';
-import type { SimulationResult } from '@shared/schemas.js';
+import { PROFILE_META, PROFILE_ORDER, formatEur } from '@/lib/profiles';
+import type { ResultsProps } from './KpiCards';
 
-interface CashFlowChartProps {
-  resultA: SimulationResult;
-  resultB?: SimulationResult | null;
-}
+export function CashFlowChart({ results }: ResultsProps) {
+  const available = PROFILE_ORDER.filter((p) => results[p]);
+  const reference = results[available[0]];
+  if (!reference) return null;
 
-export function CashFlowChart({ resultA, resultB }: CashFlowChartProps) {
-  const data = resultA.yearlyData.map((y, i) => ({
-    annee: y.year,
-    'IS — Cash flow net': parseFloat(y.totalNetCashFlow),
-    ...(resultB ? { 'IR — Cash flow net': parseFloat(resultB.yearlyData[i]?.totalNetCashFlow ?? '0') } : {}),
-  }));
-
-  const formatEur = (val: number) =>
-    new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
+  const data = reference.yearlyData.map((y) => {
+    const row: Record<string, number> = { annee: y.year };
+    for (const p of available) {
+      const match = results[p]!.yearlyData.find((r) => r.year === y.year);
+      row[PROFILE_META[p].short] = parseFloat(match?.totalNetCashFlow ?? '0');
+    }
+    return row;
+  });
 
   return (
     <div className="bg-white rounded-lg border p-4">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Flux de tresorerie net annuel</h3>
+      <h3 className="text-lg font-semibold text-gray-900">Flux de tresorerie net annuel</h3>
+      <p className="text-xs text-gray-500 mb-4">
+        L’annee 0 porte les frais de constitution : c’est le creux de depart.
+      </p>
       <ResponsiveContainer width="100%" height={350}>
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="annee" label={{ value: 'Annee', position: 'insideBottom', offset: -5 }} />
-          <YAxis tickFormatter={formatEur} width={100} />
+          <YAxis tickFormatter={(v: number) => formatEur(v)} width={100} />
           <Tooltip formatter={(val: number) => formatEur(val)} />
           <Legend />
-          <Line type="monotone" dataKey="IS — Cash flow net" stroke="#3b82f6" strokeWidth={2} dot={false} />
-          {resultB && (
-            <Line type="monotone" dataKey="IR — Cash flow net" stroke="#f59e0b" strokeWidth={2} dot={false} />
-          )}
+          <ReferenceLine y={0} stroke="#9ca3af" />
+          {available.map((p) => (
+            <Line
+              key={p}
+              type="monotone"
+              dataKey={PROFILE_META[p].short}
+              stroke={PROFILE_META[p].stroke}
+              strokeWidth={2}
+              dot={false}
+            />
+          ))}
         </LineChart>
       </ResponsiveContainer>
     </div>

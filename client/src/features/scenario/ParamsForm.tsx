@@ -1,8 +1,7 @@
 import { useScenarioStore } from '@/store/scenarioStore';
 
 export function ParamsForm() {
-  const { scenarioA, updateParamsA } = useScenarioStore();
-  const params = scenarioA.params;
+  const { params, updateParams } = useScenarioStore();
 
   const pctField = (
     label: string,
@@ -20,7 +19,7 @@ export function ParamsForm() {
         value={(((params[key] as number) ?? 0) * 100).toFixed(1)}
         onChange={(e) => {
           const pct = parseFloat(e.target.value);
-          if (!isNaN(pct)) updateParamsA({ [key]: pct / 100 });
+          if (!isNaN(pct)) updateParams({ [key]: pct / 100 });
         }}
       />
     </div>
@@ -43,7 +42,7 @@ export function ParamsForm() {
             value={params.horizonYears}
             onChange={(e) => {
               const v = parseInt(e.target.value);
-              if (!isNaN(v)) updateParamsA({ horizonYears: v });
+              if (!isNaN(v)) updateParams({ horizonYears: v });
             }}
           />
         </div>
@@ -58,8 +57,12 @@ export function ParamsForm() {
       {/* Dividend slider */}
       <div className="pt-2 border-t">
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Distribution de dividendes (Holding → Associe) : {Math.round(((params.dividendDistributionRate as number) ?? 0) * 100)}%
+          Distribution de dividendes : {Math.round(((params.dividendDistributionRate as number) ?? 0) * 100)}%
         </label>
+        <p className="text-xs text-gray-400 mb-2">
+          Montages a l’IS uniquement. A l’IR les associes sont imposes sur le resultat, qu’ils
+          sortent le cash ou non.
+        </p>
         <input
           type="range"
           min={0}
@@ -67,7 +70,7 @@ export function ParamsForm() {
           step={5}
           className="w-full accent-blue-600"
           value={Math.round(((params.dividendDistributionRate as number) ?? 0) * 100)}
-          onChange={(e) => updateParamsA({ dividendDistributionRate: parseInt(e.target.value) / 100 })}
+          onChange={(e) => updateParams({ dividendDistributionRate: parseInt(e.target.value) / 100 })}
         />
         <div className="flex justify-between text-xs text-gray-400 mt-1">
           <span>0% (capitalisation)</span>

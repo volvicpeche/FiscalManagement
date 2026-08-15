@@ -1,57 +1,103 @@
-import type { SimulationResult } from '@shared/schemas.js';
+import type { ScenarioProfile, SimulationResult } from '@shared/schemas.js';
+import { PROFILE_META, PROFILE_ORDER, formatEur } from '@/lib/profiles';
 
-function formatEur(value: string | number): string {
-  const num = typeof value === 'string' ? parseFloat(value) : value;
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'EUR',
-    maximumFractionDigits: 0,
-  }).format(num);
+export interface ResultsProps {
+  results: Record<ScenarioProfile, SimulationResult | null>;
 }
 
-interface KpiCardsProps {
-  resultA: SimulationResult;
-  resultB?: SimulationResult | null;
+interface Metric {
+  label: string;
+  value: (r: SimulationResult) => number;
+  /** Which direction is better — drives the winner highlight. */
+  better: 'higher' | 'lower';
+  tone?: 'neutral' | 'cost';
 }
 
-function KpiColumn({ label, result, color }: { label: string; result: SimulationResult; color: string }) {
-  const lastYear = result.yearlyData[result.yearlyData.length - 1];
-  const breakEvenYear = result.yearlyData.find((y) => parseFloat(y.totalNetCashFlow) > 0)?.year;
+const METRICS: Metric[] = [
+  {
+    label: 'Patrimoine net a terme',
+    value: (r) => parseFloat(r.summary.totalNetWealth),
+    better: 'higher',
+  },
+  {
+    label: 'Impots cumules',
+    value: (r) => parseFloat(r.summary.totalTaxPaid),
+    better: 'lower',
+    tone: 'cost',
+  },
+  {
+    label: 'Cout de structure cumule',
+    value: (r) =>
+      parseFloat(r.summary.fraisConstitution) + parseFloat(r.summary.totalOperatingCosts),
+    better: 'lower',
+    tone: 'cost',
+  },
+  {
+    label: 'Droits de succession',
+    value: (r) => parseFloat(r.summary.successionCost),
+    better: 'lower',
+    tone: 'cost',
+  },
+];
+
+export function KpiCards({ results }: ResultsProps) {
+  const available = PROFILE_ORDER.filter((p) => results[p]);
 
   return (
-    <div className="space-y-3">
-      <h4 className={`text-sm font-semibold ${color}`}>{label}</h4>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-white rounded-lg border p-3">
-          <p className="text-xs text-gray-500">Patrimoine net</p>
-          <p className="text-lg font-bold text-gray-900">{formatEur(result.summary.totalNetWealth)}</p>
-        </div>
-        <div className="bg-white rounded-lg border p-3">
-          <p className="text-xs text-gray-500">Impots cumules</p>
-          <p className="text-lg font-bold text-red-600">{formatEur(result.summary.totalTaxPaid)}</p>
-        </div>
-        <div className="bg-white rounded-lg border p-3">
-          <p className="text-xs text-gray-500">Cash flow (an {lastYear?.year})</p>
-          <p className={`text-lg font-bold ${parseFloat(lastYear?.totalNetCashFlow ?? '0') >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {formatEur(lastYear?.totalNetCashFlow ?? '0')}
-          </p>
-        </div>
-        <div className="bg-white rounded-lg border p-3">
-          <p className="text-xs text-gray-500">Equilibre</p>
-          <p className="text-lg font-bold text-gray-900">
-            {breakEvenYear ? `An ${breakEvenYear}` : '—'}
-          </p>
-        </div>
+    <div className="bg-white rounded-lg border overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b bg-gray-50">
+              <th className="text-left font-medium text-gray-500 px-4 py-2.5 text-xs uppercase tracking-wide">
+                Indicateur
+              </th>
+              {available.map((p) => (
+                <th
+                  key={p}
+                  className={`text-right font-semibold px-4 py-2.5 whitespace-nowrap ${PROFILE_META[p].text}`}
+                >
+                  {PROFILE_META[p].label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {METRICS.map((metric) => {
+              const values = available.map((p) => metric.value(results[p]!));
+              const best =
+                metric.better === 'higher' ? Math.max(...values) : Math.min(...values);
+              const allEqual = values.every((v) => Math.abs(v - values[0]) < 0.5);
+
+              return (
+                <tr key={metric.label} className="border-b last:border-0">
+                  <td className="px-4 py-3 text-gray-600">{metric.label}</td>
+                  {available.map((p, i) => {
+                    const isBest = !allEqual && Math.abs(values[i] - best) < 0.5;
+                    return (
+                      <td
+                        key={p}
+                        className={`px-4 py-3 text-right font-mono font-semibold whitespace-nowrap ${
+                          isBest
+                            ? 'text-green-700 bg-green-50'
+                            : metric.tone === 'cost'
+                              ? 'text-red-600'
+                              : 'text-gray-900'
+                        }`}
+                      >
+                        {formatEur(values[i])}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
-    </div>
-  );
-}
-
-export function KpiCards({ resultA, resultB }: KpiCardsProps) {
-  return (
-    <div className={`grid gap-6 ${resultB ? 'grid-cols-2' : 'grid-cols-1'}`}>
-      <KpiColumn label="Holding + SCI IS" result={resultA} color="text-blue-700" />
-      {resultB && <KpiColumn label="SCI IR (transparence)" result={resultB} color="text-amber-700" />}
+      <p className="px-4 py-2 text-xs text-gray-400 bg-gray-50 border-t">
+        En vert, le montage le plus favorable pour chaque indicateur.
+      </p>
     </div>
   );
 }

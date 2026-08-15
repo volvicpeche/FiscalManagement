@@ -1,6 +1,6 @@
 import {
-  AreaChart,
-  Area,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -9,59 +9,77 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { SimulationResult } from '@shared/schemas.js';
+import { PROFILE_META, PROFILE_ORDER, formatEur } from '@/lib/profiles';
+import type { ResultsProps } from './KpiCards';
 
-interface EquityChartProps {
-  resultA: SimulationResult;
-  resultB?: SimulationResult | null;
-}
+function equityAt(result: SimulationResult, year: number): number {
+  const yearData = result.yearlyData.find((y) => y.year === year);
+  if (!yearData) return 0;
 
-function getEntityValues(result: SimulationResult, year: number) {
-  const yearData = result.yearlyData.find(y => y.year === year);
-  if (!yearData) return { marketValue: 0, debt: 0 };
-
-  let marketValue = 0;
-  let debt = 0;
+  let equity = 0;
   for (const entity of Object.values(yearData.entities)) {
-    marketValue += parseFloat(entity.assetMarketValue);
-    debt += parseFloat(entity.remainingDebt);
+    equity += parseFloat(entity.assetMarketValue) - parseFloat(entity.remainingDebt);
   }
-  return { marketValue, debt };
+  return equity;
 }
 
-export function EquityChart({ resultA, resultB }: EquityChartProps) {
-  const data = resultA.yearlyData.map((y) => {
-    const a = getEntityValues(resultA, y.year);
+function marketValueAt(result: SimulationResult, year: number): number {
+  const yearData = result.yearlyData.find((y) => y.year === year);
+  if (!yearData) return 0;
+  return Object.values(yearData.entities).reduce(
+    (acc, e) => acc + parseFloat(e.assetMarketValue),
+    0,
+  );
+}
+
+export function EquityChart({ results }: ResultsProps) {
+  const available = PROFILE_ORDER.filter((p) => results[p]);
+  const reference = results[available[0]];
+  if (!reference) return null;
+
+  const data = reference.yearlyData.map((y) => {
     const row: Record<string, number> = {
       annee: y.year,
-      'Valeur de marche': a.marketValue,
-      'IS — Equity nette': a.marketValue - a.debt,
+      'Valeur du bien': marketValueAt(reference, y.year),
     };
-    if (resultB) {
-      const b = getEntityValues(resultB, y.year);
-      row['IR — Equity nette'] = b.marketValue - b.debt;
+    for (const p of available) {
+      row[PROFILE_META[p].short] = equityAt(results[p]!, y.year);
     }
     return row;
   });
 
-  const formatEur = (val: number) =>
-    new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
-
   return (
     <div className="bg-white rounded-lg border p-4">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Courbe patrimoniale</h3>
+      <h3 className="text-lg font-semibold text-gray-900">Courbe patrimoniale</h3>
+      <p className="text-xs text-gray-500 mb-4">
+        Valeur des biens moins la dette bancaire restante.
+      </p>
       <ResponsiveContainer width="100%" height={350}>
-        <AreaChart data={data}>
+        <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="annee" label={{ value: 'Annee', position: 'insideBottom', offset: -5 }} />
-          <YAxis tickFormatter={formatEur} width={100} />
+          <YAxis tickFormatter={(v: number) => formatEur(v)} width={100} />
           <Tooltip formatter={(val: number) => formatEur(val)} />
           <Legend />
-          <Area type="monotone" dataKey="Valeur de marche" fill="#e0e7ff" stroke="#a5b4fc" strokeDasharray="5 5" />
-          <Area type="monotone" dataKey="IS — Equity nette" fill="#bfdbfe" stroke="#3b82f6" strokeWidth={2} fillOpacity={0.4} />
-          {resultB && (
-            <Area type="monotone" dataKey="IR — Equity nette" fill="#fef3c7" stroke="#f59e0b" strokeWidth={2} fillOpacity={0.4} />
-          )}
-        </AreaChart>
+          <Line
+            type="monotone"
+            dataKey="Valeur du bien"
+            stroke="#a5b4fc"
+            strokeDasharray="5 5"
+            strokeWidth={1.5}
+            dot={false}
+          />
+          {available.map((p) => (
+            <Line
+              key={p}
+              type="monotone"
+              dataKey={PROFILE_META[p].short}
+              stroke={PROFILE_META[p].stroke}
+              strokeWidth={2}
+              dot={false}
+            />
+          ))}
+        </LineChart>
       </ResponsiveContainer>
     </div>
   );

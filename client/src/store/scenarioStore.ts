@@ -1,10 +1,27 @@
 import { create } from 'zustand';
-import type { SimulationRequest, SimulationResult } from '@shared/schemas.js';
+import type {
+  AssetInput,
+  AssocieInput,
+  EntityCostsInput,
+  ManagementMode,
+  ScenarioProfile,
+  SimulationParams,
+  SimulationRequest,
+  SimulationResult,
+  UserProfile,
+} from '@shared/schemas.js';
+import { PROFILE_ORDER } from '@/lib/profiles';
 
-// ─── Default asset (shared between scenarios) ────────────────────────────────
+/**
+ * The three scenarios are DERIVED from one set of shared inputs rather than
+ * kept as three copies to be synced. Editing the property, the loan or the
+ * associes therefore applies to all three comparisons by construction.
+ */
 
-const DEFAULT_ASSET = {
-  type: 'REAL_ESTATE' as const,
+// ─── Defaults ────────────────────────────────────────────────────────────────
+
+const DEFAULT_ASSET: AssetInput = {
+  type: 'REAL_ESTATE',
   label: 'Bien immobilier',
   purchasePrice: '200000.00',
   notaryFees: '16000.00',
@@ -19,231 +36,300 @@ const DEFAULT_ASSET = {
     insuranceRate: 0.0035,
     durationMonths: 240,
     startDate: '2026-01-01T00:00:00.000Z',
-    type: 'AMORTISSABLE' as const,
+    type: 'AMORTISSABLE',
   },
 };
 
-const DEFAULT_PARAMS = {
+const DEFAULT_PARAMS: SimulationParams = {
   horizonYears: 30,
   inflationRate: 0.02,
   propertyGrowth: 0.015,
   rentGrowthRate: 0.02,
   chargesGrowthRate: 0.02,
   propertyTaxGrowthRate: 0.02,
-  dividendDistributionRate: 0,
+  dividendDistributionRate: 0.3,
+  ccaRepaymentRate: 0,
+  illiquidityDiscount: 0.1,
+  demembrement: false,
 };
 
-const DEFAULT_PROFILE = {
-  maritalStatus: 'MARRIED' as const,
+const DEFAULT_PROFILE: UserProfile = {
+  maritalStatus: 'MARRIED',
   childrenCount: 2,
-  socialChargeRegime: 'SWISS_EXEMPT' as const,
+  socialChargeRegime: 'SWISS_EXEMPT',
 };
 
-// ─── Scenario A: Holding + SCI IS ────────────────────────────────────────────
+export function makeAssocie(over: Partial<AssocieInput> = {}): AssocieInput {
+  return {
+    nom: 'Nouvel associe',
+    partsPercent: 0,
+    relation: 'OTHER',
+    maritalStatus: 'SINGLE',
+    childrenCount: 0,
+    autresRevenus: '0.00',
+    socialChargeRegime: 'STANDARD',
+    apportCapital: '0.00',
+    apportCompteCourant: '0.00',
+    tauxInteretCCA: 0,
+    ...over,
+  };
+}
 
-const SCENARIO_A: SimulationRequest = {
-  userProfile: DEFAULT_PROFILE,
-  structures: [
-    {
-      name: 'Holding',
-      type: 'HOLDING',
-      taxRegime: 'IS',
-      ownershipShare: 1.0,
-      assets: [],
-      subsidiaries: [
+const DEFAULT_ASSOCIES: AssocieInput[] = [
+  makeAssocie({
+    nom: 'Moi',
+    partsPercent: 0.5,
+    relation: 'SELF',
+    maritalStatus: 'MARRIED',
+    childrenCount: 2,
+    autresRevenus: '90000.00',
+    socialChargeRegime: 'SWISS_EXEMPT',
+    apportCapital: '500.00',
+    apportCompteCourant: '40000.00',
+  }),
+  makeAssocie({
+    nom: 'Conjoint(e)',
+    partsPercent: 0.5,
+    relation: 'SPOUSE',
+    maritalStatus: 'MARRIED',
+    childrenCount: 2,
+    autresRevenus: '35000.00',
+    socialChargeRegime: 'STANDARD',
+    apportCapital: '500.00',
+  }),
+];
+
+const EMPTY_RESULTS: Record<ScenarioProfile, SimulationResult | null> = {
+  SCI_IR: null,
+  SCI_IS_SEULE: null,
+  SCI_IS_HOLDING: null,
+};
+
+const EMPTY_OVERRIDES: Record<ScenarioProfile, Record<string, EntityCostsInput>> = {
+  SCI_IR: {},
+  SCI_IS_SEULE: {},
+  SCI_IS_HOLDING: {},
+};
+
+// ─── Scenario construction ───────────────────────────────────────────────────
+
+export interface SharedInputs {
+  userProfile: UserProfile;
+  asset: AssetInput;
+  associes: AssocieInput[];
+  params: SimulationParams;
+  managementMode: ManagementMode;
+  costOverrides: Record<ScenarioProfile, Record<string, EntityCostsInput>>;
+}
+
+function costsFor(
+  shared: SharedInputs,
+  profile: ScenarioProfile,
+  entityName: string,
+): EntityCostsInput {
+  const override = shared.costOverrides[profile]?.[entityName];
+  if (override) return override;
+  return { mode: shared.managementMode, constitution: [], annuel: [] };
+}
+
+/** Builds the request for one profile out of the shared inputs. */
+export function buildScenario(profile: ScenarioProfile, shared: SharedInputs): SimulationRequest {
+  const { userProfile, asset, associes, params } = shared;
+
+  if (profile === 'SCI_IR') {
+    return {
+      userProfile,
+      structures: [
         {
-          name: 'SCI Alpha (IS)',
-          type: 'SCI_IS',
-          taxRegime: 'IS',
-          ownershipShare: 0.95,
-          assets: [{ ...DEFAULT_ASSET }],
+          name: 'SCI (IR)',
+          type: 'SCI_IR',
+          taxRegime: 'IR',
+          ownershipShare: 1,
+          associes,
+          costs: costsFor(shared, profile, 'SCI (IR)'),
+          assets: [asset],
           subsidiaries: [],
         },
       ],
-    },
-  ],
-  params: { ...DEFAULT_PARAMS, dividendDistributionRate: 0.3 },
-};
+      // An SCI at IR distributes nothing: the associes are taxed on the
+      // result whether they take the cash out or not.
+      params: { ...params, dividendDistributionRate: 0 },
+    };
+  }
 
-// ─── Scenario B: SCI IR (direct, no holding) ────────────────────────────────
+  if (profile === 'SCI_IS_SEULE') {
+    return {
+      userProfile,
+      structures: [
+        {
+          name: 'SCI (IS)',
+          type: 'SCI_IS',
+          taxRegime: 'IS',
+          ownershipShare: 1,
+          associes,
+          costs: costsFor(shared, profile, 'SCI (IS)'),
+          assets: [asset],
+          subsidiaries: [],
+        },
+      ],
+      params,
+    };
+  }
 
-const SCENARIO_B: SimulationRequest = {
-  userProfile: DEFAULT_PROFILE,
-  structures: [
-    {
-      name: 'SCI Beta (IR)',
-      type: 'SCI_IR',
-      taxRegime: 'IR',
-      ownershipShare: 1.0,
-      assets: [{ ...DEFAULT_ASSET }],
-      subsidiaries: [],
-    },
-  ],
-  params: { ...DEFAULT_PARAMS },
-};
+  // Holding + SCI: the associes hold the holding, which owns the SCI outright.
+  return {
+    userProfile,
+    structures: [
+      {
+        name: 'Holding',
+        type: 'HOLDING',
+        taxRegime: 'IS',
+        ownershipShare: 1,
+        associes,
+        costs: costsFor(shared, profile, 'Holding'),
+        assets: [],
+        subsidiaries: [
+          {
+            name: 'SCI (IS)',
+            type: 'SCI_IS',
+            taxRegime: 'IS',
+            ownershipShare: 1,
+            associes: [],
+            costs: costsFor(shared, profile, 'SCI (IS)'),
+            assets: [asset],
+            subsidiaries: [],
+          },
+        ],
+      },
+    ],
+    params,
+  };
+}
+
+export function buildAllScenarios(shared: SharedInputs): Record<ScenarioProfile, SimulationRequest> {
+  return {
+    SCI_IR: buildScenario('SCI_IR', shared),
+    SCI_IS_SEULE: buildScenario('SCI_IS_SEULE', shared),
+    SCI_IS_HOLDING: buildScenario('SCI_IS_HOLDING', shared),
+  };
+}
 
 // ─── Store ───────────────────────────────────────────────────────────────────
 
-interface ScenarioStore {
-  scenarioA: SimulationRequest;
-  scenarioB: SimulationRequest;
-  resultA: SimulationResult | null;
-  resultB: SimulationResult | null;
-  comparisonMode: boolean;
+interface ScenarioStore extends SharedInputs {
+  results: Record<ScenarioProfile, SimulationResult | null>;
+  /** Profile whose cost breakdown is on screen. */
+  activeProfile: ScenarioProfile;
 
-  setScenarioA: (s: SimulationRequest) => void;
-  setScenarioB: (s: SimulationRequest) => void;
-  setResultA: (r: SimulationResult | null) => void;
-  setResultB: (r: SimulationResult | null) => void;
-  setComparisonMode: (v: boolean) => void;
+  updateUserProfile: (p: Partial<UserProfile>) => void;
+  updateAsset: (a: Partial<AssetInput>) => void;
+  updateLoan: (l: Partial<NonNullable<AssetInput['loan']>>) => void;
+  updateParams: (p: Partial<SimulationParams>) => void;
 
-  // Convenience updaters for Scenario A
-  updateUserProfile: (profile: Partial<SimulationRequest['userProfile']>) => void;
-  updateStructureA: (index: number, structure: Partial<SimulationRequest['structures'][0]>) => void;
-  updateAssetA: (structureIdx: number, assetIdx: number, asset: Partial<SimulationRequest['structures'][0]['assets'][0]>) => void;
-  updateLoanA: (structureIdx: number, assetIdx: number, loan: Partial<NonNullable<SimulationRequest['structures'][0]['assets'][0]['loan']>>) => void;
-  updateParamsA: (params: Partial<SimulationRequest['params']>) => void;
+  addAssocie: () => void;
+  removeAssocie: (index: number) => void;
+  updateAssocie: (index: number, a: Partial<AssocieInput>) => void;
+  /** Spreads the parts evenly across the associes, remainder on the first. */
+  equalizeParts: () => void;
 
-  // Sync shared fields from A to B (asset, loan, user profile)
-  syncSharedFields: () => void;
+  setManagementMode: (m: ManagementMode) => void;
+  setCostOverride: (profile: ScenarioProfile, entityName: string, costs: EntityCostsInput) => void;
+  resetCostOverride: (profile: ScenarioProfile, entityName: string) => void;
+
+  setActiveProfile: (p: ScenarioProfile) => void;
+  setResult: (p: ScenarioProfile, r: SimulationResult | null) => void;
+  clearResults: () => void;
 }
 
-function findFirstAssetPath(structures: SimulationRequest['structures']): { sIdx: number; aIdx: number } | null {
-  for (let sIdx = 0; sIdx < structures.length; sIdx++) {
-    if (structures[sIdx].assets.length > 0) return { sIdx, aIdx: 0 };
-    // Check subsidiaries
-    for (let subIdx = 0; subIdx < (structures[sIdx].subsidiaries?.length ?? 0); subIdx++) {
-      const sub = (structures[sIdx].subsidiaries as SimulationRequest['structures'])[subIdx];
-      if (sub.assets.length > 0) return { sIdx, aIdx: 0 };
-    }
-  }
-  return null;
-}
+export const useScenarioStore = create<ScenarioStore>((set) => ({
+  userProfile: DEFAULT_PROFILE,
+  asset: DEFAULT_ASSET,
+  associes: DEFAULT_ASSOCIES,
+  params: DEFAULT_PARAMS,
+  managementMode: 'EN_LIGNE',
+  costOverrides: EMPTY_OVERRIDES,
+  results: EMPTY_RESULTS,
+  activeProfile: 'SCI_IS_SEULE',
 
-function getAssetFromStructures(structures: SimulationRequest['structures']): SimulationRequest['structures'][0]['assets'][0] | null {
-  for (const s of structures) {
-    if (s.assets.length > 0) return s.assets[0];
-    if (s.subsidiaries) {
-      for (const sub of s.subsidiaries as SimulationRequest['structures']) {
-        if (sub.assets.length > 0) return sub.assets[0];
-      }
-    }
-  }
-  return null;
-}
+  updateUserProfile: (p) => set((s) => ({ userProfile: { ...s.userProfile, ...p } })),
+  updateAsset: (a) => set((s) => ({ asset: { ...s.asset, ...a } })),
+  updateLoan: (l) =>
+    set((s) => (s.asset.loan ? { asset: { ...s.asset, loan: { ...s.asset.loan, ...l } } } : {})),
+  updateParams: (p) => set((s) => ({ params: { ...s.params, ...p } })),
 
-function setAssetInStructures(
-  structures: SimulationRequest['structures'],
-  asset: SimulationRequest['structures'][0]['assets'][0],
-): SimulationRequest['structures'] {
-  return structures.map(s => {
-    if (s.assets.length > 0) {
-      return { ...s, assets: [asset, ...s.assets.slice(1)] };
-    }
-    if (s.subsidiaries && (s.subsidiaries as SimulationRequest['structures']).length > 0) {
-      return {
-        ...s,
-        subsidiaries: (s.subsidiaries as SimulationRequest['structures']).map(sub => {
-          if (sub.assets.length > 0) {
-            return { ...sub, assets: [asset, ...sub.assets.slice(1)] };
-          }
-          return sub;
-        }),
-      };
-    }
-    return s;
-  });
-}
-
-export const useScenarioStore = create<ScenarioStore>((set, get) => ({
-  scenarioA: SCENARIO_A,
-  scenarioB: SCENARIO_B,
-  resultA: null,
-  resultB: null,
-  comparisonMode: true,
-
-  setScenarioA: (s) => set({ scenarioA: s }),
-  setScenarioB: (s) => set({ scenarioB: s }),
-  setResultA: (r) => set({ resultA: r }),
-  setResultB: (r) => set({ resultB: r }),
-  setComparisonMode: (v) => set({ comparisonMode: v }),
-
-  updateUserProfile: (profile) =>
-    set((state) => ({
-      scenarioA: { ...state.scenarioA, userProfile: { ...state.scenarioA.userProfile, ...profile } },
-      scenarioB: { ...state.scenarioB, userProfile: { ...state.scenarioB.userProfile, ...profile } },
+  addAssocie: () =>
+    set((s) => ({
+      associes: [...s.associes, makeAssocie({ nom: `Associe ${s.associes.length + 1}` })],
     })),
 
-  updateStructureA: (index, structure) =>
-    set((state) => {
-      const structures = [...state.scenarioA.structures];
-      structures[index] = { ...structures[index], ...structure };
-      return { scenarioA: { ...state.scenarioA, structures } };
-    }),
+  removeAssocie: (index) =>
+    set((s) => ({ associes: s.associes.filter((_, i) => i !== index) })),
 
-  updateAssetA: (structureIdx, assetIdx, asset) =>
-    set((state) => {
-      // Update asset in scenario A (could be in a subsidiary)
-      const currentAsset = getAssetFromStructures(state.scenarioA.structures);
-      if (!currentAsset) return {};
-      const updatedAsset = { ...currentAsset, ...asset };
-      const structuresA = setAssetInStructures(state.scenarioA.structures, updatedAsset);
-      const structuresB = setAssetInStructures(state.scenarioB.structures, updatedAsset);
+  updateAssocie: (index, a) =>
+    set((s) => ({
+      associes: s.associes.map((assoc, i) => (i === index ? { ...assoc, ...a } : assoc)),
+    })),
+
+  equalizeParts: () =>
+    set((s) => {
+      const n = s.associes.length;
+      if (n === 0) return {};
+      // Round to 4 decimals and put the rounding remainder on the first associe
+      // so the total lands exactly on 100 %.
+      const each = Math.round((1 / n) * 10000) / 10000;
+      const reste = Math.round((1 - each * (n - 1)) * 10000) / 10000;
       return {
-        scenarioA: { ...state.scenarioA, structures: structuresA },
-        scenarioB: { ...state.scenarioB, structures: structuresB },
+        associes: s.associes.map((assoc, i) => ({
+          ...assoc,
+          partsPercent: i === 0 ? reste : each,
+        })),
       };
     }),
 
-  updateLoanA: (structureIdx, assetIdx, loan) =>
-    set((state) => {
-      const currentAsset = getAssetFromStructures(state.scenarioA.structures);
-      if (!currentAsset?.loan) return {};
-      const updatedLoan = { ...currentAsset.loan, ...loan };
-      const updatedAsset = { ...currentAsset, loan: updatedLoan };
-      const structuresA = setAssetInStructures(state.scenarioA.structures, updatedAsset);
-      const structuresB = setAssetInStructures(state.scenarioB.structures, updatedAsset);
-      return {
-        scenarioA: { ...state.scenarioA, structures: structuresA },
-        scenarioB: { ...state.scenarioB, structures: structuresB },
-      };
-    }),
+  setManagementMode: (managementMode) => set({ managementMode, costOverrides: EMPTY_OVERRIDES }),
 
-  updateParamsA: (params) =>
-    set((state) => ({
-      scenarioA: { ...state.scenarioA, params: { ...state.scenarioA.params, ...params } },
-      scenarioB: {
-        ...state.scenarioB,
-        params: {
-          ...state.scenarioB.params,
-          // Sync all params except dividend rate (B has no holding)
-          ...Object.fromEntries(
-            Object.entries(params).filter(([k]) => k !== 'dividendDistributionRate'),
-          ),
-        },
+  setCostOverride: (profile, entityName, costs) =>
+    set((s) => ({
+      costOverrides: {
+        ...s.costOverrides,
+        [profile]: { ...s.costOverrides[profile], [entityName]: costs },
       },
     })),
 
-  syncSharedFields: () => {
-    const state = get();
-    const assetA = getAssetFromStructures(state.scenarioA.structures);
-    if (!assetA) return;
-    const structuresB = setAssetInStructures(state.scenarioB.structures, assetA);
-    set({
-      scenarioB: {
-        ...state.scenarioB,
-        userProfile: { ...state.scenarioA.userProfile },
-        structures: structuresB,
-        params: {
-          ...state.scenarioA.params,
-          dividendDistributionRate: 0, // IR has no holding dividends
-        },
-      },
-    });
-  },
+  resetCostOverride: (profile, entityName) =>
+    set((s) => {
+      const next = { ...s.costOverrides[profile] };
+      delete next[entityName];
+      return { costOverrides: { ...s.costOverrides, [profile]: next } };
+    }),
+
+  setActiveProfile: (activeProfile) => set({ activeProfile }),
+  setResult: (p, r) => set((s) => ({ results: { ...s.results, [p]: r } })),
+  clearResults: () => set({ results: EMPTY_RESULTS }),
 }));
 
-// Helper to extract the first asset from any scenario (for forms)
-export function getFirstAsset(scenario: SimulationRequest) {
-  return getAssetFromStructures(scenario.structures);
+// ─── Derived selectors ───────────────────────────────────────────────────────
+
+export function selectSharedInputs(s: ScenarioStore): SharedInputs {
+  return {
+    userProfile: s.userProfile,
+    asset: s.asset,
+    associes: s.associes,
+    params: s.params,
+    managementMode: s.managementMode,
+    costOverrides: s.costOverrides,
+  };
+}
+
+export function partsTotal(associes: AssocieInput[]): number {
+  return associes.reduce((sum, a) => sum + a.partsPercent, 0);
+}
+
+export function partsAreValid(associes: AssocieInput[]): boolean {
+  if (associes.length === 0) return true;
+  return Math.abs(partsTotal(associes) - 1) < 1e-6;
+}
+
+export function hasAnyResult(results: Record<ScenarioProfile, SimulationResult | null>): boolean {
+  return PROFILE_ORDER.some((p) => results[p] !== null);
 }

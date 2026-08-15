@@ -1,8 +1,7 @@
 import { useScenarioStore } from '@/store/scenarioStore';
 
 export function UserProfileForm() {
-  const { scenarioA, updateUserProfile } = useScenarioStore();
-  const profile = scenarioA.userProfile;
+  const { userProfile: profile, updateUserProfile } = useScenarioStore();
 
   return (
     <div className="space-y-4">

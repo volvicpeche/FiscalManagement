@@ -65,18 +65,30 @@ The engine is the heart of the app — pure TypeScript functions, fully tested, 
   - PFU (Flat Tax) 2026: 31.4% (12.8% IR + 18.6% PS). Compare with Bareme option and pick cheapest.
   - Mere-Fille regime: 95% dividend exemption between SCI→Holding.
   - IFI: yearly tax on net real estate patrimony (progressive 0.5%→1.5%, entry at €1.3M).
+- **costs.ts** — Structure setup and running costs. Presets per `ManagementMode` (SOI_MEME / EN_LIGNE / EXPERT_COMPTABLE / NOTAIRE_AVOCAT) and per structure type; every line overridable by the user. Indicative 2026 amounts — not a quote. Annual costs are indexed on `inflationRate` and deductible under both regimes.
+- **associes.ts** — Per-associe taxation of an SCI at IR:
+  - `computeAssocieIR` is a DIFFERENTIAL: `IR(autresRevenus + quotePart) − IR(autresRevenus)`. Never tax a quote-part in isolation — it lands in the wrong bracket.
+  - Deficit foncier: €10,700/yr against global income, excess carried 10 years with vintage expiry.
+  - Comptes courants d'associes: interest deductible for the SCI and taxed as RCM, capital repayment tax-free.
 - **succession.ts** — Succession cost estimator:
   - Abatements by relationship (€100K/child, spouse exempt).
   - Progressive rates (5%→45% direct line).
   - SCI share valuation with illiquidity discount (default 10%).
   - Usufruit/nue-propriete split (Art. 669 CGI bareme by age).
-- **simulator.ts** — 30-year projection loop: revenue (with configurable per-field growth rates) → loan payments → depreciation (IS only) → tax → net cash flow → intra-group dividends → asset revaluation → IFI.
+  - `computeSuccessionForAssocies`: the `SELF` associe dies at the horizon; only their remaining parts (plus their CCA at face value) are transmitted, to the co-associes or, failing that, to the declared children.
+- **simulator.ts** — 30-year projection loop: revenue (with configurable per-field growth rates) → loan payments → depreciation (IS only) → structure costs → tax → net cash flow → CCA repayment → intra-group dividends → asset revaluation → IFI → succession at the horizon.
+  - `yearlyData` opens on a **year 0** carrying the incorporation costs — index 0 is not year 1.
+  - `summary.totalNetWealth` is FAMILY wealth: companies plus what the associes hold personally, net of the tax they paid out of pocket. Without this the regimes are not comparable — at IR the SCI keeps its cash while the associes are taxed personally.
+  - `summary.successionCost` is reported separately from `totalTaxPaid`.
 
 ## Key API Endpoints
 
 - `POST /api/simulations/run` — Accepts full scenario JSON, returns 30-year projection array
-- `GET /api/simulations/:id` — Retrieve saved scenario
-- `POST /api/simulations` — Save scenario state
+- `GET /api/costs/presets` — Cost presets for every management mode × structure type, so the client pre-fills its form from the engine instead of duplicating the table
+- `GET /api/simulations/:id` — Retrieve saved scenario *(not implemented yet)*
+- `POST /api/simulations` — Save scenario state *(not implemented yet)*
+
+The server does **not** use Prisma yet: nothing under `server/src/` imports `PrismaClient`, so no database is needed to run the app. `schema.prisma` is kept as a mirror of the shared Zod schemas for when persistence lands.
 
 ## UI Language
 
@@ -87,7 +99,8 @@ The entire UI must be in **French** — all labels, buttons, tooltips, error mes
 - **Depreciation (SCI IS only):** Land (15-20% of base) is non-depreciable. Building: 4%/year over 25 years. Renovation: over 15 years.
 - **Capital Gains exit:** SCI IS = Sale Price - Net Book Value (VNC), taxed at IS rate. SCI IR = Sale Price - Purchase Price with duration abatements (IR exempt after 22yr, PS after 30yr). Social charges on IS gains apply only when distributed as dividends.
 - **Inflation is configurable per field:** separate growth rates for rent, charges, and property tax (all default 2%). Property value growth is separate (default 1.5%).
-- **A/B comparison:** Frontend makes two separate `/run` calls — no dedicated comparison endpoint.
+- **Associes:** an SCI is held by N associes, each with a full tax household (marital status, children, other income, social charge regime) plus their capital and compte courant contributions. Parts must total exactly 100% — validated in `SimulationRequestSchema.superRefine`, not on `StructureSchema` (a `.refine()` there would turn it into a `ZodEffects` and break the `z.lazy()` self-reference for subsidiaries).
+- **Three-way comparison:** the frontend derives three scenarios — `SCI_IR`, `SCI_IS_SEULE`, `SCI_IS_HOLDING` — from one set of shared inputs (`buildScenario` in the store) and makes three separate `/run` calls. No dedicated comparison endpoint.
 - **Swiss social charge exemption:** User is affiliated to Swiss social security — exempt from CSG/CRDS, only pays prelevement de solidarite (7.5% instead of 17.2%/18.2%). This is a configurable `SocialChargeRegime` flag (`STANDARD` or `SWISS_EXEMPT`) that affects all PS calculations (IR foncier, PFU, dividends, capital gains).
 - All monetary fields in Prisma use `Decimal(20,2)`.
 - Structures support parent-child hierarchy (Holding → SCI) with ownership shares.

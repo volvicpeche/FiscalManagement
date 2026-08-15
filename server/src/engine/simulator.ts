@@ -273,6 +273,12 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
   let totalOperatingCosts = d(0);
   let totalFraisConstitution = d(0);
 
+  // What the associes hold personally, outside the companies. Without this the
+  // regimes are not comparable: at IR the associes pay the tax out of their own
+  // pocket while the SCI keeps its cash, and distributed dividends would simply
+  // disappear from the wealth total.
+  let personalWealth = d(0);
+
   // ─── Year 0: incorporation ───────────────────────────────────────────────
   // The company exists but has not traded yet: only setup costs are booked,
   // and the associes' contributions are recorded.
@@ -434,6 +440,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
           const { ir, ps } = computeAssocieIR(a.input, deficit);
           yearAssocieTax = yearAssocieTax.plus(ir).plus(ps);
           totalTaxPaid = totalTaxPaid.plus(ir).plus(ps);
+          personalWealth = personalWealth.minus(ir).minus(ps);
 
           addAssocieYear(associesBucket, a.input.nom, {
             quotePart,
@@ -451,8 +458,11 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         .minus(chargesStructurelles);
 
       // 6b. Compte courant: interest paid out, then capital repaid from the
-      // remaining cash. Repayment is a pure cash movement — no tax on it.
+      // cash the entity has on hand. Repayment is a pure cash movement — no
+      // tax on it. A holding repays out of the dividends it has banked, so the
+      // envelope is the accumulated cash, not just this year's flow.
       const totalCCA = state.associes.reduce((acc, a) => acc.plus(a.ccaBalance), d(0));
+      const cashDisponible = state.accumulatedCash.plus(entityNetCashFlow);
       let totalRemboursement = d(0);
 
       for (const a of state.associes) {
@@ -461,7 +471,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         const { interets, remboursement, soldeRestant } = computeCCAYear(
           a.ccaBalance,
           d(a.input.tauxInteretCCA),
-          entityNetCashFlow.mul(quote),
+          cashDisponible.mul(quote),
           ccaRepaymentRate,
         );
         a.ccaBalance = soldeRestant;
@@ -472,6 +482,8 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
           ? computePFU(interets, a.input.socialChargeRegime)
           : d(0);
         totalTaxPaid = totalTaxPaid.plus(interetTax);
+        // Cash leaving the company lands in the associe's hands, not thin air.
+        personalWealth = personalWealth.plus(remboursement).plus(interets).minus(interetTax);
 
         addAssocieYear(associesBucket, a.input.nom, {
           ccaInterest: interets,
@@ -529,6 +541,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
     const netRealEstate = totalRealEstateMarketValue.minus(totalRemainingDebt);
     const ifiTax = computeIFI(netRealEstate);
     totalTaxPaid = totalTaxPaid.plus(ifiTax);
+    personalWealth = personalWealth.minus(ifiTax);
 
     // ── User net dividend (Holding -> User distribution) ────────────────────
     let userNetDividend = d(0);
@@ -560,6 +573,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         }
       }
       totalTaxPaid = totalTaxPaid.plus(dividendTax);
+      personalWealth = personalWealth.plus(userNetDividend);
     }
 
     yearTotalNetCashFlow = yearTotalNetCashFlow
@@ -580,8 +594,9 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
 
   // ── Summary ──────────────────────────────────────────────────────────────────
 
-  // Total net wealth = sum of all entity market values - debt + accumulated cash
-  let totalWealth = d(0);
+  // Total net wealth of the family: what the companies hold, plus what the
+  // associes hold personally after tax.
+  let totalWealth = personalWealth;
   // Company net asset value, which the shares are worth: also net of the
   // comptes courants, since those are a debt towards the associes.
   let navSocietes = d(0);
@@ -631,7 +646,8 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
     fallbackChildren: userProfile.childrenCount,
   });
 
-  totalTaxPaid = totalTaxPaid.plus(succession.total);
+  // Succession is reported on its own line: it is a one-off event at death,
+  // not part of the running tax bill.
 
   return {
     summary: {

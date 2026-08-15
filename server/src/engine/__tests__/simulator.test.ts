@@ -505,6 +505,112 @@ describe('runSimulation — comptes courants d\'associes', () => {
   });
 });
 
+describe('runSimulation — wealth basis', () => {
+  const richAsset = { ...baseRequest.structures[0].assets[0], annualRent: '40000.00' };
+
+  it('should not destroy wealth by distributing dividends', () => {
+    // Distributed cash lands in the associe's pocket; it does not vanish.
+    const base = {
+      ...baseRequest,
+      structures: [{ ...baseRequest.structures[0], assets: [richAsset] }],
+    };
+    const capitalise = runSimulation({
+      ...base,
+      params: { ...baseRequest.params, horizonYears: 15, dividendDistributionRate: 0 },
+    });
+    const distribue = runSimulation({
+      ...base,
+      params: { ...baseRequest.params, horizonYears: 15, dividendDistributionRate: 0.8 },
+    });
+
+    // Distributing costs the dividend tax, but not the whole dividend.
+    const ecart =
+      parseFloat(capitalise.summary.totalNetWealth) - parseFloat(distribue.summary.totalNetWealth);
+    expect(ecart).toBeGreaterThan(0);
+    expect(ecart).toBeLessThan(parseFloat(capitalise.summary.totalNetWealth) * 0.4);
+  });
+
+  it('should charge the associe tax against the family wealth at IR', () => {
+    // The SCI at IR pays nothing itself, so the tax must come off somewhere.
+    const irRequest: SimulationRequest = {
+      ...baseRequest,
+      structures: [
+        {
+          ...baseRequest.structures[0],
+          name: 'SCI IR',
+          type: 'SCI_IR',
+          taxRegime: 'IR',
+          associes: [associe({ nom: 'Florian', partsPercent: 1, autresRevenus: '90000.00' })],
+          assets: [richAsset],
+        },
+      ],
+      params: { ...baseRequest.params, horizonYears: 20 },
+    };
+    const modeste: SimulationRequest = {
+      ...irRequest,
+      structures: [
+        {
+          ...irRequest.structures[0],
+          associes: [associe({ nom: 'Florian', partsPercent: 1, autresRevenus: '0.00' })],
+        },
+      ],
+    };
+
+    // Same SCI, same cash: the associe in the top bracket ends up poorer.
+    expect(parseFloat(irRequest.structures[0].associes[0].autresRevenus)).toBeGreaterThan(0);
+    expect(parseFloat(runSimulation(irRequest).summary.totalNetWealth)).toBeLessThan(
+      parseFloat(runSimulation(modeste).summary.totalNetWealth),
+    );
+  });
+
+  it('should keep the repaid compte courant inside the family wealth', () => {
+    const withCCA = (repaymentRate: number): SimulationRequest => ({
+      ...baseRequest,
+      structures: [
+        {
+          ...baseRequest.structures[0],
+          associes: [associe({ nom: 'Florian', partsPercent: 1, apportCompteCourant: '50000.00' })],
+          assets: [richAsset],
+        },
+      ],
+      params: { ...baseRequest.params, horizonYears: 20, ccaRepaymentRate: repaymentRate },
+    });
+
+    // Moving cash from the company to the associe is wealth-neutral.
+    const garde = parseFloat(runSimulation(withCCA(0)).summary.totalNetWealth);
+    const rembourse = parseFloat(runSimulation(withCCA(1)).summary.totalNetWealth);
+    expect(rembourse).toBeCloseTo(garde, 0);
+  });
+
+  it('should report succession separately from the running tax bill', () => {
+    const result = runSimulation({
+      ...baseRequest,
+      structures: [
+        {
+          ...baseRequest.structures[0],
+          associes: [
+            associe({ nom: 'Florian', partsPercent: 0.5, relation: 'SELF' }),
+            associe({ nom: 'Enfant', partsPercent: 0.5, relation: 'CHILD' }),
+          ],
+          assets: [richAsset],
+        },
+      ],
+    });
+
+    expect(parseFloat(result.summary.successionCost)).toBeGreaterThan(0);
+    // Adding the death duties into the yearly tax total would double-count them.
+    const yearlyTax = result.yearlyData.reduce(
+      (acc, y) =>
+        acc +
+        Object.values(y.entities).reduce((a, e) => a + parseFloat(e.tax), 0) +
+        Object.values(y.associes).reduce((a, x) => a + parseFloat(x.irTax) + parseFloat(x.psTax), 0) +
+        parseFloat(y.ifiTax),
+      0,
+    );
+    expect(parseFloat(result.summary.totalTaxPaid)).toBeCloseTo(yearlyTax, 0);
+  });
+});
+
 describe('runSimulation — succession', () => {
   const familyRequest = (associes: AssocieInput[], over: Partial<SimulationRequest['params']> = {}): SimulationRequest => ({
     ...baseRequest,
