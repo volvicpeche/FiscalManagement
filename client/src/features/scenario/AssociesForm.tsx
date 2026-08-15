@@ -200,11 +200,17 @@ function AssocieCard({ associe, index, expanded, canRemove, onToggle }: CardProp
 }
 
 export function AssociesForm() {
-  const { associes, addAssocie, equalizeParts } = useScenarioStore();
+  const { associes, addAssocie, redistribute } = useScenarioStore();
   const [expanded, setExpanded] = useState<number | null>(0);
 
   const total = partsTotal(associes);
   const valid = partsAreValid(associes);
+
+  // Only a strictly largest share counts: a tie leaves nobody in charge.
+  const maxParts = Math.max(...associes.map((a) => a.partsPercent));
+  const aTete = associes.filter((a) => a.partsPercent === maxParts);
+  const majoritaire = aTete.length === 1 ? aTete[0] : null;
+
   const capital = associes.reduce((sum, a) => sum + parseFloat(a.apportCapital), 0);
   const cca = associes.reduce((sum, a) => sum + parseFloat(a.apportCompteCourant), 0);
 
@@ -238,24 +244,33 @@ export function AssociesForm() {
         </button>
         <button
           type="button"
-          onClick={equalizeParts}
+          onClick={redistribute}
           className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100 transition-colors"
-          title="Repartir les parts a parts egales"
+          title="Repartir les parts en laissant la majorite a l'associe « Moi-meme »"
         >
-          Egaliser
+          Repartir
         </button>
       </div>
 
       {/* Parts total — the run button stays disabled until this reaches 100 % */}
-      <div
-        className={`flex items-center justify-between rounded-md border px-3 py-2 text-sm ${
-          valid ? 'bg-green-50 border-green-200 text-green-800' : 'bg-red-50 border-red-200 text-red-800'
-        }`}
-      >
-        <span className="font-medium">Total des parts</span>
-        <span className="font-mono font-semibold">
-          {(total * 100).toFixed(2)} % {valid ? '✓' : '✗'}
-        </span>
+      <div className="space-y-1">
+        <div
+          className={`flex items-center justify-between rounded-md border px-3 py-2 text-sm ${
+            valid
+              ? 'bg-green-50 border-green-200 text-green-800'
+              : 'bg-red-50 border-red-200 text-red-800'
+          }`}
+        >
+          <span className="font-medium">Total des parts</span>
+          <span className="font-mono font-semibold">
+            {(total * 100).toFixed(2)} % {valid ? '✓' : '✗'}
+          </span>
+        </div>
+        <p className="text-xs text-gray-400">
+          {majoritaire
+            ? `${majoritaire.nom} detient la majorite (${(majoritaire.partsPercent * 100).toFixed(0)} %).`
+            : 'Aucun associe majoritaire : personne ne peut emporter une decision.'}
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">

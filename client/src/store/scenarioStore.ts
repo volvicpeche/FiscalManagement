@@ -10,6 +10,7 @@ import type {
   SimulationResult,
   UserProfile,
 } from '@shared/schemas.js';
+import { redistributeParts } from '@shared/parts.js';
 import { PROFILE_ORDER } from '@/lib/profiles';
 
 /**
@@ -75,7 +76,16 @@ export function makeAssocie(over: Partial<AssocieInput> = {}): AssocieInput {
   };
 }
 
-const DEFAULT_ASSOCIES: AssocieInput[] = [
+/**
+ * The majority of the parts goes to the SELF associe when there is one, so the
+ * SCI always has a clear decision-maker.
+ */
+function withDistributedParts(associes: AssocieInput[]): AssocieInput[] {
+  const selfIndex = associes.findIndex((a) => a.relation === 'SELF');
+  return redistributeParts(associes, selfIndex === -1 ? 0 : selfIndex);
+}
+
+const DEFAULT_ASSOCIES: AssocieInput[] = withDistributedParts([
   makeAssocie({
     nom: 'Moi',
     partsPercent: 0.5,
@@ -97,7 +107,7 @@ const DEFAULT_ASSOCIES: AssocieInput[] = [
     socialChargeRegime: 'STANDARD',
     apportCapital: '500.00',
   }),
-];
+]);
 
 const EMPTY_RESULTS: Record<ScenarioProfile, SimulationResult | null> = {
   SCI_IR: null,
@@ -229,8 +239,8 @@ interface ScenarioStore extends SharedInputs {
   addAssocie: () => void;
   removeAssocie: (index: number) => void;
   updateAssocie: (index: number, a: Partial<AssocieInput>) => void;
-  /** Spreads the parts evenly across the associes, remainder on the first. */
-  equalizeParts: () => void;
+  /** Re-splits the parts, leaving the majority to the SELF associe. */
+  redistribute: () => void;
 
   setManagementMode: (m: ManagementMode) => void;
   setCostOverride: (profile: ScenarioProfile, entityName: string, costs: EntityCostsInput) => void;
@@ -257,34 +267,25 @@ export const useScenarioStore = create<ScenarioStore>((set) => ({
     set((s) => (s.asset.loan ? { asset: { ...s.asset, loan: { ...s.asset.loan, ...l } } } : {})),
   updateParams: (p) => set((s) => ({ params: { ...s.params, ...p } })),
 
+  // Adding or removing an associe re-splits the parts, so the total always
+  // lands back on 100 % without the user having to fix it by hand.
   addAssocie: () =>
     set((s) => ({
-      associes: [...s.associes, makeAssocie({ nom: `Associe ${s.associes.length + 1}` })],
+      associes: withDistributedParts([
+        ...s.associes,
+        makeAssocie({ nom: `Associe ${s.associes.length + 1}` }),
+      ]),
     })),
 
   removeAssocie: (index) =>
-    set((s) => ({ associes: s.associes.filter((_, i) => i !== index) })),
+    set((s) => ({ associes: withDistributedParts(s.associes.filter((_, i) => i !== index)) })),
 
   updateAssocie: (index, a) =>
     set((s) => ({
       associes: s.associes.map((assoc, i) => (i === index ? { ...assoc, ...a } : assoc)),
     })),
 
-  equalizeParts: () =>
-    set((s) => {
-      const n = s.associes.length;
-      if (n === 0) return {};
-      // Round to 4 decimals and put the rounding remainder on the first associe
-      // so the total lands exactly on 100 %.
-      const each = Math.round((1 / n) * 10000) / 10000;
-      const reste = Math.round((1 - each * (n - 1)) * 10000) / 10000;
-      return {
-        associes: s.associes.map((assoc, i) => ({
-          ...assoc,
-          partsPercent: i === 0 ? reste : each,
-        })),
-      };
-    }),
+  redistribute: () => set((s) => ({ associes: withDistributedParts(s.associes) })),
 
   setManagementMode: (managementMode) => set({ managementMode, costOverrides: EMPTY_OVERRIDES }),
 
