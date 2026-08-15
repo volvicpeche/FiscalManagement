@@ -3,9 +3,12 @@ import type {
   SimulationRequest,
   SimulationResult,
   YearlyData,
+  EntityYear,
+  AssocieYear,
   StructureInput,
   AssetInput,
-  LoanInput,
+  AssocieInput,
+  UserProfile,
 } from '@shared/schemas.js';
 import { generateAmortizationSchedule, getYearlyLoanSummary } from './mortgage.js';
 import {
@@ -19,6 +22,14 @@ import {
   getSocialChargeRate,
   applyISDeficit,
 } from './tax.js';
+import { resolveCosts, indexedAnnualCost, type ResolvedCosts } from './costs.js';
+import {
+  applyDeficitFoncier,
+  computeAssocieIR,
+  computeCCAYear,
+  type DeficitVintage,
+} from './associes.js';
+import { computeSuccessionForAssocies } from './succession.js';
 
 // ─── Internal types for simulation state ─────────────────────────────────────
 
@@ -46,20 +57,48 @@ interface AssetState {
   }[];
 }
 
+interface AssocieState {
+  input: AssocieInput;
+  /** Foncier deficits carried forward, with their vintage year. */
+  deficitVintages: DeficitVintage[];
+  /** Outstanding compte courant balance owed by this entity to this associe. */
+  ccaBalance: Decimal;
+}
+
 interface EntityState {
   name: string;
   type: StructureInput['type'];
   taxRegime: 'IS' | 'IR';
   ownershipShare: Decimal;
   assets: AssetState[];
+  associes: AssocieState[];
+  costs: ResolvedCosts;
   carriedDeficit: Decimal;
   accumulatedCash: Decimal;
+  /** Bank debt outstanding at the end of the last simulated year. */
+  lastRemainingDebt: Decimal;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function d(val: string | number): Decimal {
   return new Decimal(val);
+}
+
+function zeroEntityYear(overrides: Partial<Record<keyof EntityYear, Decimal>> = {}): EntityYear {
+  const z = d(0);
+  const get = (k: keyof EntityYear) => (overrides[k] ?? z).toFixed(2);
+  return {
+    grossRevenue: get('grossRevenue'),
+    loanPayment: get('loanPayment'),
+    depreciation: get('depreciation'),
+    operatingCosts: get('operatingCosts'),
+    taxableProfit: get('taxableProfit'),
+    tax: get('tax'),
+    netCashFlow: get('netCashFlow'),
+    remainingDebt: get('remainingDebt'),
+    assetMarketValue: get('assetMarketValue'),
+  };
 }
 
 function buildAssetState(asset: AssetInput, structureType: StructureInput['type']): AssetState {
@@ -101,6 +140,48 @@ function buildAssetState(asset: AssetInput, structureType: StructureInput['type'
   };
 }
 
+/**
+ * An SCI at IR must attribute its result to someone. When no associe is
+ * declared, we fall back to a single implicit one carrying the declarant's
+ * household and the structure's ownership share.
+ */
+function implicitAssocie(userProfile: UserProfile, ownershipShare: number): AssocieInput {
+  return {
+    nom: 'Vous',
+    partsPercent: ownershipShare,
+    relation: 'SELF',
+    birthDate: userProfile.birthDate,
+    maritalStatus: userProfile.maritalStatus,
+    childrenCount: userProfile.childrenCount,
+    autresRevenus: '0.00',
+    socialChargeRegime: userProfile.socialChargeRegime ?? 'STANDARD',
+    apportCapital: '0.00',
+    apportCompteCourant: '0.00',
+    tauxInteretCCA: 0,
+  };
+}
+
+function buildAssocieStates(
+  entity: StructureInput,
+  taxRegime: 'IS' | 'IR',
+  userProfile: UserProfile,
+): AssocieState[] {
+  const declared = entity.associes ?? [];
+
+  const inputs: AssocieInput[] =
+    declared.length > 0
+      ? declared
+      : taxRegime === 'IR'
+        ? [implicitAssocie(userProfile, entity.ownershipShare ?? 1)]
+        : [];
+
+  return inputs.map((input) => ({
+    input,
+    deficitVintages: [],
+    ccaBalance: d(input.apportCompteCourant),
+  }));
+}
+
 function flattenStructures(structures: StructureInput[]): { entity: StructureInput; parent?: string }[] {
   const result: { entity: StructureInput; parent?: string }[] = [];
 
@@ -117,6 +198,31 @@ function flattenStructures(structures: StructureInput[]): { entity: StructureInp
   return result;
 }
 
+/** Accumulates an associe's yearly figures across every entity they hold. */
+function addAssocieYear(
+  bucket: Map<string, AssocieYear>,
+  nom: string,
+  values: Partial<Record<keyof AssocieYear, Decimal>>,
+): void {
+  const current = bucket.get(nom) ?? {
+    quotePart: '0.00',
+    irTax: '0.00',
+    psTax: '0.00',
+    ccaInterest: '0.00',
+    ccaRepayment: '0.00',
+    ccaBalance: '0.00',
+    netCashFlow: '0.00',
+  };
+
+  const merged: AssocieYear = { ...current };
+  for (const key of Object.keys(values) as (keyof AssocieYear)[]) {
+    const add = values[key];
+    if (add) merged[key] = d(current[key]).plus(add).toFixed(2);
+  }
+
+  bucket.set(nom, merged);
+}
+
 // ─── Main simulation ─────────────────────────────────────────────────────────
 
 export function runSimulation(request: SimulationRequest): SimulationResult {
@@ -126,7 +232,9 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
   const chargesGrowth = d(params.chargesGrowthRate ?? 0.02);
   const propTaxGrowth = d(params.propertyTaxGrowthRate ?? 0.02);
   const propertyGrowth = d(params.propertyGrowth ?? 0.015);
+  const inflation = d(params.inflationRate ?? 0.02);
   const dividendRate = d(params.dividendDistributionRate ?? 0);
+  const ccaRepaymentRate = d(params.ccaRepaymentRate ?? 0);
 
   // Flatten the structure tree
   const flatEntities = flattenStructures(structures);
@@ -134,15 +242,23 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
   // Build entity states
   const entityStates: Map<string, EntityState> = new Map();
   for (const { entity } of flatEntities) {
+    const taxRegime: 'IS' | 'IR' =
+      entity.type === 'SCI_IR' || entity.type === 'INDIVIDUAL' ? 'IR' : 'IS';
     const assets = entity.assets.map(a => buildAssetState(a, entity.type));
+    const costs = resolveCosts(entity.costs?.mode ?? 'EN_LIGNE', entity.type, entity.costs);
+
     entityStates.set(entity.name, {
       name: entity.name,
       type: entity.type,
-      taxRegime: (entity.type === 'SCI_IR' || entity.type === 'INDIVIDUAL') ? 'IR' : 'IS',
+      taxRegime,
       ownershipShare: d(entity.ownershipShare ?? 1),
       assets,
+      associes: buildAssocieStates(entity, taxRegime, userProfile),
+      costs,
       carriedDeficit: d(0),
-      accumulatedCash: d(0),
+      // Setup costs are paid before the company earns anything.
+      accumulatedCash: costs.constitution.neg(),
+      lastRemainingDebt: d(0),
     });
   }
 
@@ -154,16 +270,63 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
 
   const yearlyData: YearlyData[] = [];
   let totalTaxPaid = d(0);
+  let totalOperatingCosts = d(0);
+  let totalFraisConstitution = d(0);
+
+  // ─── Year 0: incorporation ───────────────────────────────────────────────
+  // The company exists but has not traded yet: only setup costs are booked,
+  // and the associes' contributions are recorded.
+
+  {
+    const entitiesResult: YearlyData['entities'] = {};
+    const associesBucket = new Map<string, AssocieYear>();
+    let constitutionTotal = d(0);
+
+    for (const [name, state] of entityStates) {
+      const initialDebt = state.assets.reduce(
+        (acc, a) => acc.plus(a.loanYearlySummary[0]?.remainingPrincipal ?? d(0)),
+        d(0),
+      );
+      const initialValue = state.assets.reduce((acc, a) => acc.plus(a.marketValue), d(0));
+
+      constitutionTotal = constitutionTotal.plus(state.costs.constitution);
+
+      entitiesResult[name] = zeroEntityYear({
+        operatingCosts: state.costs.constitution,
+        netCashFlow: state.costs.constitution.neg(),
+        remainingDebt: initialDebt,
+        assetMarketValue: initialValue,
+      });
+
+      for (const a of state.associes) {
+        addAssocieYear(associesBucket, a.input.nom, { ccaBalance: a.ccaBalance });
+      }
+    }
+
+    totalFraisConstitution = constitutionTotal;
+
+    yearlyData.push({
+      year: 0,
+      entities: entitiesResult,
+      associes: Object.fromEntries(associesBucket),
+      userNetDividend: '0.00',
+      ifiTax: '0.00',
+      operatingCosts: constitutionTotal.toFixed(2),
+      totalNetCashFlow: constitutionTotal.neg().toFixed(2),
+    });
+  }
 
   // ─── 30-year loop ────────────────────────────────────────────────────────
 
   for (let year = 1; year <= horizon; year++) {
     const growthMultiplier = (rate: Decimal) => rate.plus(1).pow(year - 1);
     const entitiesResult: YearlyData['entities'] = {};
+    const associesBucket = new Map<string, AssocieYear>();
     let totalRealEstateMarketValue = d(0);
     let totalRemainingDebt = d(0);
     let yearTotalNetCashFlow = d(0);
-    let yearIRFoncierIncome = d(0); // for IR entities, accumulate for user-level tax
+    let yearOperatingCosts = d(0);
+    let yearAssocieTax = d(0);
 
     // ── Step 1-6: Process each entity ──────────────────────────────────────
 
@@ -220,15 +383,34 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         entityMarketValue = entityMarketValue.plus(asset.marketValue);
       }
 
+      // 3b. Structure running costs — deductible under both regimes.
+      const operatingCosts = indexedAnnualCost(state.costs.annuel, year, inflation);
+      yearOperatingCosts = yearOperatingCosts.plus(operatingCosts);
+      totalOperatingCosts = totalOperatingCosts.plus(operatingCosts);
+
+      // 3c. Interest on comptes courants — a charge of the company.
+      let ccaInterestTotal = d(0);
+      for (const a of state.associes) {
+        ccaInterestTotal = ccaInterestTotal.plus(a.ccaBalance.mul(a.input.tauxInteretCCA));
+      }
+
       // 4. Taxable profit
       const netRents = entityGrossRevenue.minus(entityCharges).minus(entityPropertyTax);
+      const chargesStructurelles = operatingCosts.plus(ccaInterestTotal);
       let taxableProfit: Decimal;
 
       if (state.taxRegime === 'IS') {
-        taxableProfit = netRents.minus(entityInterest).minus(entityInsurance).minus(entityDepreciation);
+        taxableProfit = netRents
+          .minus(entityInterest)
+          .minus(entityInsurance)
+          .minus(entityDepreciation)
+          .minus(chargesStructurelles);
       } else {
         // IR: no depreciation
-        taxableProfit = netRents.minus(entityInterest).minus(entityInsurance);
+        taxableProfit = netRents
+          .minus(entityInterest)
+          .minus(entityInsurance)
+          .minus(chargesStructurelles);
       }
 
       // 5. Apply tax
@@ -241,22 +423,68 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         const adjustedProfit = deficitResult.taxableAfterOffset;
 
         entityTax = computeIS(adjustedProfit);
-
-        // Add Mere-Fille quote-part if entity received dividends from subsidiaries
-        // (handled in step 7 from previous year's accumulated cash)
       } else {
-        // IR: tax is computed at user level, accumulate income
-        yearIRFoncierIncome = yearIRFoncierIncome.plus(
-          taxableProfit.mul(state.ownershipShare),
-        );
+        // 5b. IR: the SCI is translucent — each associe is taxed on their own
+        // quote-part, at their own marginal rate, on top of their own income.
+        for (const a of state.associes) {
+          const quotePart = taxableProfit.mul(a.input.partsPercent);
+          const deficit = applyDeficitFoncier(quotePart, a.deficitVintages, year);
+          a.deficitVintages = deficit.vintages;
+
+          const { ir, ps } = computeAssocieIR(a.input, deficit);
+          yearAssocieTax = yearAssocieTax.plus(ir).plus(ps);
+          totalTaxPaid = totalTaxPaid.plus(ir).plus(ps);
+
+          addAssocieYear(associesBucket, a.input.nom, {
+            quotePart,
+            irTax: ir,
+            psTax: ps,
+            netCashFlow: ir.neg().minus(ps),
+          });
+        }
       }
 
-      // 6. Net cash flow for entity
-      const entityNetCashFlow = netRents
+      // 6. Net cash flow for entity, before repaying any compte courant
+      let entityNetCashFlow = netRents
         .minus(entityLoanPayment)
-        .minus(entityTax);
+        .minus(entityTax)
+        .minus(chargesStructurelles);
+
+      // 6b. Compte courant: interest paid out, then capital repaid from the
+      // remaining cash. Repayment is a pure cash movement — no tax on it.
+      const totalCCA = state.associes.reduce((acc, a) => acc.plus(a.ccaBalance), d(0));
+      let totalRemboursement = d(0);
+
+      for (const a of state.associes) {
+        // Split the repayment envelope pro-rata across the outstanding accounts.
+        const quote = totalCCA.gt(0) ? a.ccaBalance.div(totalCCA) : d(0);
+        const { interets, remboursement, soldeRestant } = computeCCAYear(
+          a.ccaBalance,
+          d(a.input.tauxInteretCCA),
+          entityNetCashFlow.mul(quote),
+          ccaRepaymentRate,
+        );
+        a.ccaBalance = soldeRestant;
+        totalRemboursement = totalRemboursement.plus(remboursement);
+
+        // Interest on a compte courant is RCM in the associe's hands.
+        const interetTax = interets.gt(0)
+          ? computePFU(interets, a.input.socialChargeRegime)
+          : d(0);
+        totalTaxPaid = totalTaxPaid.plus(interetTax);
+
+        addAssocieYear(associesBucket, a.input.nom, {
+          ccaInterest: interets,
+          ccaRepayment: remboursement,
+          ccaBalance: soldeRestant,
+          netCashFlow: remboursement.plus(interets).minus(interetTax),
+        });
+      }
+
+      entityNetCashFlow = entityNetCashFlow.minus(totalRemboursement);
 
       state.accumulatedCash = state.accumulatedCash.plus(entityNetCashFlow);
+      state.lastRemainingDebt = entityRemainingDebt;
 
       totalTaxPaid = totalTaxPaid.plus(entityTax);
       totalRealEstateMarketValue = totalRealEstateMarketValue.plus(entityMarketValue);
@@ -266,6 +494,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         grossRevenue: entityGrossRevenue.toFixed(2),
         loanPayment: entityLoanPayment.toFixed(2),
         depreciation: entityDepreciation.toFixed(2),
+        operatingCosts: operatingCosts.toFixed(2),
         taxableProfit: taxableProfit.toFixed(2),
         tax: entityTax.toFixed(2),
         netCashFlow: entityNetCashFlow.toFixed(2),
@@ -277,18 +506,20 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
     }
 
     // ── Step 7: Intra-group dividends (SCI -> Holding) ───────────────────────
-    // Simplified: SCI distributes all positive cash to parent Holding
+    // The subsidiary distributes its cash; the parent only receives its share.
     for (const [name, state] of entityStates) {
       const parentName = parentMap.get(name);
       if (parentName && state.accumulatedCash.gt(0)) {
         const parentState = entityStates.get(parentName);
         if (parentState && parentState.taxRegime === 'IS') {
-          const dividend = state.accumulatedCash;
+          const distribue = state.accumulatedCash;
+          const dividend = distribue.mul(state.ownershipShare);
           const quotePart = computeMereFilleQuotePart(dividend);
           // Quote-part taxed at IS in the parent
           const qpTax = computeIS(quotePart);
           parentState.accumulatedCash = parentState.accumulatedCash.plus(dividend).minus(qpTax);
           totalTaxPaid = totalTaxPaid.plus(qpTax);
+          // The minority share leaves the group with the other shareholders.
           state.accumulatedCash = d(0);
         }
       }
@@ -298,20 +529,6 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
     const netRealEstate = totalRealEstateMarketValue.minus(totalRemainingDebt);
     const ifiTax = computeIFI(netRealEstate);
     totalTaxPaid = totalTaxPaid.plus(ifiTax);
-
-    // ── IR on foncier income (user level, for IR entities) ───────────────────
-    let userIRTax = d(0);
-    let userPSTax = d(0);
-    if (yearIRFoncierIncome.gt(0)) {
-      userIRTax = computeIR(
-        yearIRFoncierIncome,
-        userProfile.maritalStatus,
-        userProfile.childrenCount,
-      );
-      const psRate = getSocialChargeRate(userProfile.socialChargeRegime ?? 'STANDARD');
-      userPSTax = yearIRFoncierIncome.mul(psRate);
-      totalTaxPaid = totalTaxPaid.plus(userIRTax).plus(userPSTax);
-    }
 
     // ── User net dividend (Holding -> User distribution) ────────────────────
     let userNetDividend = d(0);
@@ -329,7 +546,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
             const pfuTax = computePFU(grossDividend, regime);
             const baremeTax = computeDividendBareme(
               grossDividend,
-              yearIRFoncierIncome, // other income for marginal rate
+              d(0), // other income is now tracked per associe
               userProfile.maritalStatus,
               userProfile.childrenCount,
               regime,
@@ -347,15 +564,16 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
 
     yearTotalNetCashFlow = yearTotalNetCashFlow
       .minus(ifiTax)
-      .minus(userIRTax)
-      .minus(userPSTax)
+      .minus(yearAssocieTax)
       .plus(userNetDividend);
 
     yearlyData.push({
       year,
       entities: entitiesResult,
+      associes: Object.fromEntries(associesBucket),
       userNetDividend: userNetDividend.toFixed(2),
       ifiTax: ifiTax.toFixed(2),
+      operatingCosts: yearOperatingCosts.toFixed(2),
       totalNetCashFlow: yearTotalNetCashFlow.toFixed(2),
     });
   }
@@ -364,24 +582,81 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
 
   // Total net wealth = sum of all entity market values - debt + accumulated cash
   let totalWealth = d(0);
+  // Company net asset value, which the shares are worth: also net of the
+  // comptes courants, since those are a debt towards the associes.
+  let navSocietes = d(0);
+  const ccaBalances = new Map<string, Decimal>();
+
   for (const [, state] of entityStates) {
-    for (const asset of state.assets) {
-      totalWealth = totalWealth.plus(asset.marketValue);
-      // Subtract remaining debt
-      const lastLoanYear = asset.loanYearlySummary[asset.loanYearlySummary.length - 1];
-      if (lastLoanYear) {
-        totalWealth = totalWealth.minus(lastLoanYear.remainingPrincipal);
-      }
+    const marketValue = state.assets.reduce((acc, a) => acc.plus(a.marketValue), d(0));
+    const ccaTotal = state.associes.reduce((acc, a) => acc.plus(a.ccaBalance), d(0));
+
+    totalWealth = totalWealth
+      .plus(marketValue)
+      .minus(state.lastRemainingDebt)
+      .plus(state.accumulatedCash);
+
+    navSocietes = navSocietes
+      .plus(marketValue)
+      .minus(state.lastRemainingDebt)
+      .plus(state.accumulatedCash)
+      .minus(ccaTotal);
+
+    for (const a of state.associes) {
+      ccaBalances.set(a.input.nom, (ccaBalances.get(a.input.nom) ?? d(0)).plus(a.ccaBalance));
     }
-    totalWealth = totalWealth.plus(state.accumulatedCash);
   }
+
+  // ── Succession ───────────────────────────────────────────────────────────────
+  // Estimated on the entity the associes actually hold: the top of the tree.
+
+  const holder =
+    [...entityStates.values()].find(s => !parentMap.has(s.name) && s.associes.length > 0) ??
+    [...entityStates.values()].find(s => s.associes.length > 0);
+
+  const selfAssocie = holder?.associes.find(a => a.input.relation === 'SELF')?.input;
+  // Age reached by the deceased at the end of the horizon — drives the Art. 669
+  // usufruit bareme when the shares are transmitted in nue-propriete only.
+  const ageAuTerme = selfAssocie?.birthDate
+    ? new Date().getFullYear() - new Date(selfAssocie.birthDate).getFullYear() + horizon
+    : undefined;
+
+  const succession = computeSuccessionForAssocies({
+    nav: navSocietes,
+    associes: holder?.associes.map(a => a.input) ?? [],
+    ccaBalances,
+    illiquidityDiscount: d(params.illiquidityDiscount ?? 0.1),
+    demembrement: params.demembrement ?? false,
+    ageAuTerme,
+    fallbackChildren: userProfile.childrenCount,
+  });
+
+  totalTaxPaid = totalTaxPaid.plus(succession.total);
 
   return {
     summary: {
       totalNetWealth: totalWealth.toFixed(2),
       totalTaxPaid: totalTaxPaid.toFixed(2),
       irr: '0.00', // TODO: implement IRR calculation
+      fraisConstitution: totalFraisConstitution.toFixed(2),
+      totalOperatingCosts: totalOperatingCosts.toFixed(2),
+      successionCost: succession.total.toFixed(2),
     },
     yearlyData,
+    succession: {
+      navTotal: succession.navTotal.toFixed(2),
+      valeurPartsDefunt: succession.valeurPartsDefunt.toFixed(2),
+      ccaDefunt: succession.ccaDefunt.toFixed(2),
+      baseTransmise: succession.baseTransmise.toFixed(2),
+      heritiers: succession.heritiers.map(h => ({
+        nom: h.nom,
+        relation: h.relation,
+        partRecue: h.partRecue.toFixed(2),
+        abattement: h.abattement.toFixed(2),
+        baseTaxable: h.baseTaxable.toFixed(2),
+        droits: h.droits.toFixed(2),
+      })),
+      total: succession.total.toFixed(2),
+    },
   };
 }

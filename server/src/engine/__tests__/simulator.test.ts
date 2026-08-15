@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import type { SimulationRequest } from '@shared/schemas.js';
+import type { SimulationRequest, SimulationResult, AssocieInput, EntityCostsInput } from '@shared/schemas.js';
 import { runSimulation } from '../simulator.js';
+
+const NO_COSTS: EntityCostsInput = {
+  mode: 'SOI_MEME',
+  constitution: [{ label: 'Aucun', montant: '0.00' }],
+  annuel: [{ label: 'Aucun', montant: '0.00' }],
+};
 
 const baseRequest: SimulationRequest = {
   userProfile: {
@@ -14,6 +20,8 @@ const baseRequest: SimulationRequest = {
       type: 'SCI_IS',
       taxRegime: 'IS',
       ownershipShare: 1.0,
+      associes: [],
+      costs: NO_COSTS,
       assets: [
         {
           type: 'REAL_ESTATE',
@@ -46,15 +54,41 @@ const baseRequest: SimulationRequest = {
     chargesGrowthRate: 0.02,
     propertyTaxGrowthRate: 0.02,
     dividendDistributionRate: 0,
+    ccaRepaymentRate: 0,
+    illiquidityDiscount: 0.1,
+    demembrement: false,
   },
 };
 
+/** Addresses a year by its number rather than its index — year 0 leads. */
+function yearOf(result: SimulationResult, year: number) {
+  const row = result.yearlyData.find((y) => y.year === year);
+  if (!row) throw new Error(`Year ${year} not found`);
+  return row;
+}
+
+function associe(over: Partial<AssocieInput> = {}): AssocieInput {
+  return {
+    nom: 'Associe',
+    partsPercent: 1,
+    relation: 'SELF',
+    maritalStatus: 'SINGLE',
+    childrenCount: 0,
+    autresRevenus: '0.00',
+    socialChargeRegime: 'STANDARD',
+    apportCapital: '0.00',
+    apportCompteCourant: '0.00',
+    tauxInteretCCA: 0,
+    ...over,
+  };
+}
+
 describe('runSimulation', () => {
-  it('should return 30 years of data', () => {
+  it('should return the horizon plus a year 0 for incorporation', () => {
     const result = runSimulation(baseRequest);
-    expect(result.yearlyData).toHaveLength(30);
-    expect(result.yearlyData[0].year).toBe(1);
-    expect(result.yearlyData[29].year).toBe(30);
+    expect(result.yearlyData).toHaveLength(31);
+    expect(result.yearlyData[0].year).toBe(0);
+    expect(result.yearlyData[30].year).toBe(30);
   });
 
   it('should have entity data for SCI Alpha each year', () => {
@@ -67,20 +101,20 @@ describe('runSimulation', () => {
 
   it('should show increasing gross revenue over time (rent growth)', () => {
     const result = runSimulation(baseRequest);
-    const y1 = parseFloat(result.yearlyData[0].entities['SCI Alpha'].grossRevenue);
-    const y30 = parseFloat(result.yearlyData[29].entities['SCI Alpha'].grossRevenue);
+    const y1 = parseFloat(yearOf(result, 1).entities['SCI Alpha'].grossRevenue);
+    const y30 = parseFloat(yearOf(result, 30).entities['SCI Alpha'].grossRevenue);
     expect(y30).toBeGreaterThan(y1);
   });
 
   it('should show zero remaining debt after loan duration (20 years)', () => {
     const result = runSimulation(baseRequest);
-    const y20 = parseFloat(result.yearlyData[19].entities['SCI Alpha'].remainingDebt);
+    const y20 = parseFloat(yearOf(result, 20).entities['SCI Alpha'].remainingDebt);
     expect(y20).toBeCloseTo(0, 0);
   });
 
   it('should have zero loan payment after year 20', () => {
     const result = runSimulation(baseRequest);
-    const y25 = parseFloat(result.yearlyData[24].entities['SCI Alpha'].loanPayment);
+    const y25 = parseFloat(yearOf(result, 25).entities['SCI Alpha'].loanPayment);
     expect(y25).toBe(0);
   });
 
@@ -96,8 +130,8 @@ describe('runSimulation', () => {
 
   it('should show increasing market value over time', () => {
     const result = runSimulation(baseRequest);
-    const mv1 = parseFloat(result.yearlyData[0].entities['SCI Alpha'].assetMarketValue);
-    const mv30 = parseFloat(result.yearlyData[29].entities['SCI Alpha'].assetMarketValue);
+    const mv1 = parseFloat(yearOf(result, 1).entities['SCI Alpha'].assetMarketValue);
+    const mv30 = parseFloat(yearOf(result, 30).entities['SCI Alpha'].assetMarketValue);
     expect(mv30).toBeGreaterThan(mv1);
   });
 
@@ -115,9 +149,9 @@ describe('runSimulation', () => {
     };
 
     const result = runSimulation(irRequest);
-    expect(result.yearlyData).toHaveLength(30);
+    expect(result.yearlyData).toHaveLength(31);
     // IR entities should have 0 depreciation
-    expect(parseFloat(result.yearlyData[0].entities['SCI Beta'].depreciation)).toBe(0);
+    expect(parseFloat(yearOf(result, 1).entities['SCI Beta'].depreciation)).toBe(0);
   });
 
   it('should compute IFI when patrimony exceeds threshold', () => {
@@ -149,8 +183,7 @@ describe('runSimulation', () => {
 
     const result = runSimulation(highValueRequest);
     // Net real estate > 1.3M, so IFI should be > 0
-    const ifiYear1 = parseFloat(result.yearlyData[0].ifiTax);
-    expect(ifiYear1).toBeGreaterThan(0);
+    expect(parseFloat(yearOf(result, 1).ifiTax)).toBeGreaterThan(0);
   });
 
   it('should distribute dividends when dividendDistributionRate > 0', () => {
@@ -176,36 +209,402 @@ describe('runSimulation', () => {
     };
 
     const result = runSimulation(divRequest);
-    // With high rent, entity should have positive cash and distribute dividends
     const hasDividends = result.yearlyData.some(y => parseFloat(y.userNetDividend) > 0);
     expect(hasDividends).toBe(true);
   });
 
   it('should handle Holding + SCI hierarchy with Mere-Fille', () => {
-    const holdingRequest: SimulationRequest = {
-      userProfile: baseRequest.userProfile,
+    const result = runSimulation(holdingRequest(0.95));
+    expect(result.yearlyData).toHaveLength(11);
+    expect(yearOf(result, 1).entities['SCI Fille']).toBeDefined();
+    expect(yearOf(result, 1).entities['Holding']).toBeDefined();
+  });
+});
+
+function holdingRequest(ownershipShare: number): SimulationRequest {
+  return {
+    userProfile: baseRequest.userProfile,
+    structures: [
+      {
+        name: 'Holding',
+        type: 'HOLDING',
+        taxRegime: 'IS',
+        ownershipShare: 1.0,
+        associes: [],
+        costs: NO_COSTS,
+        assets: [],
+        subsidiaries: [
+          {
+            ...baseRequest.structures[0],
+            name: 'SCI Fille',
+            ownershipShare,
+            assets: [{ ...baseRequest.structures[0].assets[0], annualRent: '30000.00' }],
+          },
+        ],
+      },
+    ],
+    params: { ...baseRequest.params, horizonYears: 10, dividendDistributionRate: 0.3 },
+  };
+}
+
+describe('runSimulation — intra-group dividends', () => {
+  it('should remit only the parent share of the subsidiary cash', () => {
+    // Regression: the holding used to receive 100% of the SCI cash whatever
+    // its ownership share.
+    const full = runSimulation(holdingRequest(1.0));
+    const partial = runSimulation(holdingRequest(0.5));
+
+    expect(parseFloat(full.summary.totalNetWealth)).toBeGreaterThan(
+      parseFloat(partial.summary.totalNetWealth),
+    );
+  });
+});
+
+describe('runSimulation — year 0 (incorporation)', () => {
+  it('should book the setup costs and nothing else', () => {
+    const result = runSimulation({
+      ...baseRequest,
+      structures: [{ ...baseRequest.structures[0], costs: { mode: 'EXPERT_COMPTABLE', constitution: [], annuel: [] } }],
+    });
+    const y0 = yearOf(result, 0);
+
+    expect(parseFloat(y0.entities['SCI Alpha'].grossRevenue)).toBe(0);
+    expect(parseFloat(y0.entities['SCI Alpha'].tax)).toBe(0);
+    expect(parseFloat(y0.operatingCosts)).toBeGreaterThan(0);
+    expect(parseFloat(y0.totalNetCashFlow)).toBeLessThan(0);
+    expect(parseFloat(result.summary.fraisConstitution)).toBe(parseFloat(y0.operatingCosts));
+  });
+
+  it('should already show the loan and the property at year 0', () => {
+    const result = runSimulation(baseRequest);
+    const y0 = yearOf(result, 0);
+    expect(parseFloat(y0.entities['SCI Alpha'].remainingDebt)).toBeGreaterThan(0);
+    expect(parseFloat(y0.entities['SCI Alpha'].assetMarketValue)).toBe(216000);
+  });
+});
+
+describe('runSimulation — structure costs', () => {
+  const withMode = (mode: EntityCostsInput['mode']): SimulationRequest => ({
+    ...baseRequest,
+    structures: [
+      { ...baseRequest.structures[0], costs: { mode, constitution: [], annuel: [] } },
+    ],
+  });
+
+  it('should cost more to run with an expert-comptable than alone', () => {
+    const soiMeme = runSimulation(withMode('SOI_MEME'));
+    const ec = runSimulation(withMode('EXPERT_COMPTABLE'));
+
+    expect(parseFloat(ec.summary.totalOperatingCosts)).toBeGreaterThan(
+      parseFloat(soiMeme.summary.totalOperatingCosts),
+    );
+    expect(parseFloat(ec.summary.fraisConstitution)).toBeGreaterThan(
+      parseFloat(soiMeme.summary.fraisConstitution),
+    );
+  });
+
+  it('should leave less wealth behind when the structure costs more', () => {
+    const soiMeme = runSimulation(withMode('SOI_MEME'));
+    const ec = runSimulation(withMode('EXPERT_COMPTABLE'));
+    expect(parseFloat(ec.summary.totalNetWealth)).toBeLessThan(
+      parseFloat(soiMeme.summary.totalNetWealth),
+    );
+  });
+
+  it('should index the running costs on inflation', () => {
+    const result = runSimulation(withMode('EXPERT_COMPTABLE'));
+    const y1 = parseFloat(yearOf(result, 1).entities['SCI Alpha'].operatingCosts);
+    const y10 = parseFloat(yearOf(result, 10).entities['SCI Alpha'].operatingCosts);
+    expect(y10).toBeGreaterThan(y1);
+    expect(y10).toBeCloseTo(y1 * Math.pow(1.02, 9), 2);
+  });
+
+  it('should deduct the running costs from the taxable profit', () => {
+    const free = runSimulation(withMode('SOI_MEME'));
+    const paid = runSimulation(withMode('EXPERT_COMPTABLE'));
+    const profit = (r: SimulationResult) =>
+      parseFloat(yearOf(r, 1).entities['SCI Alpha'].taxableProfit);
+    expect(profit(paid)).toBeLessThan(profit(free));
+  });
+
+  it('should make the Holding + SCI setup cost about twice an SCI alone', () => {
+    const sci = runSimulation(withMode('EXPERT_COMPTABLE'));
+    const withHolding = runSimulation({
+      ...holdingRequest(1.0),
       structures: [
         {
-          name: 'Holding',
-          type: 'HOLDING',
-          taxRegime: 'IS',
-          ownershipShare: 1.0,
-          assets: [],
+          ...holdingRequest(1.0).structures[0],
+          costs: { mode: 'EXPERT_COMPTABLE', constitution: [], annuel: [] },
           subsidiaries: [
             {
-              ...baseRequest.structures[0],
-              name: 'SCI Fille',
-              ownershipShare: 0.95,
+              ...(holdingRequest(1.0).structures[0].subsidiaries as SimulationRequest['structures'])[0],
+              costs: { mode: 'EXPERT_COMPTABLE', constitution: [], annuel: [] },
             },
           ],
         },
       ],
-      params: { ...baseRequest.params, horizonYears: 10, dividendDistributionRate: 0.3 },
-    };
+      params: { ...baseRequest.params, horizonYears: 30 },
+    });
 
-    const result = runSimulation(holdingRequest);
-    expect(result.yearlyData).toHaveLength(10);
-    expect(result.yearlyData[0].entities['SCI Fille']).toBeDefined();
-    expect(result.yearlyData[0].entities['Holding']).toBeDefined();
+    const ratio =
+      parseFloat(withHolding.summary.totalOperatingCosts) /
+      parseFloat(sci.summary.totalOperatingCosts);
+    expect(ratio).toBeGreaterThan(1.8);
+    expect(ratio).toBeLessThan(2.5);
+  });
+});
+
+describe('runSimulation — associes at IR', () => {
+  const irWithAssocies = (associes: AssocieInput[]): SimulationRequest => ({
+    ...baseRequest,
+    structures: [
+      {
+        ...baseRequest.structures[0],
+        name: 'SCI Familiale',
+        type: 'SCI_IR',
+        taxRegime: 'IR',
+        associes,
+        assets: [{ ...baseRequest.structures[0].assets[0], annualRent: '40000.00', loan: undefined }],
+      },
+    ],
+    params: { ...baseRequest.params, horizonYears: 5 },
+  });
+
+  it('should report one row per associe', () => {
+    const result = runSimulation(
+      irWithAssocies([
+        associe({ nom: 'Florian', partsPercent: 0.6 }),
+        associe({ nom: 'Marie', partsPercent: 0.4, relation: 'SPOUSE' }),
+      ]),
+    );
+    const y1 = yearOf(result, 1);
+    expect(Object.keys(y1.associes).sort()).toEqual(['Florian', 'Marie']);
+  });
+
+  it('should split the quote-part pro-rata by parts', () => {
+    const result = runSimulation(
+      irWithAssocies([
+        associe({ nom: 'Florian', partsPercent: 0.75 }),
+        associe({ nom: 'Marie', partsPercent: 0.25, relation: 'SPOUSE' }),
+      ]),
+    );
+    const y1 = yearOf(result, 1);
+    const florian = parseFloat(y1.associes['Florian'].quotePart);
+    const marie = parseFloat(y1.associes['Marie'].quotePart);
+    expect(florian / marie).toBeCloseTo(3, 5);
+  });
+
+  it('should tax associes differently according to their own other income', () => {
+    // Same parts, very different households — the whole point of the module.
+    const result = runSimulation(
+      irWithAssocies([
+        associe({ nom: 'Modeste', partsPercent: 0.5, autresRevenus: '12000.00' }),
+        associe({ nom: 'Aise', partsPercent: 0.5, relation: 'SPOUSE', autresRevenus: '180000.00' }),
+      ]),
+    );
+    const y1 = yearOf(result, 1);
+    expect(parseFloat(y1.associes['Aise'].irTax)).toBeGreaterThan(
+      parseFloat(y1.associes['Modeste'].irTax),
+    );
+  });
+
+  it('should exempt a Swiss-affiliated associe from CSG/CRDS while taxing the other', () => {
+    const result = runSimulation(
+      irWithAssocies([
+        associe({ nom: 'Suisse', partsPercent: 0.5, socialChargeRegime: 'SWISS_EXEMPT' }),
+        associe({ nom: 'Francais', partsPercent: 0.5, relation: 'SPOUSE', socialChargeRegime: 'STANDARD' }),
+      ]),
+    );
+    const y1 = yearOf(result, 1);
+    expect(parseFloat(y1.associes['Suisse'].psTax)).toBeLessThan(
+      parseFloat(y1.associes['Francais'].psTax),
+    );
+  });
+
+  it('should not tax the SCI itself at IR', () => {
+    const result = runSimulation(irWithAssocies([associe({ nom: 'Florian', partsPercent: 1 })]));
+    expect(parseFloat(yearOf(result, 1).entities['SCI Familiale'].tax)).toBe(0);
+  });
+
+  it('should charge a foncier deficit against the associe global income', () => {
+    // Heavy loan, low rent: the early years run at a loss.
+    const deficitaire = runSimulation({
+      ...baseRequest,
+      structures: [
+        {
+          ...baseRequest.structures[0],
+          name: 'SCI Deficit',
+          type: 'SCI_IR',
+          taxRegime: 'IR',
+          associes: [associe({ nom: 'Florian', partsPercent: 1, autresRevenus: '90000.00' })],
+          assets: [{ ...baseRequest.structures[0].assets[0], annualRent: '4000.00' }],
+        },
+      ],
+      params: { ...baseRequest.params, horizonYears: 3 },
+    });
+
+    // A negative IR means the SCI reduced the associe's overall tax bill.
+    expect(parseFloat(yearOf(deficitaire, 1).associes['Florian'].irTax)).toBeLessThan(0);
+    expect(parseFloat(yearOf(deficitaire, 1).associes['Florian'].psTax)).toBe(0);
+  });
+});
+
+describe('runSimulation — comptes courants d\'associes', () => {
+  const withCCA = (repaymentRate: number, taux = 0): SimulationRequest => ({
+    ...baseRequest,
+    structures: [
+      {
+        ...baseRequest.structures[0],
+        associes: [
+          associe({ nom: 'Florian', partsPercent: 1, apportCompteCourant: '50000.00', tauxInteretCCA: taux }),
+        ],
+        assets: [{ ...baseRequest.structures[0].assets[0], annualRent: '40000.00' }],
+      },
+    ],
+    params: { ...baseRequest.params, horizonYears: 10, ccaRepaymentRate: repaymentRate },
+  });
+
+  it('should carry the initial balance at year 0', () => {
+    const result = runSimulation(withCCA(0));
+    expect(parseFloat(yearOf(result, 0).associes['Florian'].ccaBalance)).toBe(50000);
+  });
+
+  it('should never repay when the repayment rate is 0', () => {
+    const result = runSimulation(withCCA(0));
+    expect(parseFloat(yearOf(result, 10).associes['Florian'].ccaBalance)).toBe(50000);
+  });
+
+  it('should draw the balance down when repaying', () => {
+    const result = runSimulation(withCCA(0.5));
+    const y10 = parseFloat(yearOf(result, 10).associes['Florian'].ccaBalance);
+    expect(y10).toBeLessThan(50000);
+  });
+
+  it('should hand the repayment to the associe without any tax on it', () => {
+    const result = runSimulation(withCCA(0.5));
+    const y1 = yearOf(result, 1).associes['Florian'];
+    expect(parseFloat(y1.ccaRepayment)).toBeGreaterThan(0);
+    // No IR, no PS: an SCI at IS attributes no result to its associes, and
+    // repaying a loan is not income.
+    expect(parseFloat(y1.irTax)).toBe(0);
+    expect(parseFloat(y1.psTax)).toBe(0);
+    expect(parseFloat(y1.netCashFlow)).toBeCloseTo(parseFloat(y1.ccaRepayment), 2);
+  });
+
+  it('should accrue interest on a remunerated compte courant', () => {
+    const result = runSimulation(withCCA(0, 0.03));
+    expect(parseFloat(yearOf(result, 1).associes['Florian'].ccaInterest)).toBeCloseTo(1500, 2);
+  });
+
+  it('should deduct the CCA interest from the taxable profit', () => {
+    const gratuit = runSimulation(withCCA(0, 0));
+    const remunere = runSimulation(withCCA(0, 0.03));
+    const profit = (r: SimulationResult) =>
+      parseFloat(yearOf(r, 1).entities['SCI Alpha'].taxableProfit);
+    expect(profit(remunere)).toBeLessThan(profit(gratuit));
+  });
+});
+
+describe('runSimulation — succession', () => {
+  const familyRequest = (associes: AssocieInput[], over: Partial<SimulationRequest['params']> = {}): SimulationRequest => ({
+    ...baseRequest,
+    structures: [
+      {
+        ...baseRequest.structures[0],
+        associes,
+        assets: [{ ...baseRequest.structures[0].assets[0], annualRent: '20000.00' }],
+      },
+    ],
+    params: { ...baseRequest.params, horizonYears: 30, ...over },
+  });
+
+  it('should produce a succession estimate wired to the associes', () => {
+    const result = runSimulation(
+      familyRequest([
+        associe({ nom: 'Florian', partsPercent: 1, relation: 'SELF', birthDate: '1980-01-01T00:00:00.000Z' }),
+      ]),
+    );
+
+    // No co-associe: the estate goes to the declared children.
+    expect(result.succession.heritiers).toHaveLength(2);
+    expect(parseFloat(result.succession.navTotal)).toBeGreaterThan(0);
+    expect(parseFloat(result.summary.successionCost)).toBe(parseFloat(result.succession.total));
+  });
+
+  it('should lower the succession cost when children already hold parts', () => {
+    // The core argument for an SCI: parts given early are out of the estate.
+    const solo = runSimulation(
+      familyRequest([associe({ nom: 'Florian', partsPercent: 1, relation: 'SELF' })]),
+    );
+    const partage = runSimulation(
+      familyRequest([
+        associe({ nom: 'Florian', partsPercent: 0.4, relation: 'SELF' }),
+        associe({ nom: 'Enfant 1', partsPercent: 0.3, relation: 'CHILD' }),
+        associe({ nom: 'Enfant 2', partsPercent: 0.3, relation: 'CHILD' }),
+      ]),
+    );
+
+    expect(parseFloat(partage.succession.total)).toBeLessThan(parseFloat(solo.succession.total));
+  });
+
+  it('should exempt a surviving spouse entirely', () => {
+    const result = runSimulation(
+      familyRequest([
+        associe({ nom: 'Florian', partsPercent: 0.5, relation: 'SELF' }),
+        associe({ nom: 'Marie', partsPercent: 0.5, relation: 'SPOUSE' }),
+      ]),
+    );
+    expect(parseFloat(result.succession.total)).toBe(0);
+  });
+
+  it('should apply the illiquidity discount to the shares', () => {
+    const associes = [
+      associe({ nom: 'Florian', partsPercent: 0.5, relation: 'SELF' }),
+      associe({ nom: 'Enfant', partsPercent: 0.5, relation: 'CHILD' }),
+    ];
+    const sansDecote = runSimulation(familyRequest(associes, { illiquidityDiscount: 0 }));
+    const avecDecote = runSimulation(familyRequest(associes, { illiquidityDiscount: 0.2 }));
+
+    expect(parseFloat(avecDecote.succession.valeurPartsDefunt)).toBeLessThan(
+      parseFloat(sansDecote.succession.valeurPartsDefunt),
+    );
+    expect(parseFloat(avecDecote.succession.total)).toBeLessThan(
+      parseFloat(sansDecote.succession.total),
+    );
+  });
+
+  it('should lower the transmitted base when only the nue-propriete passes', () => {
+    const associes = [
+      associe({ nom: 'Florian', partsPercent: 0.5, relation: 'SELF', birthDate: '1980-01-01T00:00:00.000Z' }),
+      associe({ nom: 'Enfant', partsPercent: 0.5, relation: 'CHILD' }),
+    ];
+    const pleine = runSimulation(familyRequest(associes, { demembrement: false }));
+    const demembre = runSimulation(familyRequest(associes, { demembrement: true }));
+
+    expect(parseFloat(demembre.succession.baseTransmise)).toBeLessThan(
+      parseFloat(pleine.succession.baseTransmise),
+    );
+  });
+
+  it('should add the deceased compte courant to the estate at face value', () => {
+    const associes = (cca: string) => [
+      associe({ nom: 'Florian', partsPercent: 0.5, relation: 'SELF', apportCompteCourant: cca }),
+      associe({ nom: 'Enfant', partsPercent: 0.5, relation: 'CHILD' }),
+    ];
+    const sansCCA = runSimulation(familyRequest(associes('0.00')));
+    const avecCCA = runSimulation(familyRequest(associes('80000.00')));
+
+    expect(parseFloat(avecCCA.succession.ccaDefunt)).toBe(80000);
+    expect(parseFloat(avecCCA.succession.baseTransmise)).toBeGreaterThan(
+      parseFloat(sansCCA.succession.baseTransmise),
+    );
+  });
+
+  it('should return an empty estimate when no SELF associe is declared', () => {
+    const result = runSimulation(
+      familyRequest([associe({ nom: 'Indivisaire', partsPercent: 1, relation: 'OTHER' })]),
+    );
+    expect(result.succession.heritiers).toHaveLength(0);
+    expect(parseFloat(result.succession.total)).toBe(0);
   });
 });

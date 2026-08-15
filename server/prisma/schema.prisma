@@ -29,21 +29,65 @@ model User {
 // ─── Corporate Structures ────────────────────────────────────────────────────
 
 model Structure {
-  id             String        @id @default(uuid())
+  id             String         @id @default(uuid())
   userId         String
-  user           User          @relation(fields: [userId], references: [id])
+  user           User           @relation(fields: [userId], references: [id])
 
   name           String
   type           StructureType
-  taxRegime      TaxRegime     @default(IS)
+  taxRegime      TaxRegime      @default(IS)
 
   // Hierarchy for Holding -> SCI ownership
   parentId       String?
-  parent         Structure?    @relation("Hierarchy", fields: [parentId], references: [id])
-  subsidiaries   Structure[]   @relation("Hierarchy")
-  ownershipShare Float         @default(1.0)
+  parent         Structure?     @relation("Hierarchy", fields: [parentId], references: [id])
+  subsidiaries   Structure[]    @relation("Hierarchy")
+  ownershipShare Float          @default(1.0)
 
+  // Setup & running costs. Empty cost lines mean "use the preset for `mode`".
+  managementMode ManagementMode @default(EN_LIGNE)
+  costLines      CostLine[]
+
+  associes       Associe[]
   assets         Asset[]
+}
+
+// ─── Associes (partners of an SCI) ───────────────────────────────────────────
+
+model Associe {
+  id                  String             @id @default(uuid())
+  structureId         String
+  structure           Structure          @relation(fields: [structureId], references: [id])
+
+  nom                 String
+  partsPercent        Float
+  relation            AssocieRelation    @default(OTHER)
+  birthDate           DateTime?
+
+  // Own tax household — an SCI at IR is translucent, each associe is taxed
+  // on their own bareme on top of their own other income.
+  maritalStatus       MaritalStatus      @default(SINGLE)
+  childrenCount       Int                @default(0)
+  autresRevenus       Decimal            @default(0) @db.Decimal(20, 2)
+  socialChargeRegime  SocialChargeRegime @default(STANDARD)
+
+  // Contributions
+  apportCapital       Decimal            @default(0) @db.Decimal(20, 2)
+  apportCompteCourant Decimal            @default(0) @db.Decimal(20, 2)
+  tauxInteretCCA      Float              @default(0)
+
+  @@unique([structureId, nom])
+}
+
+// ─── Cost lines ──────────────────────────────────────────────────────────────
+
+model CostLine {
+  id          String      @id @default(uuid())
+  structureId String
+  structure   Structure   @relation(fields: [structureId], references: [id])
+
+  kind        CostKind
+  label       String
+  montant     Decimal     @db.Decimal(20, 2)
 }
 
 // ─── Assets ──────────────────────────────────────────────────────────────────
@@ -99,6 +143,9 @@ model Simulation {
   rentGrowthRate        Float    @default(0.02)
   chargesGrowthRate     Float    @default(0.02)
   propertyTaxGrowthRate Float    @default(0.02)
+  ccaRepaymentRate      Float    @default(0)
+  illiquidityDiscount   Float    @default(0.10)
+  demembrement          Boolean  @default(false)
 
   // Cached result of the engine run
   results               Json?
@@ -138,4 +185,26 @@ enum MaritalStatus {
 enum SocialChargeRegime {
   STANDARD
   SWISS_EXEMPT
+}
+
+enum ManagementMode {
+  SOI_MEME
+  EN_LIGNE
+  EXPERT_COMPTABLE
+  NOTAIRE_AVOCAT
+}
+
+enum AssocieRelation {
+  SELF
+  SPOUSE
+  CHILD
+  GRANDCHILD
+  SIBLING
+  NEPHEW_NIECE
+  OTHER
+}
+
+enum CostKind {
+  CONSTITUTION
+  ANNUEL
 }

@@ -1,4 +1,5 @@
 import Decimal from 'decimal.js';
+import type { AssocieInput, AssocieRelation } from '@shared/schemas.js';
 
 // ─── Succession Abatements ───────────────────────────────────────────────────
 
@@ -106,4 +107,119 @@ export function getUsufruitSplit(age: number): { usufruit: Decimal; nuePropriete
   }
 
   return { usufruit: new Decimal('0.10'), nuePropriete: new Decimal('0.90') };
+}
+
+// ─── Succession across the associes of a structure ───────────────────────────
+
+export interface SuccessionHeirDetail {
+  nom: string;
+  relation: AssocieRelation;
+  partRecue: Decimal;
+  abattement: Decimal;
+  baseTaxable: Decimal;
+  droits: Decimal;
+}
+
+export interface SuccessionEstimate {
+  navTotal: Decimal;
+  valeurPartsDefunt: Decimal;
+  ccaDefunt: Decimal;
+  baseTransmise: Decimal;
+  heritiers: SuccessionHeirDetail[];
+  total: Decimal;
+}
+
+export interface SuccessionParams {
+  /** Net asset value of the structures at the end of the horizon. */
+  nav: Decimal;
+  associes: AssocieInput[];
+  /** CCA balance still owed to each associe, keyed by name. */
+  ccaBalances: Map<string, Decimal>;
+  illiquidityDiscount: Decimal;
+  demembrement: boolean;
+  /** Age of the SELF associe at the end of the horizon, if their birth date is known. */
+  ageAuTerme?: number;
+  /** Heirs to assume when no other associe can inherit. */
+  fallbackChildren: number;
+}
+
+const EMPTY_ESTIMATE = (nav: Decimal): SuccessionEstimate => ({
+  navTotal: nav,
+  valeurPartsDefunt: new Decimal(0),
+  ccaDefunt: new Decimal(0),
+  baseTransmise: new Decimal(0),
+  heritiers: [],
+  total: new Decimal(0),
+});
+
+/** Relations that can receive the estate. SELF is the deceased. */
+function isHeir(relation: AssocieRelation): relation is BeneficiaryRelation {
+  return relation !== 'SELF';
+}
+
+/**
+ * Estimates what the SELF associe's death costs their heirs at the end of the
+ * horizon.
+ *
+ * Only the shares still held by the deceased are transmitted — parts already
+ * given to the children are out of the estate, which is precisely why an SCI
+ * is used to organise a transmission. Their compte courant is added at face
+ * value: it is a claim against the company, so it gets no illiquidity discount.
+ */
+export function computeSuccessionForAssocies(params: SuccessionParams): SuccessionEstimate {
+  const { nav, associes, ccaBalances, illiquidityDiscount, demembrement, ageAuTerme, fallbackChildren } =
+    params;
+
+  const defunt = associes.find((a) => a.relation === 'SELF');
+  if (!defunt) return EMPTY_ESTIMATE(nav);
+
+  // Value of the deceased's shares, discounted for illiquidity.
+  let valeurParts = computeSCIShareValue(
+    Decimal.max(new Decimal(0), nav),
+    new Decimal(defunt.partsPercent),
+    illiquidityDiscount,
+  );
+
+  // With a demembrement, only the nue-propriete leaves the estate.
+  if (demembrement && ageAuTerme !== undefined) {
+    valeurParts = valeurParts.mul(getUsufruitSplit(ageAuTerme).nuePropriete);
+  }
+
+  const ccaDefunt = ccaBalances.get(defunt.nom) ?? new Decimal(0);
+  const baseTransmise = valeurParts.plus(ccaDefunt);
+
+  // Heirs: the other associes, or the declared children if the deceased is alone.
+  const coAssocies = associes.filter((a) => a.nom !== defunt.nom && isHeir(a.relation));
+  const heritiers: { nom: string; relation: AssocieRelation }[] =
+    coAssocies.length > 0
+      ? coAssocies.map((a) => ({ nom: a.nom, relation: a.relation }))
+      : Array.from({ length: fallbackChildren }, (_, i) => ({
+          nom: `Enfant ${i + 1}`,
+          relation: 'CHILD' as AssocieRelation,
+        }));
+
+  if (heritiers.length === 0) return EMPTY_ESTIMATE(nav);
+
+  const partParHeritier = baseTransmise.div(heritiers.length);
+
+  const details: SuccessionHeirDetail[] = heritiers.map((h) => {
+    const { taxableBase, tax } = computeSuccessionTax(partParHeritier, h.relation as BeneficiaryRelation);
+    return {
+      nom: h.nom,
+      relation: h.relation,
+      partRecue: partParHeritier,
+      abattement: partParHeritier.minus(taxableBase),
+      baseTaxable: taxableBase,
+      droits: tax,
+    };
+  });
+
+  return {
+    navTotal: nav,
+    valeurPartsDefunt: valeurParts,
+    ccaDefunt,
+    baseTransmise,
+    heritiers: details,
+    total: details.reduce((acc, h) => acc.plus(h.droits), new Decimal(0)),
+  };
 }
