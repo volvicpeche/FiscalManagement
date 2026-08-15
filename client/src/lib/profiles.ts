@@ -80,9 +80,12 @@ export const RELATION_LABELS: Record<string, string> = {
 
 export function formatEur(value: string | number, digits = 0): string {
   const num = typeof value === 'string' ? parseFloat(value) : value;
+  // Never render missing data as "0 €" — a plausible wrong number is worse
+  // than an obvious gap.
+  if (!Number.isFinite(num)) return '—';
   return new Intl.NumberFormat('fr-FR', {
     style: 'currency',
     currency: 'EUR',
     maximumFractionDigits: digits,
-  }).format(Number.isFinite(num) ? num : 0);
+  }).format(num);
 }

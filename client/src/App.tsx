@@ -56,6 +56,10 @@ function App() {
   const error = PROFILE_ORDER.map((p) => simulations[p].error).find(Boolean);
   const validParts = partsAreValid(associes);
 
+  // The projection table takes the full width; the forms come back with the
+  // Synthese tab, and are always shown before the first run.
+  const showForms = tab === 'synthese' || !hasAnyResult(results);
+
   const handleRun = () => {
     const shared = selectSharedInputs(store);
     for (const profile of PROFILE_ORDER) {
@@ -92,28 +96,35 @@ function App() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <main
+        className={`mx-auto px-4 py-6 transition-[max-width] ${
+          showForms ? 'max-w-7xl' : 'max-w-[1800px]'
+        }`}
+      >
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
             Erreur: {error.message}
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left panel: inputs */}
-          <div className="lg:col-span-1 space-y-4">
-            <Panel><StructureForm /></Panel>
-            <Panel><AssociesForm /></Panel>
-            <Panel><AssetForm /></Panel>
-            <Panel><LoanForm /></Panel>
-            <Panel><CostsForm /></Panel>
-            <Panel><SuccessionForm /></Panel>
-            <Panel><UserProfileForm /></Panel>
-            <Panel><ParamsForm /></Panel>
-          </div>
+        <div className={`grid grid-cols-1 gap-6 ${showForms ? 'lg:grid-cols-3' : ''}`}>
+          {/* Left panel: inputs — hidden on the projection tab, where the table
+              needs the full width to be readable. */}
+          {showForms && (
+            <div className="lg:col-span-1 space-y-4">
+              <Panel><StructureForm /></Panel>
+              <Panel><AssociesForm /></Panel>
+              <Panel><AssetForm /></Panel>
+              <Panel><LoanForm /></Panel>
+              <Panel><CostsForm /></Panel>
+              <Panel><SuccessionForm /></Panel>
+              <Panel><UserProfileForm /></Panel>
+              <Panel><ParamsForm /></Panel>
+            </div>
+          )}
 
           {/* Right panel: results */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className={`space-y-6 ${showForms ? 'lg:col-span-2' : ''}`}>
             {hasAnyResult(results) ? (
               <>
                 <div className="flex gap-1 border-b border-gray-200">

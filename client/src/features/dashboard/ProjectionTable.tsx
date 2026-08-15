@@ -134,6 +134,19 @@ function associeTotals(result: SimulationResult): AssocieTotals[] {
 }
 
 function Cell({ value, col }: { value: number; col: Column }) {
+  // A result computed before this column existed yields NaN. Flag it rather
+  // than let it read as a genuine zero.
+  if (!Number.isFinite(value)) {
+    return (
+      <td
+        className="px-2 py-1 text-right font-mono whitespace-nowrap text-amber-600"
+        title="Donnee absente de ce resultat — relancez la simulation"
+      >
+        n/d
+      </td>
+    );
+  }
+
   const isZero = Math.abs(value) < 0.005;
   const tone = isZero
     ? 'text-gray-300'
