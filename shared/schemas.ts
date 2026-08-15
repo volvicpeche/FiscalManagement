@@ -235,7 +235,13 @@ export type SimulationRequest = z.infer<typeof SimulationRequestSchema>;
 
 export const EntityYearSchema = z.object({
   grossRevenue: z.string(),
+  /** Charges de copropriete + taxe fonciere. */
+  charges: z.string(),
   loanPayment: z.string(),
+  /** Interest + loan insurance — the deductible part of the payment. */
+  loanInterest: z.string(),
+  /** Capital repaid — a cash outflow that is not a charge. */
+  loanPrincipal: z.string(),
   depreciation: z.string(),
   /** Structure running costs for the year (comptable, CFE, banque, ...). */
   operatingCosts: z.string(),

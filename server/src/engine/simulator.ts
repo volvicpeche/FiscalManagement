@@ -42,6 +42,8 @@ interface AssetState {
   chargesYearly: Decimal;
   propertyTax: Decimal;
   marketValue: Decimal;
+  /** Amount borrowed, before any repayment — the debt at incorporation. */
+  loanPrincipalInitial: Decimal;
   yearlyDepreciation: Decimal;
   buildingDepreciationYearsLeft: number;
   renovationDepreciationYearsLeft: number;
@@ -90,7 +92,10 @@ function zeroEntityYear(overrides: Partial<Record<keyof EntityYear, Decimal>> = 
   const get = (k: keyof EntityYear) => (overrides[k] ?? z).toFixed(2);
   return {
     grossRevenue: get('grossRevenue'),
+    charges: get('charges'),
     loanPayment: get('loanPayment'),
+    loanInterest: get('loanInterest'),
+    loanPrincipal: get('loanPrincipal'),
     depreciation: get('depreciation'),
     operatingCosts: get('operatingCosts'),
     taxableProfit: get('taxableProfit'),
@@ -131,6 +136,7 @@ function buildAssetState(asset: AssetInput, structureType: StructureInput['type'
     chargesYearly: d(asset.chargesYearly),
     propertyTax: d(asset.propertyTax),
     marketValue: purchasePrice.plus(notaryFees),
+    loanPrincipalInitial: asset.loan ? d(asset.loan.principal) : d(0),
     yearlyDepreciation: (structureType === 'SCI_IS' || structureType === 'HOLDING') ? dep.total : d(0),
     buildingDepreciationYearsLeft: 25,
     renovationDepreciationYearsLeft: 15,
@@ -289,10 +295,9 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
     let constitutionTotal = d(0);
 
     for (const [name, state] of entityStates) {
-      const initialDebt = state.assets.reduce(
-        (acc, a) => acc.plus(a.loanYearlySummary[0]?.remainingPrincipal ?? d(0)),
-        d(0),
-      );
+      // The debt at incorporation is the amount borrowed, not the balance after
+      // a first year of repayments.
+      const initialDebt = state.assets.reduce((acc, a) => acc.plus(a.loanPrincipalInitial), d(0));
       const initialValue = state.assets.reduce((acc, a) => acc.plus(a.marketValue), d(0));
 
       constitutionTotal = constitutionTotal.plus(state.costs.constitution);
@@ -504,7 +509,13 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
 
       entitiesResult[name] = {
         grossRevenue: entityGrossRevenue.toFixed(2),
+        charges: entityCharges.plus(entityPropertyTax).toFixed(2),
         loanPayment: entityLoanPayment.toFixed(2),
+        loanInterest: entityInterest.plus(entityInsurance).toFixed(2),
+        loanPrincipal: entityLoanPayment
+          .minus(entityInterest)
+          .minus(entityInsurance)
+          .toFixed(2),
         depreciation: entityDepreciation.toFixed(2),
         operatingCosts: operatingCosts.toFixed(2),
         taxableProfit: taxableProfit.toFixed(2),

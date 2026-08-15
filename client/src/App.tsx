@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { ScenarioProfile } from '@shared/schemas.js';
 import {
   useScenarioStore,
@@ -25,15 +26,24 @@ import {
   TaxBreakdownChart,
   CostsChart,
   SuccessionCard,
+  ProjectionTable,
 } from '@/features/dashboard';
 
 function Panel({ children }: { children: React.ReactNode }) {
   return <div className="bg-white rounded-lg border p-4">{children}</div>;
 }
 
+const TABS = [
+  { key: 'synthese', label: 'Synthese' },
+  { key: 'tableau', label: 'Tableau previsionnel' },
+] as const;
+
+type TabKey = (typeof TABS)[number]['key'];
+
 function App() {
   const store = useScenarioStore();
   const { associes, results, setResult } = store;
+  const [tab, setTab] = useState<TabKey>('synthese');
 
   // One mutation per profile so they run in parallel and report independently.
   const simulations: Record<ScenarioProfile, ReturnType<typeof useSimulation>> = {
@@ -106,12 +116,35 @@ function App() {
           <div className="lg:col-span-2 space-y-6">
             {hasAnyResult(results) ? (
               <>
-                <KpiCards results={results} />
-                <CashFlowChart results={results} />
-                <CostsChart results={results} />
-                <SuccessionCard results={results} />
-                <EquityChart results={results} />
-                <TaxBreakdownChart results={results} />
+                <div className="flex gap-1 border-b border-gray-200">
+                  {TABS.map((t) => (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => setTab(t.key)}
+                      className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                        tab === t.key
+                          ? 'text-blue-700 border-blue-600'
+                          : 'text-gray-400 border-transparent hover:text-gray-600'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+
+                {tab === 'synthese' ? (
+                  <>
+                    <KpiCards results={results} />
+                    <CashFlowChart results={results} />
+                    <CostsChart results={results} />
+                    <SuccessionCard results={results} />
+                    <EquityChart results={results} />
+                    <TaxBreakdownChart results={results} />
+                  </>
+                ) : (
+                  <ProjectionTable results={results} />
+                )}
               </>
             ) : (
               <div className="bg-white rounded-lg border p-12 text-center text-gray-400">

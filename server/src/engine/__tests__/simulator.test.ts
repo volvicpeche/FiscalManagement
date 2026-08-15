@@ -278,8 +278,29 @@ describe('runSimulation — year 0 (incorporation)', () => {
   it('should already show the loan and the property at year 0', () => {
     const result = runSimulation(baseRequest);
     const y0 = yearOf(result, 0);
-    expect(parseFloat(y0.entities['SCI Alpha'].remainingDebt)).toBeGreaterThan(0);
+    // The full amount borrowed, before the first year of repayments.
+    expect(parseFloat(y0.entities['SCI Alpha'].remainingDebt)).toBe(180000);
     expect(parseFloat(y0.entities['SCI Alpha'].assetMarketValue)).toBe(216000);
+  });
+
+  it('should reconcile year 0 debt with year 1 capital repaid', () => {
+    const result = runSimulation(baseRequest);
+    const y0 = yearOf(result, 0).entities['SCI Alpha'];
+    const y1 = yearOf(result, 1).entities['SCI Alpha'];
+
+    expect(parseFloat(y0.remainingDebt) - parseFloat(y1.loanPrincipal)).toBeCloseTo(
+      parseFloat(y1.remainingDebt),
+      2,
+    );
+  });
+
+  it('should repay exactly the borrowed capital over the life of the loan', () => {
+    const result = runSimulation(baseRequest);
+    const totalCapital = result.yearlyData.reduce(
+      (acc, y) => acc + parseFloat(y.entities['SCI Alpha'].loanPrincipal),
+      0,
+    );
+    expect(totalCapital).toBeCloseTo(180000, 0);
   });
 });
 
@@ -502,6 +523,57 @@ describe('runSimulation — comptes courants d\'associes', () => {
     const profit = (r: SimulationResult) =>
       parseFloat(yearOf(r, 1).entities['SCI Alpha'].taxableProfit);
     expect(profit(remunere)).toBeLessThan(profit(gratuit));
+  });
+});
+
+describe('runSimulation — projection detail', () => {
+  it('should split the loan payment into interest and capital', () => {
+    const result = runSimulation(baseRequest);
+    for (const year of [1, 10, 20]) {
+      const e = yearOf(result, year).entities['SCI Alpha'];
+      expect(parseFloat(e.loanInterest) + parseFloat(e.loanPrincipal)).toBeCloseTo(
+        parseFloat(e.loanPayment),
+        2,
+      );
+    }
+  });
+
+  it('should shift the payment from interest to capital as the loan runs down', () => {
+    const result = runSimulation(baseRequest);
+    const y1 = yearOf(result, 1).entities['SCI Alpha'];
+    const y19 = yearOf(result, 19).entities['SCI Alpha'];
+
+    expect(parseFloat(y1.loanInterest)).toBeGreaterThan(parseFloat(y19.loanInterest));
+    expect(parseFloat(y19.loanPrincipal)).toBeGreaterThan(parseFloat(y1.loanPrincipal));
+  });
+
+  it('should report charges and taxe fonciere together, growing with their rates', () => {
+    const result = runSimulation(baseRequest);
+    // Year 1 is unindexed: 2 400 of charges + 1 200 of taxe fonciere.
+    expect(parseFloat(yearOf(result, 1).entities['SCI Alpha'].charges)).toBeCloseTo(3600, 2);
+    expect(parseFloat(yearOf(result, 10).entities['SCI Alpha'].charges)).toBeCloseTo(
+      3600 * Math.pow(1.02, 9),
+      2,
+    );
+  });
+
+  it('should reconcile the taxable profit from the reported lines at IS', () => {
+    const result = runSimulation({
+      ...baseRequest,
+      structures: [
+        { ...baseRequest.structures[0], costs: { mode: 'EXPERT_COMPTABLE', constitution: [], annuel: [] } },
+      ],
+    });
+    const e = yearOf(result, 3).entities['SCI Alpha'];
+
+    const reconstructed =
+      parseFloat(e.grossRevenue) -
+      parseFloat(e.charges) -
+      parseFloat(e.loanInterest) -
+      parseFloat(e.depreciation) -
+      parseFloat(e.operatingCosts);
+
+    expect(reconstructed).toBeCloseTo(parseFloat(e.taxableProfit), 2);
   });
 });
 
