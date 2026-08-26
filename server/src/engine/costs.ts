@@ -118,6 +118,25 @@ const CFE_IS: PresetLine = { label: 'CFE', parMode: flat('250.00') };
 const ANNUEL_SCI_IR: PresetLine[] = [COMPTA_IR, CFE_IR, ASSURANCE_PNO, BANQUE, JURIDIQUE_ANNUEL];
 const ANNUEL_SCI_IS: PresetLine[] = [COMPTA_IS, CFE_IS, ASSURANCE_PNO, BANQUE, JURIDIQUE_ANNUEL];
 
+/** LMP is a sole-trader (entreprise individuelle) activity: no statuts, no AG. */
+const CONSTITUTION_LMP: PresetLine[] = [
+  { label: 'Immatriculation (guichet unique)', parMode: flat('60.00') },
+];
+
+const COMPTA_BIC: PresetLine = {
+  // BIC reel bookkeeping (bilan, compte de resultat, tableau d'amortissements)
+  // is as demanding as a societe a l'IS.
+  label: 'Comptabilite BIC reel (liasse + bilan)',
+  parMode: {
+    SOI_MEME: '0.00',
+    EN_LIGNE: '800.00',
+    EXPERT_COMPTABLE: '1500.00',
+    NOTAIRE_AVOCAT: '1500.00',
+  },
+};
+
+const ANNUEL_LMP: PresetLine[] = [COMPTA_BIC, CFE_IS, ASSURANCE_PNO, BANQUE];
+
 /** A holding owns shares, not walls — no PNO, but consolidation work instead. */
 const ANNUEL_HOLDING: PresetLine[] = [
   COMPTA_IS,
@@ -151,6 +170,8 @@ function presetFor(structureType: StructureType): {
     case 'INDIVIDUAL':
       // Direct ownership: no company, therefore no structure cost at all.
       return { constitution: [], annuel: [] };
+    case 'LMP':
+      return { constitution: CONSTITUTION_LMP, annuel: ANNUEL_LMP };
   }
 }
 
