@@ -135,22 +135,6 @@ export const LoanSchema = z.object({
 });
 export type LoanInput = z.infer<typeof LoanSchema>;
 
-// ─── Asset ───────────────────────────────────────────────────────────────────
-
-export const AssetSchema = z.object({
-  type: AssetType.default('REAL_ESTATE'),
-  label: z.string().min(1),
-  purchasePrice: decimalString,
-  notaryFees: decimalString,
-  renovationCosts: decimalString,
-  acquisitionDate: z.string().datetime(),
-  annualRent: decimalString,
-  chargesYearly: decimalString,
-  propertyTax: decimalString,
-  loan: LoanSchema.optional(),
-});
-export type AssetInput = z.infer<typeof AssetSchema>;
-
 // ─── Location saisonniere ─────────────────────────────────────────────────────
 
 /**
@@ -182,6 +166,25 @@ export const SaisonnierParamsSchema = z.object({
 });
 export type SaisonnierParams = z.infer<typeof SaisonnierParamsSchema>;
 
+// ─── Asset ───────────────────────────────────────────────────────────────────
+
+export const AssetSchema = z.object({
+  type: AssetType.default('REAL_ESTATE'),
+  label: z.string().min(1),
+  purchasePrice: decimalString,
+  notaryFees: decimalString,
+  renovationCosts: decimalString,
+  acquisitionDate: z.string().datetime(),
+  /** Ignored when `saisonnier` is set — the two revenue models are exclusive. */
+  annualRent: decimalString.default('0.00'),
+  chargesYearly: decimalString,
+  propertyTax: decimalString,
+  /** When set, revenue is computed from the seasonal buckets, not `annualRent`. */
+  saisonnier: SaisonnierParamsSchema.optional(),
+  loan: LoanSchema.optional(),
+});
+export type AssetInput = z.infer<typeof AssetSchema>;
+
 // ─── Structure ───────────────────────────────────────────────────────────────
 
 export const StructureSchema = z.object({
@@ -193,6 +196,12 @@ export const StructureSchema = z.object({
   costs: EntityCostsSchema.default({}),
   assets: z.array(AssetSchema).default([]),
   subsidiaries: z.lazy((): z.ZodType => z.array(StructureSchema)).default([]),
+  /**
+   * LMP only — indicative flat rate for TNS (SSI) social contributions on the
+   * BIC result, distinct from the CSG/PS rate applied to passive foncier
+   * income. Ignored for every other structure type.
+   */
+  tauxCotisationsSocialesLMP: z.number().min(0).max(1).default(0.35),
 });
 export type StructureInput = z.infer<typeof StructureSchema>;
 

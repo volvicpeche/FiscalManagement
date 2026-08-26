@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import type { SimulationRequest, SimulationResult, AssocieInput, EntityCostsInput } from '@shared/schemas.js';
+import type {
+  SimulationRequest,
+  SimulationResult,
+  AssocieInput,
+  EntityCostsInput,
+  SaisonnierParams,
+} from '@shared/schemas.js';
 import { runSimulation } from '../simulator.js';
 
 const NO_COSTS: EntityCostsInput = {
@@ -20,6 +26,7 @@ const baseRequest: SimulationRequest = {
       type: 'SCI_IS',
       taxRegime: 'IS',
       ownershipShare: 1.0,
+      tauxCotisationsSocialesLMP: 0.35,
       associes: [],
       costs: NO_COSTS,
       assets: [
@@ -230,6 +237,7 @@ function holdingRequest(ownershipShare: number): SimulationRequest {
         type: 'HOLDING',
         taxRegime: 'IS',
         ownershipShare: 1.0,
+        tauxCotisationsSocialesLMP: 0.35,
         associes: [],
         costs: NO_COSTS,
         assets: [],
@@ -467,6 +475,86 @@ describe('runSimulation — associes at IR', () => {
     // A negative IR means the SCI reduced the associe's overall tax bill.
     expect(parseFloat(yearOf(deficitaire, 1).associes['Florian'].irTax)).toBeLessThan(0);
     expect(parseFloat(yearOf(deficitaire, 1).associes['Florian'].psTax)).toBe(0);
+  });
+});
+
+describe('runSimulation — LMP saisonnier', () => {
+  const saisonnierAsset = {
+    ...baseRequest.structures[0].assets[0],
+    label: 'Mas en Provence',
+    annualRent: '0.00',
+    loan: undefined,
+    saisonnier: {
+      hauteSaison: { tauxOccupation: 0.9, caPeriode: '18000.00' },
+      moyenneSaison: { tauxOccupation: 0.6, caPeriode: '9000.00' },
+      basseSaison: { tauxOccupation: 0.3, caPeriode: '3000.00' },
+      gestion: 'SOI_MEME',
+      commissionPlateforme: 0.15,
+      fraisMenageLingeAnnuel: '2000.00',
+      fraisConciergeriePercent: 0.25,
+    } satisfies SaisonnierParams,
+  };
+
+  const lmpRequest = (overrides: Partial<SaisonnierParams> = {}): SimulationRequest => ({
+    ...baseRequest,
+    structures: [
+      {
+        ...baseRequest.structures[0],
+        name: 'LMP Provence',
+        type: 'LMP',
+        taxRegime: 'IR',
+        associes: [associe({ nom: 'Florian', partsPercent: 1, autresRevenus: '40000.00' })],
+        assets: [{ ...saisonnierAsset, saisonnier: { ...saisonnierAsset.saisonnier, ...overrides } }],
+      },
+    ],
+    params: { ...baseRequest.params, horizonYears: 3 },
+  });
+
+  it('should compute gross revenue from the seasonal buckets, not annualRent', () => {
+    const y1 = yearOf(runSimulation(lmpRequest()), 1);
+    expect(parseFloat(y1.entities['LMP Provence'].grossRevenue)).toBeCloseTo(30000, 2);
+  });
+
+  it('should not tax the LMP entity itself — it is translucent like an SCI at IR', () => {
+    const y1 = yearOf(runSimulation(lmpRequest()), 1);
+    expect(parseFloat(y1.entities['LMP Provence'].tax)).toBe(0);
+  });
+
+  it('should apply depreciation on a BIC reel basis, unlike an SCI at IR', () => {
+    const y1 = yearOf(runSimulation(lmpRequest()), 1);
+    expect(parseFloat(y1.entities['LMP Provence'].depreciation)).toBeGreaterThan(0);
+  });
+
+  it('should charge the platform commission plus menage/linge in SOI_MEME mode', () => {
+    const y1 = yearOf(runSimulation(lmpRequest({ gestion: 'SOI_MEME' })), 1);
+    const baseCharges = 2400 + 1200; // chargesYearly + propertyTax from the shared fixture
+    const exploitationFees = 30000 * 0.15 + 2000;
+    expect(parseFloat(y1.entities['LMP Provence'].charges)).toBeCloseTo(baseCharges + exploitationFees, 2);
+  });
+
+  it('should charge only the conciergerie fee in CONCIERGERIE mode — no platform commission on top', () => {
+    const y1 = yearOf(runSimulation(lmpRequest({ gestion: 'CONCIERGERIE' })), 1);
+    const baseCharges = 2400 + 1200;
+    const exploitationFees = 30000 * 0.25;
+    expect(parseFloat(y1.entities['LMP Provence'].charges)).toBeCloseTo(baseCharges + exploitationFees, 2);
+  });
+
+  it('should tax the associe on TNS contributions rather than the foncier PS rate', () => {
+    const y1 = yearOf(runSimulation(lmpRequest()), 1);
+    // The quote-part is positive after depreciation and charges: TNS applies.
+    expect(parseFloat(y1.associes['Florian'].psTax)).toBeGreaterThan(0);
+  });
+
+  it('should impute an LMP deficit fully against the associe global income, no 10 700 EUR cap', () => {
+    // Basse saison only, no loan: revenue barely covers charges, likely a loss.
+    const deficitaire = lmpRequest({
+      hauteSaison: { tauxOccupation: 0.2, caPeriode: '2000.00' },
+      moyenneSaison: { tauxOccupation: 0.1, caPeriode: '1000.00' },
+    });
+    const y1 = yearOf(runSimulation(deficitaire), 1);
+    const quotePart = parseFloat(y1.associes['Florian'].quotePart);
+    expect(quotePart).toBeLessThan(0);
+    expect(parseFloat(y1.associes['Florian'].irTax)).toBeLessThan(0);
   });
 });
 

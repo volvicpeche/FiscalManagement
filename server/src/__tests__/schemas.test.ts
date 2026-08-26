@@ -130,3 +130,62 @@ describe('SimulationRequestSchema — associes', () => {
     expect(result.params.ccaRepaymentRate).toBe(0);
   });
 });
+
+describe('SimulationRequestSchema — LMP saisonnier', () => {
+  const saisonnierPayload = (over: Record<string, unknown> = {}) => ({
+    userProfile: { maritalStatus: 'SINGLE', childrenCount: 0 },
+    structures: [
+      {
+        name: 'LMP Provence',
+        type: 'LMP',
+        associes: [],
+        assets: [
+          {
+            label: 'Mas',
+            purchasePrice: '400000.00',
+            notaryFees: '32000.00',
+            renovationCosts: '0.00',
+            acquisitionDate: '2026-01-01T00:00:00.000Z',
+            chargesYearly: '3000.00',
+            propertyTax: '1500.00',
+            saisonnier: {
+              hauteSaison: { tauxOccupation: 0.9, caPeriode: '18000.00' },
+              moyenneSaison: { tauxOccupation: 0.6, caPeriode: '9000.00' },
+              basseSaison: { tauxOccupation: 0.3, caPeriode: '3000.00' },
+              ...(over.saisonnier as object),
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  it('should accept the LMP structure type', () => {
+    expect(SimulationRequestSchema.safeParse(saisonnierPayload()).success).toBe(true);
+  });
+
+  it('should default annualRent to 0.00 when saisonnier params are provided instead', () => {
+    const result = SimulationRequestSchema.parse(saisonnierPayload());
+    expect(result.structures[0].assets[0].annualRent).toBe('0.00');
+  });
+
+  it('should default gestion to SOI_MEME and fill the fee defaults', () => {
+    const result = SimulationRequestSchema.parse(saisonnierPayload());
+    const s = result.structures[0].assets[0].saisonnier!;
+    expect(s.gestion).toBe('SOI_MEME');
+    expect(s.commissionPlateforme).toBe(0.15);
+    expect(s.fraisConciergeriePercent).toBe(0.25);
+  });
+
+  it('should default the LMP social contribution rate', () => {
+    const result = SimulationRequestSchema.parse(saisonnierPayload());
+    expect(result.structures[0].tauxCotisationsSocialesLMP).toBe(0.35);
+  });
+
+  it('should reject an out-of-range occupation rate', () => {
+    const result = SimulationRequestSchema.safeParse(
+      saisonnierPayload({ saisonnier: { hauteSaison: { tauxOccupation: 1.2, caPeriode: '18000.00' } } }),
+    );
+    expect(result.success).toBe(false);
+  });
+});
