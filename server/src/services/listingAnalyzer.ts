@@ -1,38 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk';
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
-// The SDK's structured-output helper is typed against the zod/v4 API, while
-// the rest of this codebase uses classic zod (v3 API, exported by the same
-// "zod" package). Building a local v4-flavoured mirror for this one call —
-// then re-validating the result through the shared classic schema below —
-// keeps that version split contained to this file.
-import * as zv4 from 'zod/v4';
-import { ListingExtractionSchema, type ListingExtraction } from '@shared/listing.js';
-
-const ListingExtractionSchemaV4 = zv4.object({
-  label: zv4.string().nullable(),
-  ville: zv4.string().nullable(),
-  codePostal: zv4.string().nullable(),
-  surfaceM2: zv4.number().nullable(),
-  nbPieces: zv4.number().nullable(),
-  nbChambres: zv4.number().nullable(),
-  capaciteCouchage: zv4.number().nullable(),
-  prixVente: zv4.number().nullable(),
-  atouts: zv4.object({
-    piscine: zv4.boolean(),
-    vue: zv4.boolean(),
-    spa: zv4.boolean(),
-    terrainPetanque: zv4.boolean(),
-    climatisation: zv4.boolean(),
-    parking: zv4.boolean(),
-    autres: zv4.array(zv4.string()),
-  }),
-  estimationSaisonniere: zv4.object({
-    hauteSaison: zv4.object({ tauxOccupation: zv4.number(), caPeriode: zv4.number() }),
-    moyenneSaison: zv4.object({ tauxOccupation: zv4.number(), caPeriode: zv4.number() }),
-    basseSaison: zv4.object({ tauxOccupation: zv4.number(), caPeriode: zv4.number() }),
-    rationale: zv4.string(),
-  }),
-});
+import type { ListingExtraction } from '@shared/listing.js';
+import { extractListingViaLlm } from './llm/index.js';
 
 const MAX_TEXT_CHARS = 20000;
 const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
@@ -107,30 +74,13 @@ async function fetchListingText(url: URL): Promise<string> {
   return text;
 }
 
-const SYSTEM_PROMPT = `Tu extrais les caracteristiques d'un bien immobilier a partir du texte brut d'une annonce de vente en France, en vue d'une exploitation en location saisonniere.
-
-Renseigne null pour toute information absente du texte plutot que de deviner une valeur precise (surface, prix, nombre de pieces, localite...).
-
-Propose ensuite une estimation INDICATIVE et PRUDENTE du potentiel de location saisonniere (taux d'occupation et chiffre d'affaires par saison), fondee sur la localite, le standing du bien et ses atouts (piscine, vue, spa, etc.). Explique brievement les hypotheses retenues dans le champ rationale — cette estimation n'est pas une donnee de marche verifiee, l'utilisateur doit pouvoir juger de sa fiabilite.`;
-
-/** Fetches a listing URL and extracts its features + a rough seasonal-rental estimate via Claude. */
+/**
+ * Fetches a listing URL and extracts its features + a rough seasonal-rental
+ * estimate via whichever LLM provider is configured (LLM_PROVIDER env var —
+ * see server/.env.example and services/llm/index.ts).
+ */
 export async function analyzeListing(rawUrl: string): Promise<ListingExtraction> {
   const url = assertPublicHttpUrl(rawUrl);
   const text = await fetchListingText(url);
-
-  const client = new Anthropic();
-
-  const response = await client.messages.parse({
-    model: 'claude-opus-5',
-    max_tokens: 4000,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: `Annonce (texte extrait de la page) :\n\n${text}` }],
-    output_config: { format: zodOutputFormat(ListingExtractionSchemaV4) },
-  });
-
-  if (!response.parsed_output) {
-    throw new Error("L'analyse de l'annonce a echoue");
-  }
-
-  return ListingExtractionSchema.parse(response.parsed_output);
+  return extractListingViaLlm(text);
 }
