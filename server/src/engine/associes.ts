@@ -142,6 +142,43 @@ export function computeAssocieIR(
   return { ir, ps, total: ir.plus(ps) };
 }
 
+// ─── LMP (BIC reel) ──────────────────────────────────────────────────────────
+
+export interface AssocieLMPResult {
+  /** IR attributable to the LMP activity. Negative when a deficit lowers the bill. */
+  ir: Decimal;
+  /** TNS (SSI) contributions — not the CSG/PS rate used for passive foncier income. */
+  cotisationsSociales: Decimal;
+  total: Decimal;
+}
+
+/**
+ * Per-associe taxation of an LMP (Loueur Meuble Professionnel) BIC result.
+ *
+ * Two things set this apart from `computeAssocieIR`:
+ *  - A BIC pro deficit imputes in full against the associe's global income —
+ *    unlike a foncier deficit there is no 10 700 EUR/year cap.
+ *  - The social levy is TNS (SSI) contributions on the professional result,
+ *    not CSG/CRDS/PS on passive income, so it uses its own rate rather than
+ *    `getSocialChargeRate`.
+ */
+export function computeAssocieLMP(
+  associe: AssocieInput,
+  quotePart: Decimal,
+  tauxCotisationsSocialesTNS: Decimal,
+): AssocieLMPResult {
+  const autresRevenus = new Decimal(associe.autresRevenus);
+  const revenuAvecLMP = Decimal.max(new Decimal(0), autresRevenus.plus(quotePart));
+
+  const irAvec = computeIR(revenuAvecLMP, associe.maritalStatus, associe.childrenCount);
+  const irSans = computeIR(autresRevenus, associe.maritalStatus, associe.childrenCount);
+  const ir = irAvec.minus(irSans);
+
+  const cotisationsSociales = quotePart.gt(0) ? quotePart.mul(tauxCotisationsSocialesTNS) : new Decimal(0);
+
+  return { ir, cotisationsSociales, total: ir.plus(cotisationsSociales) };
+}
+
 // ─── Compte courant d'associe ────────────────────────────────────────────────
 
 export interface CCAYearResult {

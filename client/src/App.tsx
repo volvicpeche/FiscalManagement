@@ -28,6 +28,7 @@ import {
   SuccessionCard,
   ProjectionTable,
 } from '@/features/dashboard';
+import { SaisonnierPage } from '@/features/saisonnier';
 
 function Panel({ children }: { children: React.ReactNode }) {
   return <div className="bg-white rounded-lg border p-4">{children}</div>;
@@ -40,7 +41,15 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]['key'];
 
+const MODES = [
+  { key: 'sci', label: 'SCI / Holding' },
+  { key: 'saisonnier', label: 'Location saisonniere' },
+] as const;
+
+type ModeKey = (typeof MODES)[number]['key'];
+
 function App() {
+  const [mode, setMode] = useState<ModeKey>('sci');
   const store = useScenarioStore();
   const { associes, results, setResult } = store;
   const [tab, setTab] = useState<TabKey>('synthese');
@@ -76,100 +85,126 @@ function App() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Patrimonia</h1>
             <p className="text-sm text-gray-500">
-              Simulateur de SCI — creation, cout de fonctionnement, fiscalite et transmission
+              Simulateur patrimonial — structures locatives, fiscalite et transmission
             </p>
           </div>
-          <div className="flex flex-col items-end gap-1">
-            <button
-              onClick={handleRun}
-              disabled={isPending || !validParts}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isPending ? 'Calcul en cours...' : 'Comparer les 3 montages'}
-            </button>
-            {!validParts && (
-              <span className="text-xs text-red-600">
-                La repartition des parts doit totaliser 100 %.
-              </span>
+
+          <div className="flex items-center gap-4">
+            <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
+              {MODES.map((m) => (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => setMode(m.key)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    mode === m.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+
+            {mode === 'sci' && (
+              <div className="flex flex-col items-end gap-1">
+                <button
+                  onClick={handleRun}
+                  disabled={isPending || !validParts}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isPending ? 'Calcul en cours...' : 'Comparer les 3 montages'}
+                </button>
+                {!validParts && (
+                  <span className="text-xs text-red-600">
+                    La repartition des parts doit totaliser 100 %.
+                  </span>
+                )}
+              </div>
             )}
           </div>
         </div>
       </header>
 
-      <main
-        className={`mx-auto px-4 py-6 transition-[max-width] ${
-          showForms ? 'max-w-7xl' : 'max-w-[1800px]'
-        }`}
-      >
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            Erreur: {error.message}
-          </div>
-        )}
-
-        <div className={`grid grid-cols-1 gap-6 ${showForms ? 'lg:grid-cols-3' : ''}`}>
-          {/* Left panel: inputs — hidden on the projection tab, where the table
-              needs the full width to be readable. */}
-          {showForms && (
-            <div className="lg:col-span-1 space-y-4">
-              <Panel><StructureForm /></Panel>
-              <Panel><AssociesForm /></Panel>
-              <Panel><AssetForm /></Panel>
-              <Panel><LoanForm /></Panel>
-              <Panel><CostsForm /></Panel>
-              <Panel><SuccessionForm /></Panel>
-              <Panel><UserProfileForm /></Panel>
-              <Panel><ParamsForm /></Panel>
+      {mode === 'saisonnier' ? (
+        <main className="mx-auto px-4 py-6 max-w-[1800px]">
+          <SaisonnierPage />
+        </main>
+      ) : (
+        <main
+          className={`mx-auto px-4 py-6 transition-[max-width] ${
+            showForms ? 'max-w-7xl' : 'max-w-[1800px]'
+          }`}
+        >
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+              Erreur: {error.message}
             </div>
           )}
 
-          {/* Right panel: results */}
-          <div className={`space-y-6 ${showForms ? 'lg:col-span-2' : ''}`}>
-            {hasAnyResult(results) ? (
-              <>
-                <div className="flex gap-1 border-b border-gray-200">
-                  {TABS.map((t) => (
-                    <button
-                      key={t.key}
-                      type="button"
-                      onClick={() => setTab(t.key)}
-                      className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                        tab === t.key
-                          ? 'text-blue-700 border-blue-600'
-                          : 'text-gray-400 border-transparent hover:text-gray-600'
-                      }`}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-
-                {tab === 'synthese' ? (
-                  <>
-                    <KpiCards results={results} />
-                    <CashFlowChart results={results} />
-                    <CostsChart results={results} />
-                    <SuccessionCard results={results} />
-                    <EquityChart results={results} />
-                    <TaxBreakdownChart results={results} />
-                  </>
-                ) : (
-                  <ProjectionTable results={results} />
-                )}
-              </>
-            ) : (
-              <div className="bg-white rounded-lg border p-12 text-center text-gray-400">
-                <p className="text-lg">
-                  Cliquez sur « Comparer les 3 montages » pour lancer la simulation
-                </p>
-                <p className="text-sm mt-2">
-                  SCI a l’IR · SCI a l’IS · Holding + SCI a l’IS, sur {store.params.horizonYears} ans
-                </p>
+          <div className={`grid grid-cols-1 gap-6 ${showForms ? 'lg:grid-cols-3' : ''}`}>
+            {/* Left panel: inputs — hidden on the projection tab, where the table
+                needs the full width to be readable. */}
+            {showForms && (
+              <div className="lg:col-span-1 space-y-4">
+                <Panel><StructureForm /></Panel>
+                <Panel><AssociesForm /></Panel>
+                <Panel><AssetForm /></Panel>
+                <Panel><LoanForm /></Panel>
+                <Panel><CostsForm /></Panel>
+                <Panel><SuccessionForm /></Panel>
+                <Panel><UserProfileForm /></Panel>
+                <Panel><ParamsForm /></Panel>
               </div>
             )}
+
+            {/* Right panel: results */}
+            <div className={`space-y-6 ${showForms ? 'lg:col-span-2' : ''}`}>
+              {hasAnyResult(results) ? (
+                <>
+                  <div className="flex gap-1 border-b border-gray-200">
+                    {TABS.map((t) => (
+                      <button
+                        key={t.key}
+                        type="button"
+                        onClick={() => setTab(t.key)}
+                        className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                          tab === t.key
+                            ? 'text-blue-700 border-blue-600'
+                            : 'text-gray-400 border-transparent hover:text-gray-600'
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {tab === 'synthese' ? (
+                    <>
+                      <KpiCards results={results} />
+                      <CashFlowChart results={results} />
+                      <CostsChart results={results} />
+                      <SuccessionCard results={results} />
+                      <EquityChart results={results} />
+                      <TaxBreakdownChart results={results} />
+                    </>
+                  ) : (
+                    <ProjectionTable results={results} />
+                  )}
+                </>
+              ) : (
+                <div className="bg-white rounded-lg border p-12 text-center text-gray-400">
+                  <p className="text-lg">
+                    Cliquez sur « Comparer les 3 montages » pour lancer la simulation
+                  </p>
+                  <p className="text-sm mt-2">
+                    SCI a l’IR · SCI a l’IS · Holding + SCI a l’IS, sur {store.params.horizonYears} ans
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      </main>
+        </main>
+      )}
     </div>
   );
 }

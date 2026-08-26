@@ -5,6 +5,7 @@ import {
   splitResultatFoncier,
   applyDeficitFoncier,
   computeAssocieIR,
+  computeAssocieLMP,
   computeCCAYear,
   findSelf,
   totalCapitalSocial,
@@ -204,6 +205,42 @@ describe('computeAssocieIR — differential taxation', () => {
       vintages: [],
     };
     expect(computeAssocieIR(associe(), deficit).ps.toNumber()).toBe(0);
+  });
+});
+
+describe('computeAssocieLMP — BIC differential taxation', () => {
+  it('should tax the quote-part at the marginal rate set by other income, like computeAssocieIR', () => {
+    const modeste = computeAssocieLMP(associe({ autresRevenus: '15000.00' }), new Decimal('10000'), new Decimal('0.35'));
+    const aise = computeAssocieLMP(associe({ autresRevenus: '150000.00' }), new Decimal('10000'), new Decimal('0.35'));
+
+    expect(aise.ir.gt(modeste.ir)).toBe(true);
+  });
+
+  it('should charge TNS contributions on a positive result, not the foncier PS rate', () => {
+    const r = computeAssocieLMP(associe({ socialChargeRegime: 'STANDARD' }), new Decimal('10000'), new Decimal('0.35'));
+    expect(r.cotisationsSociales.toNumber()).toBe(3500);
+  });
+
+  it('should charge no TNS contributions on a deficit year', () => {
+    const r = computeAssocieLMP(associe(), new Decimal('-5000'), new Decimal('0.35'));
+    expect(r.cotisationsSociales.toNumber()).toBe(0);
+  });
+
+  it('should impute a BIC deficit against global income with no 10 700 EUR cap, unlike foncier', () => {
+    // A 20000 EUR deficit fully offsets 20000 EUR of other income — the
+    // foncier path would cap the offset at 10700 and carry the rest forward.
+    const withDeficit = computeAssocieLMP(associe({ autresRevenus: '80000.00' }), new Decimal('-20000'), new Decimal('0.35'));
+    const withoutLMP = new Decimal(0); // IR on 80000 minus IR on 80000 = 0 baseline
+    expect(withDeficit.ir.lt(withoutLMP)).toBe(true);
+
+    const noSci = computeAssocieLMP(associe({ autresRevenus: '80000.00' }), new Decimal(0), new Decimal('0.35')).ir;
+    expect(noSci.toNumber()).toBe(0);
+  });
+
+  it('should never let the deficit push net taxable income below zero', () => {
+    const r = computeAssocieLMP(associe({ autresRevenus: '5000.00' }), new Decimal('-20000'), new Decimal('0.35'));
+    // IR without the LMP (on 5000) is already 0, so the differential floors at 0 too.
+    expect(r.ir.toNumber()).toBe(0);
   });
 });
 

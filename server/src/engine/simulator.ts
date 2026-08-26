@@ -9,6 +9,7 @@ import type {
   AssetInput,
   AssocieInput,
   UserProfile,
+  SaisonnierParams,
 } from '@shared/schemas.js';
 import { generateAmortizationSchedule, getYearlyLoanSummary } from './mortgage.js';
 import {
@@ -26,9 +27,11 @@ import { resolveCosts, indexedAnnualCost, type ResolvedCosts } from './costs.js'
 import {
   applyDeficitFoncier,
   computeAssocieIR,
+  computeAssocieLMP,
   computeCCAYear,
   type DeficitVintage,
 } from './associes.js';
+import { computeSaisonnierRevenue } from './saisonnier.js';
 import { computeSuccessionForAssocies } from './succession.js';
 
 // ─── Internal types for simulation state ─────────────────────────────────────
@@ -39,6 +42,8 @@ interface AssetState {
   notaryFees: Decimal;
   renovationCosts: Decimal;
   annualRent: Decimal;
+  /** When set, revenue for this asset comes from the seasonal engine instead of `annualRent`. */
+  saisonnier?: SaisonnierParams;
   chargesYearly: Decimal;
   propertyTax: Decimal;
   marketValue: Decimal;
@@ -79,6 +84,9 @@ interface EntityState {
   accumulatedCash: Decimal;
   /** Bank debt outstanding at the end of the last simulated year. */
   lastRemainingDebt: Decimal;
+  /** LMP: BIC reel — depreciation applies and the per-associe tax uses TNS charges, not foncier PS. */
+  isBic: boolean;
+  tauxCotisationsSocialesLMP: Decimal;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -133,11 +141,15 @@ function buildAssetState(asset: AssetInput, structureType: StructureInput['type'
     notaryFees,
     renovationCosts,
     annualRent: d(asset.annualRent),
+    saisonnier: asset.saisonnier,
     chargesYearly: d(asset.chargesYearly),
     propertyTax: d(asset.propertyTax),
     marketValue: purchasePrice.plus(notaryFees),
     loanPrincipalInitial: asset.loan ? d(asset.loan.principal) : d(0),
-    yearlyDepreciation: (structureType === 'SCI_IS' || structureType === 'HOLDING') ? dep.total : d(0),
+    yearlyDepreciation:
+      (structureType === 'SCI_IS' || structureType === 'HOLDING' || structureType === 'LMP')
+        ? dep.total
+        : d(0),
     buildingDepreciationYearsLeft: 25,
     renovationDepreciationYearsLeft: 15,
     buildingDepreciationPerYear: dep.building,
@@ -249,7 +261,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
   const entityStates: Map<string, EntityState> = new Map();
   for (const { entity } of flatEntities) {
     const taxRegime: 'IS' | 'IR' =
-      entity.type === 'SCI_IR' || entity.type === 'INDIVIDUAL' ? 'IR' : 'IS';
+      entity.type === 'SCI_IR' || entity.type === 'INDIVIDUAL' || entity.type === 'LMP' ? 'IR' : 'IS';
     const assets = entity.assets.map(a => buildAssetState(a, entity.type));
     const costs = resolveCosts(entity.costs?.mode ?? 'EN_LIGNE', entity.type, entity.costs);
 
@@ -265,6 +277,8 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       // Setup costs are paid before the company earns anything.
       accumulatedCash: costs.constitution.neg(),
       lastRemainingDebt: d(0),
+      isBic: entity.type === 'LMP',
+      tauxCotisationsSocialesLMP: d(entity.tauxCotisationsSocialesLMP ?? 0.35),
     });
   }
 
@@ -353,9 +367,35 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       let entityMarketValue = d(0);
 
       for (const asset of state.assets) {
-        // 1. Gross revenue with rent growth
-        const rent = asset.annualRent.mul(growthMultiplier(rentGrowth));
-        entityGrossRevenue = entityGrossRevenue.plus(rent);
+        // 1. Gross revenue with rent growth — seasonal assets go through the
+        // saisonnier engine instead, and their operating fees (commission or
+        // conciergerie) are folded into entityCharges alongside copro/taxe fonciere.
+        if (asset.saisonnier) {
+          const caGrowth = growthMultiplier(rentGrowth);
+          const feeGrowth = growthMultiplier(chargesGrowth);
+          const grown: SaisonnierParams = {
+            ...asset.saisonnier,
+            hauteSaison: {
+              ...asset.saisonnier.hauteSaison,
+              caPeriode: d(asset.saisonnier.hauteSaison.caPeriode).mul(caGrowth).toFixed(2),
+            },
+            moyenneSaison: {
+              ...asset.saisonnier.moyenneSaison,
+              caPeriode: d(asset.saisonnier.moyenneSaison.caPeriode).mul(caGrowth).toFixed(2),
+            },
+            basseSaison: {
+              ...asset.saisonnier.basseSaison,
+              caPeriode: d(asset.saisonnier.basseSaison.caPeriode).mul(caGrowth).toFixed(2),
+            },
+            fraisMenageLingeAnnuel: d(asset.saisonnier.fraisMenageLingeAnnuel).mul(feeGrowth).toFixed(2),
+          };
+          const revenue = computeSaisonnierRevenue(grown);
+          entityGrossRevenue = entityGrossRevenue.plus(revenue.caAnnuelBrut);
+          entityCharges = entityCharges.plus(revenue.totalFraisExploitation);
+        } else {
+          const rent = asset.annualRent.mul(growthMultiplier(rentGrowth));
+          entityGrossRevenue = entityGrossRevenue.plus(rent);
+        }
 
         // Charges & property tax with growth
         const charges = asset.chargesYearly.mul(growthMultiplier(chargesGrowth));
@@ -375,9 +415,9 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
           entityRemainingDebt = entityRemainingDebt.plus(d(0));
         }
 
-        // 3. Depreciation (IS only)
+        // 3. Depreciation (IS and LMP/BIC reel — not SCI_IR/INDIVIDUAL foncier)
         let yearDep = d(0);
-        if (state.taxRegime === 'IS') {
+        if (state.taxRegime === 'IS' || state.isBic) {
           if (asset.buildingDepreciationYearsLeft > 0) {
             yearDep = yearDep.plus(asset.buildingDepreciationPerYear);
             asset.buildingDepreciationYearsLeft--;
@@ -410,14 +450,14 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       const chargesStructurelles = operatingCosts.plus(ccaInterestTotal);
       let taxableProfit: Decimal;
 
-      if (state.taxRegime === 'IS') {
+      if (state.taxRegime === 'IS' || state.isBic) {
         taxableProfit = netRents
           .minus(entityInterest)
           .minus(entityInsurance)
           .minus(entityDepreciation)
           .minus(chargesStructurelles);
       } else {
-        // IR: no depreciation
+        // IR foncier (SCI_IR / INDIVIDUAL): no depreciation
         taxableProfit = netRents
           .minus(entityInterest)
           .minus(entityInsurance)
@@ -434,9 +474,34 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         const adjustedProfit = deficitResult.taxableAfterOffset;
 
         entityTax = computeIS(adjustedProfit);
+      } else if (state.isBic) {
+        // 5c. LMP: translucent like an SCI at IR, but the result is BIC — the
+        // deficit imputes fully against global income (no foncier cap) and the
+        // social levy is TNS (SSI) contributions on the professional result,
+        // not the foncier PS rate.
+        for (const a of state.associes) {
+          const quotePart = taxableProfit.mul(a.input.partsPercent);
+          const { ir, cotisationsSociales, total } = computeAssocieLMP(
+            a.input,
+            quotePart,
+            state.tauxCotisationsSocialesLMP,
+          );
+          yearAssocieTax = yearAssocieTax.plus(total);
+          totalTaxPaid = totalTaxPaid.plus(total);
+          personalWealth = personalWealth.minus(total);
+
+          addAssocieYear(associesBucket, a.input.nom, {
+            quotePart,
+            irTax: ir,
+            // Reusing the psTax slot for TNS contributions — see AssocieYear.
+            psTax: cotisationsSociales,
+            netCashFlow: total.neg(),
+          });
+        }
       } else {
-        // 5b. IR: the SCI is translucent — each associe is taxed on their own
-        // quote-part, at their own marginal rate, on top of their own income.
+        // 5b. IR foncier: the SCI is translucent — each associe is taxed on
+        // their own quote-part, at their own marginal rate, on top of their
+        // own income.
         for (const a of state.associes) {
           const quotePart = taxableProfit.mul(a.input.partsPercent);
           const deficit = applyDeficitFoncier(quotePart, a.deficitVintages, year);
