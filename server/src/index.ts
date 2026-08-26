@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { simulationRoutes } from './routes/simulation.js';
+import { listingRoutes } from './routes/listings.js';
 
 const server = Fastify({ logger: true });
 
@@ -9,6 +10,7 @@ await server.register(cors, {
 });
 
 await server.register(simulationRoutes);
+await server.register(listingRoutes);
 
 server.get('/api/health', async () => {
   return { status: 'ok' };
