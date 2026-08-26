@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
-export const StructureType = z.enum(['HOLDING', 'SCI_IS', 'SCI_IR', 'INDIVIDUAL']);
+export const StructureType = z.enum(['HOLDING', 'SCI_IS', 'SCI_IR', 'INDIVIDUAL', 'LMP']);
 export type StructureType = z.infer<typeof StructureType>;
 
 export const TaxRegime = z.enum(['IS', 'IR']);
@@ -47,6 +47,16 @@ export const AssocieRelation = z.enum([
   'OTHER',
 ]);
 export type AssocieRelation = z.infer<typeof AssocieRelation>;
+
+/**
+ * How a location saisonniere is operated.
+ * CONCIERGERIE bundles mise en location + menage/linge/entretien into a
+ * single percentage — no platform commission is charged on top of it.
+ * SOI_MEME books directly on the platform: commission is paid to the
+ * platform and menage/linge is a separate line the owner organizes.
+ */
+export const GestionSaisonniere = z.enum(['SOI_MEME', 'CONCIERGERIE']);
+export type GestionSaisonniere = z.infer<typeof GestionSaisonniere>;
 
 // ─── Decimal string (validated as numeric) ───────────────────────────────────
 
@@ -140,6 +150,37 @@ export const AssetSchema = z.object({
   loan: LoanSchema.optional(),
 });
 export type AssetInput = z.infer<typeof AssetSchema>;
+
+// ─── Location saisonniere ─────────────────────────────────────────────────────
+
+/**
+ * One season bucket (haute / moyenne / basse saison). `caPeriode` is entered
+ * directly by the user (v1: manual, potentially LLM-suggested from the
+ * listing/locality later) rather than derived from nights x rate — simpler
+ * and always overridable, consistent with the rest of the engine's presets.
+ */
+export const SaisonnierSaisonSchema = z.object({
+  tauxOccupation: z.number().min(0).max(1),
+  caPeriode: decimalString,
+});
+export type SaisonnierSaisonInput = z.infer<typeof SaisonnierSaisonSchema>;
+
+export const SaisonnierParamsSchema = z.object({
+  hauteSaison: SaisonnierSaisonSchema,
+  moyenneSaison: SaisonnierSaisonSchema,
+  basseSaison: SaisonnierSaisonSchema,
+  gestion: GestionSaisonniere.default('SOI_MEME'),
+  /** SOI_MEME only — platform commission (Airbnb/Abritel/Booking ~15-20%). */
+  commissionPlateforme: z.number().min(0).max(1).default(0.15),
+  /** SOI_MEME only — menage/linge/entretien organized directly by the owner. */
+  fraisMenageLingeAnnuel: decimalString.default('0.00'),
+  /**
+   * CONCIERGERIE only — a single percentage covering mise en location,
+   * menage, linge and entretien. No platform commission applies on top.
+   */
+  fraisConciergeriePercent: z.number().min(0).max(1).default(0.25),
+});
+export type SaisonnierParams = z.infer<typeof SaisonnierParamsSchema>;
 
 // ─── Structure ───────────────────────────────────────────────────────────────
 
