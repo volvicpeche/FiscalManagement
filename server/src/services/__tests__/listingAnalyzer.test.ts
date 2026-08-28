@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { assertPublicHttpUrl, htmlToText } from '../listingAnalyzer.js';
+import { assertPublicHttpUrl, htmlToText, analyzeListingText, MIN_TEXT_CHARS } from '../listingAnalyzer.js';
+import { ListingAnalyzeRequestSchema } from '@shared/listing.js';
 
 describe('assertPublicHttpUrl', () => {
   it('should accept a plain https URL', () => {
@@ -51,5 +52,45 @@ describe('htmlToText', () => {
 
   it('should decode common entities', () => {
     expect(htmlToText('<p>Terrain&nbsp;&amp;&nbsp;piscine</p>')).toBe('Terrain & piscine');
+  });
+});
+
+describe('analyzeListingText', () => {
+  it('should reject a paste that is too short to analyse', async () => {
+    await expect(analyzeListingText('Joli mas en Provence')).rejects.toThrow(/trop court/);
+  });
+
+  it('should say how short the paste was and what the minimum is', async () => {
+    await expect(analyzeListingText('abc')).rejects.toThrow(
+      new RegExp(`3 caracteres, minimum ${MIN_TEXT_CHARS}`),
+    );
+  });
+
+  it('should count the trimmed length, not the surrounding whitespace', async () => {
+    await expect(analyzeListingText('   x   '.padEnd(400, ' '))).rejects.toThrow(
+      /1 caracteres/,
+    );
+  });
+});
+
+describe('ListingAnalyzeRequestSchema', () => {
+  it('should accept a url on its own', () => {
+    expect(ListingAnalyzeRequestSchema.safeParse({ url: 'https://www.bienici.com/annonce/1' }).success).toBe(true);
+  });
+
+  it('should accept pasted text on its own', () => {
+    expect(ListingAnalyzeRequestSchema.safeParse({ text: 'Mas en Provence...' }).success).toBe(true);
+  });
+
+  it('should reject a request carrying neither', () => {
+    expect(ListingAnalyzeRequestSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('should reject a malformed url', () => {
+    expect(ListingAnalyzeRequestSchema.safeParse({ url: 'pas-une-url' }).success).toBe(false);
+  });
+
+  it('should reject empty text', () => {
+    expect(ListingAnalyzeRequestSchema.safeParse({ text: '' }).success).toBe(false);
   });
 });

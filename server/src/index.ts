@@ -3,6 +3,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { simulationRoutes } from './routes/simulation.js';
 import { listingRoutes } from './routes/listings.js';
+import { closeBrowser } from './services/browserFetch.js';
 
 const server = Fastify({ logger: true });
 
@@ -16,6 +17,16 @@ await server.register(listingRoutes);
 server.get('/api/health', async () => {
   return { status: 'ok' };
 });
+
+// The listing fallback keeps a Chrome alive between requests; do not leave it
+// running when the server goes down.
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.once(signal, async () => {
+    await closeBrowser();
+    await server.close();
+    process.exit(0);
+  });
+}
 
 const start = async () => {
   try {
