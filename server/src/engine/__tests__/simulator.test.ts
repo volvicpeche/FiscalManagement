@@ -1102,3 +1102,81 @@ describe('runSimulation — IRR', () => {
     expect(result.summary.irr).toBeNull();
   });
 });
+
+describe('runSimulation — selling at the horizon', () => {
+  const withRegime = (type: 'SCI_IS' | 'SCI_IR', taxRegime: 'IS' | 'IR'): SimulationRequest => ({
+    ...baseRequest,
+    structures: [{ ...baseRequest.structures[0], type, taxRegime, costs: NO_COSTS }],
+  });
+
+  it('should measure the IS gain against the depreciated book value', () => {
+    const s = runSimulation(withRegime('SCI_IS', 'IS')).summary.sortie;
+
+    expect(s.regime).toBe('IS');
+    // 246 000 of basis less everything written off over 30 years.
+    expect(parseFloat(s.valeurNetteComptable)).toBeLessThan(50000);
+    expect(parseFloat(s.plusValueBrute)).toBeGreaterThan(parseFloat(s.prixVente) * 0.8);
+    expect(parseFloat(s.impot)).toBeGreaterThan(0);
+  });
+
+  it('should exempt the IR gain entirely after 30 years', () => {
+    const s = runSimulation(withRegime('SCI_IR', 'IR')).summary.sortie;
+
+    expect(s.regime).toBe('IR');
+    expect(parseFloat(s.impot)).toBe(0);
+    expect(parseFloat(s.amortissementsRepris)).toBe(0);
+  });
+
+  it('should make the exit far more expensive at IS than at IR', () => {
+    // The bias the whole feature exists to remove: twenty years of
+    // depreciation is a bill deferred, not avoided.
+    const is = parseFloat(runSimulation(withRegime('SCI_IS', 'IS')).summary.sortie.impot);
+    const ir = parseFloat(runSimulation(withRegime('SCI_IR', 'IR')).summary.sortie.impot);
+    expect(is).toBeGreaterThan(ir);
+    expect(is).toBeGreaterThan(50000);
+  });
+
+  it('should report the gain that only exists because of depreciation', () => {
+    const s = runSimulation(withRegime('SCI_IS', 'IS')).summary.sortie;
+    const cumulAmortissements = runSimulation(withRegime('SCI_IS', 'IS')).yearlyData.reduce(
+      (acc, y) => acc + parseFloat(y.entities['SCI Alpha'].depreciation),
+      0,
+    );
+    expect(parseFloat(s.amortissementsRepris)).toBeCloseTo(cumulAmortissements, 0);
+  });
+
+  it('should lower the IRR once the exit tax is paid', () => {
+    const r = runSimulation(withRegime('SCI_IS', 'IS'));
+    expect(parseFloat(r.summary.irrNetDeRevente!)).toBeLessThan(parseFloat(r.summary.irr!));
+  });
+
+  it('should leave the IRR untouched when the exit is exempt', () => {
+    const r = runSimulation(withRegime('SCI_IR', 'IR'));
+    expect(r.summary.irrNetDeRevente).toBe(r.summary.irr);
+  });
+
+  it('should narrow the gap between the regimes once the sale is priced', () => {
+    const is = runSimulation(withRegime('SCI_IS', 'IS')).summary;
+    const ir = runSimulation(withRegime('SCI_IR', 'IR')).summary;
+
+    const ecartAvant = parseFloat(is.irr!) - parseFloat(ir.irr!);
+    const ecartApres = parseFloat(is.irrNetDeRevente!) - parseFloat(ir.irrNetDeRevente!);
+
+    expect(ecartAvant).toBeGreaterThan(0);
+    expect(ecartApres).toBeLessThan(ecartAvant);
+  });
+
+  it('should deduct the outstanding debt from the proceeds', () => {
+    // Sold at year 10, the loan still has ten years to run.
+    const r = runSimulation({
+      ...withRegime('SCI_IS', 'IS'),
+      params: { ...baseRequest.params, horizonYears: 10 },
+    });
+    const s = r.summary.sortie;
+    expect(parseFloat(s.detteResiduelle)).toBeGreaterThan(0);
+    expect(parseFloat(s.produitNet)).toBeCloseTo(
+      parseFloat(s.prixVente) - parseFloat(s.impot) - parseFloat(s.detteResiduelle),
+      2,
+    );
+  });
+});

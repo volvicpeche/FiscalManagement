@@ -44,6 +44,20 @@ const METRICS: Metric[] = [
     tone: 'cost',
   },
   {
+    label: 'Impot de sortie (revente)',
+    value: (r) => parseFloat(r.summary.sortie.impot),
+    better: 'lower',
+    tone: 'cost',
+    aide: "Ce que coute la vente au terme. A l'IS la plus-value se calcule sur la valeur comptable amortie, pas sur le prix d'achat : les vingt ans d'impot economise par l'amortissement reviennent ici. A l'IR, la plus-value est exoneree apres 22 ans (impot) et 30 ans (prelevements sociaux).",
+  },
+  {
+    label: 'TRI net de revente',
+    value: (r) => (r.summary.irrNetDeRevente === null ? NaN : parseFloat(r.summary.irrNetDeRevente) * 100),
+    better: 'higher',
+    format: 'pct',
+    aide: "Le rendement sur le cycle complet, impot de sortie deduit. C'est l'indicateur a comparer entre montages : le TRI brut au-dessus flatte l'IS, qui n'a pas encore paye sa plus-value.",
+  },
+  {
     label: 'Droits de succession',
     value: (r) => parseFloat(r.summary.successionCost),
     better: 'lower',

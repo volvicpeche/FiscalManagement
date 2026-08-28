@@ -35,6 +35,7 @@ import { computeSaisonnierRevenue } from './saisonnier.js';
 import { computeSuccessionForAssocies } from './succession.js';
 import { computeIRR } from './irr.js';
 import { computeFinancement, type FinancementResult } from './financement.js';
+import { computeExitIS, computeExitIR, computeExitLMP, type ExitResult } from './exit.js';
 
 // ─── Internal types for simulation state ─────────────────────────────────────
 
@@ -51,6 +52,8 @@ interface AssetState {
   marketValue: Decimal;
   /** Amount borrowed, before any repayment — the debt at incorporation. */
   loanPrincipalInitial: Decimal;
+  /** Everything written off so far — drives the book value at the exit. */
+  cumulAmortissements: Decimal;
   yearlyDepreciation: Decimal;
   buildingDepreciationYearsLeft: number;
   renovationDepreciationYearsLeft: number;
@@ -157,6 +160,7 @@ function buildAssetState(asset: AssetInput, structureType: StructureInput['type'
     propertyTax: d(asset.propertyTax),
     marketValue: purchasePrice.plus(notaryFees),
     loanPrincipalInitial: asset.loan ? d(asset.loan.principal) : d(0),
+    cumulAmortissements: d(0),
     yearlyDepreciation:
       (structureType === 'SCI_IS' || structureType === 'HOLDING' || structureType === 'LMP')
         ? dep.total
@@ -472,6 +476,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
           }
         }
         entityDepreciation = entityDepreciation.plus(yearDep);
+        asset.cumulAmortissements = asset.cumulAmortissements.plus(yearDep);
 
         // 8. Update market value
         asset.marketValue = asset.marketValue.mul(propertyGrowth.plus(1));
@@ -796,6 +801,50 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
   cashFlows[cashFlows.length - 1] = cashFlows[cashFlows.length - 1].plus(totalWealth);
   const irr = computeIRR(cashFlows);
 
+  // ── Selling at the horizon ───────────────────────────────────────────────
+  // Aggregated across the entity that actually holds the walls.
+  const holders = [...entityStates.values()].filter((s) => s.assets.length > 0);
+  const sortieParams = holders.reduce(
+    (acc, s) => {
+      for (const a of s.assets) {
+        acc.prixVente = acc.prixVente.plus(a.marketValue);
+        acc.prixAcquisition = acc.prixAcquisition.plus(a.purchasePrice).plus(a.notaryFees);
+        acc.baseAmortissable = acc.baseAmortissable
+          .plus(a.purchasePrice)
+          .plus(a.notaryFees)
+          .plus(a.renovationCosts);
+        acc.cumulAmortissements = acc.cumulAmortissements.plus(a.cumulAmortissements);
+      }
+      acc.detteResiduelle = acc.detteResiduelle.plus(s.lastRemainingDebt);
+      return acc;
+    },
+    {
+      prixVente: d(0), prixAcquisition: d(0), baseAmortissable: d(0),
+      cumulAmortissements: d(0), detteResiduelle: d(0),
+      dureeDetention: horizon,
+      regimeSocial: userProfile.socialChargeRegime ?? ('STANDARD' as const),
+    },
+  );
+
+  const holderPrincipal = holders[0];
+  const vendeur = holderPrincipal?.associes[0]?.input;
+
+  let sortie: ExitResult;
+  if (holderPrincipal?.isBic && vendeur) {
+    sortie = computeExitLMP(sortieParams, vendeur, holderPrincipal.tauxCotisationsSocialesLMP);
+  } else if (holderPrincipal?.taxRegime === 'IS') {
+    sortie = computeExitIS(sortieParams);
+  } else {
+    sortie = computeExitIR(sortieParams);
+  }
+
+  // The rate over the whole cycle, sale included. This is the honest one: the
+  // plain IRR above treats terminal wealth as if it were already cash.
+  const cashFlowsApresRevente = [...cashFlows];
+  const last = cashFlowsApresRevente.length - 1;
+  cashFlowsApresRevente[last] = cashFlowsApresRevente[last].minus(sortie.impot);
+  const irrNetDeRevente = computeIRR(cashFlowsApresRevente);
+
   return {
     summary: {
       totalNetWealth: totalWealth.toFixed(2),
@@ -804,6 +853,18 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       fraisConstitution: totalFraisConstitution.toFixed(2),
       totalOperatingCosts: totalOperatingCosts.toFixed(2),
       successionCost: succession.total.toFixed(2),
+      sortie: {
+        regime: sortie.regime,
+        prixVente: sortie.prixVente.toFixed(2),
+        valeurNetteComptable: sortie.valeurNetteComptable.toFixed(2),
+        prixAcquisition: sortie.prixAcquisition.toFixed(2),
+        plusValueBrute: sortie.plusValueBrute.toFixed(2),
+        amortissementsRepris: sortie.amortissementsRepris.toFixed(2),
+        impot: sortie.impot.toFixed(2),
+        detteResiduelle: sortie.detteResiduelle.toFixed(2),
+        produitNet: sortie.produitNet.toFixed(2),
+      },
+      irrNetDeRevente: irrNetDeRevente === null ? null : irrNetDeRevente.toFixed(4),
       financement: {
         coutAcquisition: financementTotal.coutAcquisition.toFixed(2),
         emprunt: financementTotal.emprunt.toFixed(2),

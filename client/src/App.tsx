@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ScenarioProfile } from '@shared/schemas.js';
+import type { SharedInputs } from '@/store/scenarioStore';
 import {
   useScenarioStore,
   selectSharedInputs,
@@ -32,6 +33,7 @@ import {
 import { SaisonnierPage } from '@/features/saisonnier';
 import { AidePage } from '@/features/aide';
 import { SidebarLayout } from '@/components/SidebarLayout';
+import { ScenarioManager } from '@/features/scenarios';
 
 function Panel({ children }: { children: React.ReactNode }) {
   return <div className="bg-white rounded-lg border p-4">{children}</div>;
@@ -69,8 +71,6 @@ function App() {
   const error = PROFILE_ORDER.map((p) => simulations[p].error).find(Boolean);
   const validParts = partsAreValid(associes);
 
-  // The projection table takes the full width; the forms come back with the
-  // Synthese tab, and are always shown before the first run.
   // The projection table opens with the panel folded because it needs the
   // width, but the choice stays the user's from then on.
   const [panelOpen, setPanelOpen] = useState(true);
@@ -162,6 +162,13 @@ function App() {
             onToggle={() => setPanelOpen(!panelOpen)}
             sidebar={
               <>
+                <Panel>
+                  <ScenarioManager
+                    kind="sci"
+                    getData={() => selectSharedInputs(store) as unknown as Record<string, unknown>}
+                    onLoad={(data) => store.hydrate(data as Partial<SharedInputs>)}
+                  />
+                </Panel>
                 <Panel><StructureForm /></Panel>
                 <Panel><AssociesForm /></Panel>
                 <Panel><AssetForm /></Panel>

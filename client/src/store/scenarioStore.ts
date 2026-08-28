@@ -249,6 +249,8 @@ interface ScenarioStore extends SharedInputs {
   setCostOverride: (profile: ScenarioProfile, entityName: string, costs: EntityCostsInput) => void;
   resetCostOverride: (profile: ScenarioProfile, entityName: string) => void;
 
+  /** Replaces every input from a saved scenario. Missing keys keep their default. */
+  hydrate: (data: Partial<SharedInputs>) => void;
   setActiveProfile: (p: ScenarioProfile) => void;
   setResult: (p: ScenarioProfile, r: SimulationResult | null) => void;
   clearResults: () => void;
@@ -306,6 +308,18 @@ export const useScenarioStore = create<ScenarioStore>((set) => ({
       delete next[entityName];
       return { costOverrides: { ...s.costOverrides, [profile]: next } };
     }),
+
+  hydrate: (data) =>
+    set((s) => ({
+      userProfile: data.userProfile ?? s.userProfile,
+      asset: data.asset ?? s.asset,
+      associes: data.associes ?? s.associes,
+      params: data.params ?? s.params,
+      managementMode: data.managementMode ?? s.managementMode,
+      costOverrides: data.costOverrides ?? s.costOverrides,
+      // A loaded scenario has not been run yet.
+      results: EMPTY_RESULTS,
+    })),
 
   setActiveProfile: (activeProfile) => set({ activeProfile }),
   setResult: (p, r) => set((s) => ({ results: { ...s.results, [p]: r } })),

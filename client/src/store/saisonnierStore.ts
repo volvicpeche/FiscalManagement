@@ -96,6 +96,8 @@ interface SaisonnierStore {
   updateParams: (p: Partial<SimulationParams>) => void;
   setTauxCotisationsSocialesLMP: (v: number) => void;
   setResult: (r: SimulationResult | null) => void;
+  /** Replaces every input from a saved scenario. Missing keys keep their default. */
+  hydrate: (data: Partial<Pick<SaisonnierStore, 'asset' | 'proprietaire' | 'params' | 'tauxCotisationsSocialesLMP'>>) => void;
 }
 
 export const useSaisonnierStore = create<SaisonnierStore>((set) => ({
@@ -130,6 +132,17 @@ export const useSaisonnierStore = create<SaisonnierStore>((set) => ({
   updateParams: (p) => set((s) => ({ params: { ...s.params, ...p } })),
   setTauxCotisationsSocialesLMP: (v) => set({ tauxCotisationsSocialesLMP: v }),
   setResult: (result) => set({ result }),
+
+  hydrate: (data) =>
+    set((s) => ({
+      asset: data.asset ?? s.asset,
+      proprietaire: data.proprietaire ?? s.proprietaire,
+      params: data.params ?? s.params,
+      tauxCotisationsSocialesLMP:
+        data.tauxCotisationsSocialesLMP ?? s.tauxCotisationsSocialesLMP,
+      // A loaded scenario has not been run yet.
+      result: null,
+    })),
 }));
 
 /** Builds the single-structure LMP request the engine expects. */
