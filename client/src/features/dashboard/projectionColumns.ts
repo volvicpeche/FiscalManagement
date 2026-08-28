@@ -1,0 +1,345 @@
+import type { SimulationResult, YearlyData } from '@shared/schemas.js';
+
+/**
+ * The projection table, organised around the direction money moves rather than
+ * around accounting categories: what comes in, what goes out, what is left, and
+ * what it leaves on the balance sheet.
+ */
+export type Flux = 'ENTREES' | 'SORTIES' | 'SOLDE' | 'BILAN';
+
+export interface RowDetail {
+  loyerNu: number;
+  caHaute: number;
+  caMoyenne: number;
+  caBasse: number;
+  chargesCopro: number;
+  taxeFonciere: number;
+  commission: number;
+  menageLinge: number;
+  conciergerie: number;
+  interetsSeuls: number;
+  assurance: number;
+}
+
+export interface Row {
+  year: number;
+  loyers: number;
+  chargesBien: number;
+  fraisExploitation: number;
+  coutsStructure: number;
+  interets: number;
+  capital: number;
+  is: number;
+  irAssocies: number;
+  psAssocies: number;
+  ifi: number;
+  cashFlow: number;
+  effortReel: number;
+  dividendeNet: number;
+  ccaRembourse: number;
+  detteRestante: number;
+  valeurBien: number;
+  /** Component figures behind the totals, for the per-cell tooltips. */
+  detail: RowDetail;
+}
+
+type EntityField = keyof YearlyData['entities'][string];
+type DetailField = keyof YearlyData['entities'][string]['detail'];
+type AssocieField = keyof YearlyData['associes'][string];
+
+const sumEntities = (y: YearlyData, f: EntityField): number =>
+  Object.values(y.entities).reduce((acc, e) => acc + parseFloat(e[f] as string), 0);
+
+const sumDetail = (y: YearlyData, f: DetailField): number =>
+  Object.values(y.entities).reduce((acc, e) => acc + parseFloat(e.detail[f]), 0);
+
+const sumAssocies = (y: YearlyData, f: AssocieField): number =>
+  Object.values(y.associes).reduce((acc, a) => acc + parseFloat(a[f]), 0);
+
+export function toRows(result: SimulationResult): Row[] {
+  return result.yearlyData.map((y) => {
+    const detail: RowDetail = {
+      loyerNu: sumDetail(y, 'loyerNu'),
+      caHaute: sumDetail(y, 'caHauteSaison'),
+      caMoyenne: sumDetail(y, 'caMoyenneSaison'),
+      caBasse: sumDetail(y, 'caBasseSaison'),
+      chargesCopro: sumDetail(y, 'chargesCopro'),
+      taxeFonciere: sumDetail(y, 'taxeFonciere'),
+      commission: sumDetail(y, 'commissionPlateforme'),
+      menageLinge: sumDetail(y, 'fraisMenageLinge'),
+      conciergerie: sumDetail(y, 'fraisConciergerie'),
+      interetsSeuls: sumDetail(y, 'interets'),
+      assurance: sumDetail(y, 'assurance'),
+    };
+
+    const capital = sumEntities(y, 'loanPrincipal');
+    const cashFlow = parseFloat(y.totalNetCashFlow);
+
+    return {
+      year: y.year,
+      loyers: sumEntities(y, 'grossRevenue'),
+      chargesBien: detail.chargesCopro + detail.taxeFonciere,
+      fraisExploitation: detail.commission + detail.menageLinge + detail.conciergerie,
+      coutsStructure: sumEntities(y, 'operatingCosts'),
+      interets: sumEntities(y, 'loanInterest'),
+      capital,
+      is: sumEntities(y, 'tax'),
+      irAssocies: sumAssocies(y, 'irTax'),
+      psAssocies: sumAssocies(y, 'psTax'),
+      ifi: parseFloat(y.ifiTax),
+      cashFlow,
+      // Capital repayment is forced saving, not a loss: adding it back shows
+      // what the year actually costs.
+      effortReel: cashFlow + capital,
+      dividendeNet: parseFloat(y.userNetDividend),
+      ccaRembourse: sumAssocies(y, 'ccaRepayment'),
+      detteRestante: sumEntities(y, 'remainingDebt'),
+      valeurBien: sumEntities(y, 'assetMarketValue'),
+      detail,
+    };
+  });
+}
+
+export interface DecomposeLine {
+  label: string;
+  montant: number;
+}
+
+export interface Column {
+  key: keyof Row;
+  label: string;
+  flux: Flux;
+  /** Running totals are meaningless for balances. */
+  cumulable: boolean;
+  emphasise?: boolean;
+  /** Money that merely changes pocket rather than entering or leaving. */
+  transfert?: boolean;
+  /** What the column is. */
+  quoi: string;
+  /** Component lines behind this cell, with their actual figures. */
+  decompose?: (r: Row) => DecomposeLine[];
+}
+
+export const COLUMNS: Column[] = [
+  {
+    key: 'loyers',
+    label: 'Revenus locatifs',
+    flux: 'ENTREES',
+    cumulable: true,
+    quoi: "Tout ce que le bien encaisse sur l'annee, avant la moindre depense.",
+    decompose: (r) =>
+      r.detail.caHaute + r.detail.caMoyenne + r.detail.caBasse > 0
+        ? [
+            { label: 'CA haute saison', montant: r.detail.caHaute },
+            { label: 'CA moyenne saison', montant: r.detail.caMoyenne },
+            { label: 'CA basse saison', montant: r.detail.caBasse },
+          ]
+        : [{ label: 'Loyer annuel (location nue)', montant: r.detail.loyerNu }],
+  },
+  {
+    key: 'chargesBien',
+    label: 'Charges + TF',
+    flux: 'SORTIES',
+    cumulable: true,
+    quoi: 'Ce que le bien coute a detenir, que vous le louiez ou non.',
+    decompose: (r) => [
+      { label: 'Charges de copropriete', montant: r.detail.chargesCopro },
+      { label: 'Taxe fonciere', montant: r.detail.taxeFonciere },
+    ],
+  },
+  {
+    key: 'fraisExploitation',
+    label: 'Frais exploitation',
+    flux: 'SORTIES',
+    cumulable: true,
+    quoi: 'Ce que coute la mise en location saisonniere elle-meme.',
+    decompose: (r) =>
+      [
+        { label: 'Commission plateforme', montant: r.detail.commission },
+        { label: 'Menage et linge', montant: r.detail.menageLinge },
+        { label: 'Conciergerie', montant: r.detail.conciergerie },
+      ].filter((l) => l.montant !== 0),
+  },
+  {
+    key: 'coutsStructure',
+    label: 'Couts structure',
+    flux: 'SORTIES',
+    cumulable: true,
+    quoi: "Le prix de la societe elle-meme : comptable, CFE, banque, assurance, juridique. Indexe sur l'inflation. Un montage avec holding les porte deux fois.",
+  },
+  {
+    key: 'interets',
+    label: 'Interets + assur.',
+    flux: 'SORTIES',
+    cumulable: true,
+    quoi: "La part de la mensualite qui part definitivement. C'est la seule partie du credit qui soit deductible.",
+    decompose: (r) => [
+      { label: 'Interets du pret', montant: r.detail.interetsSeuls },
+      { label: 'Assurance emprunteur', montant: r.detail.assurance },
+    ],
+  },
+  {
+    key: 'capital',
+    label: 'Capital rembourse',
+    flux: 'SORTIES',
+    cumulable: true,
+    quoi: "Sort de la tresorerie mais pas de votre patrimoine : de l'epargne forcee qui se transforme en murs. Non deductible. Le cumul egale exactement le montant emprunte.",
+  },
+  {
+    key: 'is',
+    label: 'IS societe',
+    flux: 'SORTIES',
+    cumulable: true,
+    quoi: "Impot paye par la societe : 15 % jusqu'a 42 500 EUR de benefice, 25 % au-dela, deficits anterieurs imputes avant calcul. Reste a zero dans un montage a l'IR.",
+  },
+  {
+    key: 'irAssocies',
+    label: 'IR associes',
+    flux: 'SORTIES',
+    cumulable: true,
+    quoi: "Impot paye par les associes de leur poche, calcule en differentiel sur le foyer de chacun. Negatif = un deficit a reduit leur impot global. Reste a zero a l'IS.",
+  },
+  {
+    key: 'psAssocies',
+    label: 'PS associes',
+    flux: 'SORTIES',
+    cumulable: true,
+    quoi: 'Prelevements sociaux sur la quote-part positive : 17,2 %, ou 7,5 % pour un affilie suisse.',
+  },
+  {
+    key: 'ifi',
+    label: 'IFI',
+    flux: 'SORTIES',
+    cumulable: true,
+    quoi: 'Impot sur la fortune immobiliere : valeur des biens moins la dette bancaire, nul en dessous de 1,3 M EUR net.',
+  },
+  {
+    key: 'cashFlow',
+    label: 'Cash-flow net',
+    flux: 'SOLDE',
+    cumulable: true,
+    emphasise: true,
+    quoi: "Ce qui reste au niveau de la famille sur l'annee. Negatif = l'operation demande un effort d'epargne.",
+    decompose: (r) => {
+      // A foncier or BIC deficit can push the tax line positive: it then lowers
+      // the associes' overall bill, so calling it "Impots" would read wrong.
+      const impots = -(r.is + r.irAssocies + r.psAssocies + r.ifi);
+      return [
+        { label: 'Revenus locatifs', montant: r.loyers },
+        { label: 'Charges + TF', montant: -r.chargesBien },
+        { label: 'Frais exploitation', montant: -r.fraisExploitation },
+        { label: 'Couts structure', montant: -r.coutsStructure },
+        { label: 'Interets + assurance', montant: -r.interets },
+        { label: 'Capital rembourse', montant: -r.capital },
+        { label: impots > 0 ? "Economie d'impot" : 'Impots', montant: impots },
+      ].filter((l) => l.montant !== 0);
+    },
+  },
+  {
+    key: 'effortReel',
+    label: 'Effort reel',
+    flux: 'SOLDE',
+    cumulable: true,
+    emphasise: true,
+    quoi: "Le cash-flow une fois le capital rembourse remis dedans. C'est le vrai cout de l'annee : un cash-flow tres negatif dont l'essentiel part en capital ne vous appauvrit pas.",
+    decompose: (r) => [
+      { label: 'Cash-flow net', montant: r.cashFlow },
+      { label: 'Capital rembourse (reinjecte)', montant: r.capital },
+    ],
+  },
+  {
+    key: 'dividendeNet',
+    label: 'Dividende net',
+    flux: 'SOLDE',
+    cumulable: true,
+    transfert: true,
+    quoi: "Ce que l'associe touche apres impot. La societe s'appauvrit d'autant : transfert, pas creation de richesse.",
+  },
+  {
+    key: 'ccaRembourse',
+    label: 'CCA rembourse',
+    flux: 'SOLDE',
+    cumulable: true,
+    transfert: true,
+    quoi: 'Compte courant rendu aux associes, sans aucune imposition. Transfert egalement : la societe rend une dette.',
+  },
+  {
+    key: 'detteRestante',
+    label: 'Dette restante',
+    flux: 'BILAN',
+    cumulable: false,
+    quoi: "Capital bancaire restant du a la fin de l'annee. A l'annee 0, le montant emprunte. C'est un solde : le cumuler n'aurait aucun sens.",
+  },
+  {
+    key: 'valeurBien',
+    label: 'Valeur du bien',
+    flux: 'BILAN',
+    cumulable: false,
+    quoi: "Prix d'achat + frais de notaire, revalorises chaque annee. Les travaux ne sont pas ajoutes a la valeur. Solde, non cumulable.",
+  },
+];
+
+export const FLUX_META: Record<Flux, { titre: string; sous: string; header: string; cell: string }> = {
+  ENTREES: {
+    titre: 'Entrees',
+    sous: 'ce qui rentre',
+    header: 'bg-emerald-100 text-emerald-900 border-emerald-200',
+    cell: 'bg-emerald-50/40',
+  },
+  SORTIES: {
+    titre: 'Sorties',
+    sous: 'ce qui sort',
+    header: 'bg-rose-100 text-rose-900 border-rose-200',
+    cell: 'bg-rose-50/30',
+  },
+  SOLDE: {
+    titre: 'Solde',
+    sous: 'ce qui reste',
+    header: 'bg-blue-100 text-blue-900 border-blue-200',
+    cell: 'bg-blue-50/30',
+  },
+  BILAN: {
+    titre: 'Bilan',
+    sous: 'situation a la fin',
+    header: 'bg-gray-200 text-gray-800 border-gray-300',
+    cell: 'bg-gray-50/60',
+  },
+};
+
+/** Consecutive runs of columns sharing a flux, for the top header row. */
+export function fluxGroups(columns: Column[]): { flux: Flux; span: number }[] {
+  return columns.reduce<{ flux: Flux; span: number }[]>((acc, col) => {
+    const last = acc[acc.length - 1];
+    if (last && last.flux === col.flux) last.span += 1;
+    else acc.push({ flux: col.flux, span: 1 });
+    return acc;
+  }, []);
+}
+
+/**
+ * Drops columns that are all zero across the horizon — a long-term rental has
+ * no seasonal fees, an SCI at IR has no IS, and empty columns only add noise.
+ */
+export function visibleColumns(rows: Row[]): Column[] {
+  const alwaysShown = new Set<keyof Row>(['loyers', 'cashFlow', 'effortReel', 'detteRestante', 'valeurBien']);
+  return COLUMNS.filter(
+    (col) => alwaysShown.has(col.key) || rows.some((r) => Math.abs(r[col.key] as number) > 0.005),
+  );
+}
+
+export interface CellExplanation {
+  titre: string;
+  quoi: string;
+  lignes: DecomposeLine[];
+  total: number;
+}
+
+/** Builds the tooltip for one cell: what it is, then how it adds up. */
+export function explainCell(col: Column, row: Row): CellExplanation {
+  return {
+    titre: `${col.label} — ${row.year === 0 ? 'creation' : `annee ${row.year}`}`,
+    quoi: col.quoi,
+    lignes: col.decompose?.(row) ?? [],
+    total: row[col.key] as number,
+  };
+}

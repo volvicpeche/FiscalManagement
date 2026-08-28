@@ -283,6 +283,31 @@ export type SimulationRequest = z.infer<typeof SimulationRequestSchema>;
 
 // ─── Simulation Response ─────────────────────────────────────────────────────
 
+/**
+ * Where an entity's yearly totals come from, line by line.
+ *
+ * The table renders these as per-cell tooltips ("CA brut 23 000 = haute 15 000
+ * + moyenne 8 000"), so a reader can trace any figure back to its parts
+ * without opening the engine.
+ */
+export const EntityYearDetailSchema = z.object({
+  // Revenue
+  loyerNu: z.string(),
+  caHauteSaison: z.string(),
+  caMoyenneSaison: z.string(),
+  caBasseSaison: z.string(),
+  // Charges
+  chargesCopro: z.string(),
+  taxeFonciere: z.string(),
+  commissionPlateforme: z.string(),
+  fraisMenageLinge: z.string(),
+  fraisConciergerie: z.string(),
+  // Loan
+  interets: z.string(),
+  assurance: z.string(),
+});
+export type EntityYearDetail = z.infer<typeof EntityYearDetailSchema>;
+
 export const EntityYearSchema = z.object({
   grossRevenue: z.string(),
   /** Charges de copropriete + taxe fonciere. */
@@ -300,6 +325,7 @@ export const EntityYearSchema = z.object({
   netCashFlow: z.string(),
   remainingDebt: z.string(),
   assetMarketValue: z.string(),
+  detail: EntityYearDetailSchema,
 });
 export type EntityYear = z.infer<typeof EntityYearSchema>;
 
