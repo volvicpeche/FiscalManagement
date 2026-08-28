@@ -51,7 +51,15 @@ export const ListingExtractionSchema = z.object({
 });
 export type ListingExtraction = z.infer<typeof ListingExtractionSchema>;
 
-export const ListingAnalyzeRequestSchema = z.object({
-  url: z.string().url(),
-});
+/**
+ * Either a URL to fetch, or text the user pasted.
+ *
+ * The paste route is not a convenience: SeLoger, LeBonCoin and PAP answer 403
+ * to any server-side request whatever the headers, so for those portals
+ * pasting is the only way the feature can work at all.
+ */
+export const ListingAnalyzeRequestSchema = z.union([
+  z.object({ url: z.string().url("L'URL de l'annonce est invalide") }),
+  z.object({ text: z.string().min(1, "Le texte de l'annonce est vide") }),
+]);
 export type ListingAnalyzeRequest = z.infer<typeof ListingAnalyzeRequestSchema>;

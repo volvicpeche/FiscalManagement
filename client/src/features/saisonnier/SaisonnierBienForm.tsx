@@ -21,21 +21,38 @@ const ATOUT_LABELS: Record<Exclude<keyof ListingExtraction['atouts'], 'autres'>,
   parking: 'Parking',
 };
 
+/** Portals that answer 403 to any server-side request, whatever the headers. */
+const PORTAILS_BLOQUANTS = ['seloger', 'leboncoin', 'pap.fr', 'logic-immo', 'bellesdemeures'];
+
+function isPortailBloquant(url: string): boolean {
+  return PORTAILS_BLOQUANTS.some((p) => url.toLowerCase().includes(p));
+}
+
 function ListingUrlAnalyzer() {
   const [url, setUrl] = useState('');
+  const [texte, setTexte] = useState('');
+  const [showTexte, setShowTexte] = useState(false);
   const [extraction, setExtraction] = useState<ListingExtraction | null>(null);
   const { updateAsset, updateSaison } = useSaisonnierStore();
   const analyze = useAnalyzeListing();
 
+  const apply = (data: ListingExtraction) => {
+    setExtraction(data);
+    if (data.label) updateAsset({ label: data.label });
+    if (data.prixVente != null) updateAsset({ purchasePrice: data.prixVente.toFixed(2) });
+  };
+
   const handleAnalyze = () => {
     if (!url.trim()) return;
-    analyze.mutate(url.trim(), {
-      onSuccess: (data) => {
-        setExtraction(data);
-        if (data.label) updateAsset({ label: data.label });
-        if (data.prixVente != null) updateAsset({ purchasePrice: data.prixVente.toFixed(2) });
-      },
-    });
+    // These portals cannot be fetched at all — open the paste box straight away
+    // rather than spending a round-trip to be told so.
+    if (isPortailBloquant(url)) setShowTexte(true);
+    analyze.mutate({ url: url.trim() }, { onSuccess: apply });
+  };
+
+  const handleAnalyzeTexte = () => {
+    if (!texte.trim()) return;
+    analyze.mutate({ text: texte.trim() }, { onSuccess: apply });
   };
 
   const applyEstimate = () => {
@@ -73,6 +90,50 @@ function ListingUrlAnalyzer() {
 
       {analyze.error && (
         <p className="text-xs text-red-600">{analyze.error.message}</p>
+      )}
+
+      {!showTexte && (
+        <button
+          type="button"
+          onClick={() => setShowTexte(true)}
+          className="text-xs text-orange-700 hover:text-orange-900 underline underline-offset-2"
+        >
+          Le portail bloque la lecture ? Coller le texte de l’annonce
+        </button>
+      )}
+
+      {showTexte && (
+        <div className="space-y-2 rounded-md border border-gray-200 bg-gray-50 p-3">
+          <label className="block text-sm font-medium text-gray-700">
+            Coller le texte de l’annonce
+          </label>
+          <p className="text-xs text-gray-500">
+            SeLoger, LeBonCoin et PAP refusent toute lecture automatique : leurs pages ne sont
+            lisibles que depuis votre navigateur. Selectionnez la description de l’annonce,
+            copiez-la, et collez-la ici.
+          </p>
+          <textarea
+            rows={6}
+            className={`${inputClass} font-normal`}
+            placeholder="Mas provencal de 220 m2, 6 chambres, piscine chauffee, vue sur les Alpilles..."
+            value={texte}
+            onChange={(e) => setTexte(e.target.value)}
+          />
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-gray-400">
+              {texte.trim().length} caracteres
+              {texte.trim().length > 0 && texte.trim().length < 200 && ' — minimum 200'}
+            </span>
+            <button
+              type="button"
+              onClick={handleAnalyzeTexte}
+              disabled={analyze.isPending || texte.trim().length < 200}
+              className="shrink-0 px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {analyze.isPending ? 'Analyse...' : 'Analyser le texte'}
+            </button>
+          </div>
+        </div>
       )}
 
       {extraction && (

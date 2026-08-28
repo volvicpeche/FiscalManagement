@@ -6,7 +6,7 @@ import { parseExtractionJson } from './jsonMode.js';
 export async function extractListingViaGemini(text: string): Promise<ListingExtraction> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY manquant');
-  const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+  const modelName = process.env.GEMINI_MODEL || 'gemini-flash-latest';
 
   const client = new GoogleGenerativeAI(apiKey);
   const model = client.getGenerativeModel({
