@@ -950,3 +950,155 @@ describe('runSimulation — traceable detail', () => {
     expect(parseFloat(e.detail.fraisConciergerie)).toBe(0);
   });
 });
+
+describe('runSimulation — financing', () => {
+  it('should report what the acquisition needs versus what was declared', () => {
+    const result = runSimulation({
+      ...baseRequest,
+      structures: [
+        {
+          ...baseRequest.structures[0],
+          associes: [associe({ nom: 'Moi', partsPercent: 1, apportCapital: '1000.00' })],
+          costs: NO_COSTS,
+        },
+      ],
+    });
+    const f = result.summary.financement;
+
+    // 200 000 + 16 000 + 30 000 − 180 000 borrowed, no setup costs.
+    expect(parseFloat(f.coutAcquisition)).toBe(246000);
+    expect(parseFloat(f.emprunt)).toBe(180000);
+    expect(parseFloat(f.apportRequis)).toBe(66000);
+    expect(parseFloat(f.apportDeclare)).toBe(1000);
+    expect(parseFloat(f.ecart)).toBe(65000);
+  });
+
+  it('should charge the whole apport against year 0', () => {
+    const result = runSimulation(baseRequest);
+    expect(parseFloat(yearOf(result, 0).totalNetCashFlow)).toBeCloseTo(
+      -parseFloat(result.summary.financement.apportRequis),
+      2,
+    );
+  });
+
+  it('should stop the down payment appearing from nowhere', () => {
+    // Regression: the asset used to exist at full value with only the loan
+    // against it, so the apport inflated net wealth by its own amount.
+    const petitApport = runSimulation({
+      ...baseRequest,
+      structures: [
+        {
+          ...baseRequest.structures[0],
+          assets: [
+            {
+              ...baseRequest.structures[0].assets[0],
+              loan: { ...baseRequest.structures[0].assets[0].loan!, principal: '180000.00' },
+            },
+          ],
+        },
+      ],
+      params: { ...baseRequest.params, horizonYears: 1 },
+    });
+    const grosApport = runSimulation({
+      ...baseRequest,
+      structures: [
+        {
+          ...baseRequest.structures[0],
+          assets: [
+            {
+              ...baseRequest.structures[0].assets[0],
+              loan: { ...baseRequest.structures[0].assets[0].loan!, principal: '100000.00' },
+            },
+          ],
+        },
+      ],
+      params: { ...baseRequest.params, horizonYears: 1 },
+    });
+
+    // Borrowing less means paying more up front, not being richer for it.
+    expect(parseFloat(grosApport.summary.financement.apportRequis)).toBeGreaterThan(
+      parseFloat(petitApport.summary.financement.apportRequis),
+    );
+    expect(parseFloat(grosApport.summary.totalNetWealth)).toBeGreaterThan(
+      parseFloat(petitApport.summary.totalNetWealth) - 1,
+    );
+  });
+
+  it('should leave year-0 wealth at minus the works and the setup costs', () => {
+    // Everything else nets out: the apport buys equity of equal value. Only the
+    // works and the incorporation fees create no asset.
+    const avecTravaux = runSimulation({ ...baseRequest, params: { ...baseRequest.params, horizonYears: 1 } });
+    const sansTravaux = runSimulation({
+      ...baseRequest,
+      structures: [
+        {
+          ...baseRequest.structures[0],
+          assets: [{ ...baseRequest.structures[0].assets[0], renovationCosts: '0.00' }],
+        },
+      ],
+      params: { ...baseRequest.params, horizonYears: 1 },
+    });
+
+    expect(
+      parseFloat(sansTravaux.summary.totalNetWealth) - parseFloat(avecTravaux.summary.totalNetWealth),
+    ).toBeCloseTo(30000, 0);
+  });
+});
+
+describe('runSimulation — IRR', () => {
+  it('should turn positive only once the loan is behind you', () => {
+    const at = (horizon: number) =>
+      parseFloat(
+        runSimulation({ ...baseRequest, params: { ...baseRequest.params, horizonYears: horizon } })
+          .summary.irr!,
+      );
+
+    expect(at(10)).toBeLessThan(0);
+    expect(at(30)).toBeGreaterThan(0);
+    expect(at(30)).toBeGreaterThan(at(20));
+  });
+
+  it('should reward a better rent with a better rate', () => {
+    const withRent = (annualRent: string) =>
+      parseFloat(
+        runSimulation({
+          ...baseRequest,
+          structures: [
+            {
+              ...baseRequest.structures[0],
+              assets: [{ ...baseRequest.structures[0].assets[0], annualRent }],
+            },
+          ],
+        }).summary.irr!,
+      );
+
+    expect(withRent('24000.00')).toBeGreaterThan(withRent('12000.00'));
+  });
+
+  it('should report null rather than 0 when there is no meaningful rate', () => {
+    // A property that never earns anything: money only ever goes out.
+    const result = runSimulation({
+      ...baseRequest,
+      structures: [
+        {
+          ...baseRequest.structures[0],
+          costs: NO_COSTS,
+          assets: [
+            {
+              ...baseRequest.structures[0].assets[0],
+              purchasePrice: '0.01',
+              notaryFees: '0.00',
+              renovationCosts: '0.00',
+              annualRent: '0.00',
+              chargesYearly: '5000.00',
+              propertyTax: '0.00',
+              loan: undefined,
+            },
+          ],
+        },
+      ],
+      params: { ...baseRequest.params, horizonYears: 5, propertyGrowth: 0 },
+    });
+    expect(result.summary.irr).toBeNull();
+  });
+});

@@ -11,6 +11,9 @@ interface Metric {
   /** Which direction is better — drives the winner highlight. */
   better: 'higher' | 'lower';
   tone?: 'neutral' | 'cost';
+  /** Percentages rather than euros. */
+  format?: 'eur' | 'pct';
+  aide?: string;
 }
 
 const METRICS: Metric[] = [
@@ -18,6 +21,14 @@ const METRICS: Metric[] = [
     label: 'Patrimoine net a terme',
     value: (r) => parseFloat(r.summary.totalNetWealth),
     better: 'higher',
+    aide: "Ce que la famille possede au terme : les societes, plus ce que les associes detiennent personnellement, net de l'apport de depart et des impots payes de leur poche.",
+  },
+  {
+    label: 'Rendement annuel (TRI)',
+    value: (r) => (r.summary.irr === null ? NaN : parseFloat(r.summary.irr) * 100),
+    better: 'higher',
+    format: 'pct',
+    aide: "Le taux que rapporte l'operation chaque annee, tout compris. C'est le chiffre qui la rend comparable a un placement financier. La valeur du patrimoine au terme tient lieu de revente : l'impot sur la plus-value de sortie n'est pas deduit.",
   },
   {
     label: 'Impots cumules',
@@ -65,27 +76,60 @@ export function KpiCards({ results }: ResultsProps) {
           <tbody>
             {METRICS.map((metric) => {
               const values = available.map((p) => metric.value(results[p]!));
-              const best =
-                metric.better === 'higher' ? Math.max(...values) : Math.min(...values);
-              const allEqual = values.every((v) => Math.abs(v - values[0]) < 0.5);
+              // A montage with no meaningful rate must not decide the winner.
+              const comparables = values.filter((v) => Number.isFinite(v));
+              const best = comparables.length
+                ? metric.better === 'higher'
+                  ? Math.max(...comparables)
+                  : Math.min(...comparables)
+                : NaN;
+              const tolerance = metric.format === 'pct' ? 0.005 : 0.5;
+              const allEqual = comparables.every((v) => Math.abs(v - comparables[0]) < tolerance);
+
+              const render = (v: number) => {
+                if (!Number.isFinite(v)) return 'n/d';
+                if (metric.format === 'pct') {
+                  return `${v.toFixed(2).replace('.', ',')} %`;
+                }
+                return formatEur(v);
+              };
 
               return (
                 <tr key={metric.label} className="border-b last:border-0">
-                  <td className="px-4 py-3 text-gray-600">{metric.label}</td>
+                  <td
+                    className={`px-4 py-3 text-gray-600 ${metric.aide ? 'cursor-help' : ''}`}
+                    title={metric.aide}
+                  >
+                    <span
+                      className={
+                        metric.aide
+                          ? 'underline decoration-dotted decoration-gray-300 underline-offset-4'
+                          : undefined
+                      }
+                    >
+                      {metric.label}
+                    </span>
+                  </td>
                   {available.map((p, i) => {
-                    const isBest = !allEqual && Math.abs(values[i] - best) < 0.5;
+                    const v = values[i];
+                    const isBest =
+                      !allEqual && Number.isFinite(v) && Math.abs(v - best) < tolerance;
                     return (
                       <td
                         key={p}
                         className={`px-4 py-3 text-right font-mono font-semibold whitespace-nowrap ${
-                          isBest
-                            ? 'text-green-700 bg-green-50'
-                            : metric.tone === 'cost'
-                              ? 'text-red-600'
-                              : 'text-gray-900'
+                          !Number.isFinite(v)
+                            ? 'text-gray-300'
+                            : isBest
+                              ? 'text-green-700 bg-green-50'
+                              : metric.tone === 'cost'
+                                ? 'text-red-600'
+                                : metric.format === 'pct' && v < 0
+                                  ? 'text-red-600'
+                                  : 'text-gray-900'
                         }`}
                       >
-                        {formatEur(values[i])}
+                        {render(v)}
                       </td>
                     );
                   })}

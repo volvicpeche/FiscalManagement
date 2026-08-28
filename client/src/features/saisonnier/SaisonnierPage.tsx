@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useSaisonnierStore, buildSaisonnierRequest } from '@/store/saisonnierStore';
 import { useSimulation } from '@/hooks/useSimulation';
 import { SaisonnierBienForm } from './SaisonnierBienForm';
@@ -9,6 +10,7 @@ import { SaisonnierRevenueChart } from './SaisonnierRevenueChart';
 import { SaisonnierCashFlowChart } from './SaisonnierCashFlowChart';
 import { SaisonnierProjectionTable } from './SaisonnierProjectionTable';
 import { SaisonnierSuccession } from './SaisonnierSuccession';
+import { SidebarLayout } from '@/components/SidebarLayout';
 
 function Panel({ children }: { children: React.ReactNode }) {
   return <div className="bg-white rounded-lg border p-4">{children}</div>;
@@ -18,6 +20,7 @@ export function SaisonnierPage() {
   const store = useSaisonnierStore();
   const { asset, result, setResult } = store;
   const simulation = useSimulation();
+  const [panelOpen, setPanelOpen] = useState(true);
 
   const handleRun = () => {
     simulation.mutate(buildSaisonnierRequest(store), {
@@ -26,13 +29,21 @@ export function SaisonnierPage() {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-1 space-y-4">
-        <Panel><SaisonnierBienForm /></Panel>
-        <Panel><SaisonnierSaisonsForm /></Panel>
-        <Panel><SaisonnierProprietaireForm /></Panel>
-        <Panel><SaisonnierParamsForm /></Panel>
-
+    <SidebarLayout
+      open={panelOpen}
+      onToggle={() => setPanelOpen(!panelOpen)}
+      sidebar={
+        <>
+          <Panel><SaisonnierBienForm /></Panel>
+          <Panel><SaisonnierSaisonsForm /></Panel>
+          <Panel><SaisonnierProprietaireForm /></Panel>
+          <Panel><SaisonnierParamsForm /></Panel>
+        </>
+      }
+    >
+      <div className="space-y-6">
+        {/* Kept outside the folding panel so a collapsed sidebar never strands
+            the user without a way to re-run. */}
         <button
           onClick={handleRun}
           disabled={simulation.isPending}
@@ -40,9 +51,7 @@ export function SaisonnierPage() {
         >
           {simulation.isPending ? 'Calcul en cours...' : 'Simuler la location saisonniere'}
         </button>
-      </div>
 
-      <div className="lg:col-span-2 space-y-6">
         {simulation.error && (
           <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
             Erreur : {simulation.error.message}
@@ -72,6 +81,6 @@ export function SaisonnierPage() {
           </>
         )}
       </div>
-    </div>
+    </SidebarLayout>
   );
 }

@@ -381,10 +381,19 @@ export const SimulationResultSchema = z.object({
   summary: z.object({
     totalNetWealth: z.string(),
     totalTaxPaid: z.string(),
-    irr: z.string(),
+    /** Null when the cash flows never change sign — there is no rate to report. */
+    irr: z.string().nullable(),
     fraisConstitution: z.string(),
     totalOperatingCosts: z.string(),
     successionCost: z.string(),
+    /** What the acquisition really needs versus what the associes declared. */
+    financement: z.object({
+      coutAcquisition: z.string(),
+      emprunt: z.string(),
+      apportRequis: z.string(),
+      apportDeclare: z.string(),
+      ecart: z.string(),
+    }),
   }),
   yearlyData: z.array(YearlyDataSchema),
   succession: SuccessionResultSchema,

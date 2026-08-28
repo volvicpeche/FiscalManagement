@@ -33,6 +33,8 @@ import {
 } from './associes.js';
 import { computeSaisonnierRevenue } from './saisonnier.js';
 import { computeSuccessionForAssocies } from './succession.js';
+import { computeIRR } from './irr.js';
+import { computeFinancement, type FinancementResult } from './financement.js';
 
 // ─── Internal types for simulation state ─────────────────────────────────────
 
@@ -84,6 +86,8 @@ interface EntityState {
   accumulatedCash: Decimal;
   /** Bank debt outstanding at the end of the last simulated year. */
   lastRemainingDebt: Decimal;
+  /** What the acquisition needs versus what the associes declared. */
+  financement: FinancementResult;
   /** LMP: BIC reel — depreciation applies and the per-associe tax uses TNS charges, not foncier PS. */
   isBic: boolean;
   tauxCotisationsSocialesLMP: Decimal;
@@ -281,9 +285,12 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       associes: buildAssocieStates(entity, taxRegime, userProfile),
       costs,
       carriedDeficit: d(0),
-      // Setup costs are paid before the company earns anything.
-      accumulatedCash: costs.constitution.neg(),
+      // The apport covers the acquisition AND the setup costs exactly, so the
+      // company opens at zero. Starting at -constitution would charge those
+      // costs twice: once here and once inside apportRequis.
+      accumulatedCash: d(0),
       lastRemainingDebt: d(0),
+      financement: computeFinancement(entity.assets, entity.associes ?? [], costs.constitution),
       isBic: entity.type === 'LMP',
       tauxCotisationsSocialesLMP: d(entity.tauxCotisationsSocialesLMP ?? 0.35),
     });
@@ -314,6 +321,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
     const entitiesResult: YearlyData['entities'] = {};
     const associesBucket = new Map<string, AssocieYear>();
     let constitutionTotal = d(0);
+    let apportTotal = d(0);
 
     for (const [name, state] of entityStates) {
       // The debt at incorporation is the amount borrowed, not the balance after
@@ -322,10 +330,13 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       const initialValue = state.assets.reduce((acc, a) => acc.plus(a.marketValue), d(0));
 
       constitutionTotal = constitutionTotal.plus(state.costs.constitution);
+      apportTotal = apportTotal.plus(state.financement.apportRequis);
 
       entitiesResult[name] = zeroEntityYear({
         operatingCosts: state.costs.constitution,
-        netCashFlow: state.costs.constitution.neg(),
+        // What year 0 really costs the family: the whole down payment, of
+        // which the incorporation costs are one line.
+        netCashFlow: state.financement.apportRequis.neg(),
         remainingDebt: initialDebt,
         assetMarketValue: initialValue,
       });
@@ -337,6 +348,13 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
 
     totalFraisConstitution = constitutionTotal;
 
+    // The apport leaves the family's pocket to become equity in the company.
+    // Without this debit the model let the down payment appear from nowhere and
+    // over-stated net wealth by exactly that amount.
+    for (const [, state] of entityStates) {
+      personalWealth = personalWealth.minus(state.financement.apportRequis);
+    }
+
     yearlyData.push({
       year: 0,
       entities: entitiesResult,
@@ -344,7 +362,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       userNetDividend: '0.00',
       ifiTax: '0.00',
       operatingCosts: constitutionTotal.toFixed(2),
-      totalNetCashFlow: constitutionTotal.neg().toFixed(2),
+      totalNetCashFlow: apportTotal.neg().toFixed(2),
     });
   }
 
@@ -754,14 +772,45 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
   // Succession is reported on its own line: it is a one-off event at death,
   // not part of the running tax bill.
 
+  // ── IRR ──────────────────────────────────────────────────────────────────
+  // From the family's point of view: the apport and the setup costs go out at
+  // t0, each year brings its net cash flow, and the horizon returns whatever
+  // the structures are worth. Terminal wealth stands in for a sale, so the
+  // rate ignores the capital-gains tax an actual exit would trigger.
+  const financementTotal = [...entityStates.values()].reduce(
+    (acc, s) => ({
+      coutAcquisition: acc.coutAcquisition.plus(s.financement.coutAcquisition),
+      emprunt: acc.emprunt.plus(s.financement.emprunt),
+      apportRequis: acc.apportRequis.plus(s.financement.apportRequis),
+      apportDeclare: acc.apportDeclare.plus(s.financement.apportDeclare),
+      ecart: acc.ecart.plus(s.financement.ecart),
+    }),
+    {
+      coutAcquisition: d(0), emprunt: d(0),
+      apportRequis: d(0), apportDeclare: d(0), ecart: d(0),
+    },
+  );
+
+  // Year 0 already carries the full apport, so the series is taken as it is.
+  const cashFlows: Decimal[] = yearlyData.map((y) => d(y.totalNetCashFlow));
+  cashFlows[cashFlows.length - 1] = cashFlows[cashFlows.length - 1].plus(totalWealth);
+  const irr = computeIRR(cashFlows);
+
   return {
     summary: {
       totalNetWealth: totalWealth.toFixed(2),
       totalTaxPaid: totalTaxPaid.toFixed(2),
-      irr: '0.00', // TODO: implement IRR calculation
+      irr: irr === null ? null : irr.toFixed(4),
       fraisConstitution: totalFraisConstitution.toFixed(2),
       totalOperatingCosts: totalOperatingCosts.toFixed(2),
       successionCost: succession.total.toFixed(2),
+      financement: {
+        coutAcquisition: financementTotal.coutAcquisition.toFixed(2),
+        emprunt: financementTotal.emprunt.toFixed(2),
+        apportRequis: financementTotal.apportRequis.toFixed(2),
+        apportDeclare: financementTotal.apportDeclare.toFixed(2),
+        ecart: financementTotal.ecart.toFixed(2),
+      },
     },
     yearlyData,
     succession: {
