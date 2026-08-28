@@ -31,6 +31,7 @@ import {
 } from '@/features/dashboard';
 import { SaisonnierPage } from '@/features/saisonnier';
 import { AidePage } from '@/features/aide';
+import { SidebarLayout } from '@/components/SidebarLayout';
 
 function Panel({ children }: { children: React.ReactNode }) {
   return <div className="bg-white rounded-lg border p-4">{children}</div>;
@@ -70,7 +71,15 @@ function App() {
 
   // The projection table takes the full width; the forms come back with the
   // Synthese tab, and are always shown before the first run.
-  const showForms = tab === 'synthese' || !hasAnyResult(results);
+  // The projection table opens with the panel folded because it needs the
+  // width, but the choice stays the user's from then on.
+  const [panelOpen, setPanelOpen] = useState(true);
+  const showForms = panelOpen || !hasAnyResult(results);
+
+  const selectTab = (key: TabKey) => {
+    setTab(key);
+    setPanelOpen(key === 'synthese');
+  };
 
   const handleRun = () => {
     const shared = selectSharedInputs(store);
@@ -148,11 +157,11 @@ function App() {
             </div>
           )}
 
-          <div className={`grid grid-cols-1 gap-6 ${showForms ? 'lg:grid-cols-3' : ''}`}>
-            {/* Left panel: inputs — hidden on the projection tab, where the table
-                needs the full width to be readable. */}
-            {showForms && (
-              <div className="lg:col-span-1 space-y-4">
+          <SidebarLayout
+            open={showForms}
+            onToggle={() => setPanelOpen(!panelOpen)}
+            sidebar={
+              <>
                 <Panel><StructureForm /></Panel>
                 <Panel><AssociesForm /></Panel>
                 <Panel><AssetForm /></Panel>
@@ -161,11 +170,10 @@ function App() {
                 <Panel><SuccessionForm /></Panel>
                 <Panel><UserProfileForm /></Panel>
                 <Panel><ParamsForm /></Panel>
-              </div>
-            )}
-
-            {/* Right panel: results */}
-            <div className={`space-y-6 ${showForms ? 'lg:col-span-2' : ''}`}>
+              </>
+            }
+          >
+            <div className="space-y-6">
               {hasAnyResult(results) ? (
                 <>
                   <div className="flex gap-1 border-b border-gray-200">
@@ -173,7 +181,7 @@ function App() {
                       <button
                         key={t.key}
                         type="button"
-                        onClick={() => setTab(t.key)}
+                        onClick={() => selectTab(t.key)}
                         className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
                           tab === t.key
                             ? 'text-blue-700 border-blue-600'
@@ -209,7 +217,7 @@ function App() {
                 </div>
               )}
             </div>
-          </div>
+          </SidebarLayout>
         </main>
       )}
     </div>
