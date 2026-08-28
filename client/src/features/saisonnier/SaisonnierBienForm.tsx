@@ -21,11 +21,11 @@ const ATOUT_LABELS: Record<Exclude<keyof ListingExtraction['atouts'], 'autres'>,
   parking: 'Parking',
 };
 
-/** Portals that answer 403 to any server-side request, whatever the headers. */
-const PORTAILS_BLOQUANTS = ['seloger', 'leboncoin', 'pap.fr', 'logic-immo', 'bellesdemeures'];
+/** Portals behind DataDome: the server has to drive a real Chrome for these. */
+const PORTAILS_PROTEGES = ['seloger', 'leboncoin', 'pap.fr', 'logic-immo', 'bellesdemeures'];
 
-function isPortailBloquant(url: string): boolean {
-  return PORTAILS_BLOQUANTS.some((p) => url.toLowerCase().includes(p));
+function isPortailProtege(url: string): boolean {
+  return PORTAILS_PROTEGES.some((p) => url.toLowerCase().includes(p));
 }
 
 function ListingUrlAnalyzer() {
@@ -44,9 +44,6 @@ function ListingUrlAnalyzer() {
 
   const handleAnalyze = () => {
     if (!url.trim()) return;
-    // These portals cannot be fetched at all — open the paste box straight away
-    // rather than spending a round-trip to be told so.
-    if (isPortailBloquant(url)) setShowTexte(true);
     analyze.mutate({ url: url.trim() }, { onSuccess: apply });
   };
 
@@ -87,6 +84,13 @@ function ListingUrlAnalyzer() {
           {analyze.isPending ? 'Analyse...' : 'Analyser'}
         </button>
       </div>
+
+      {analyze.isPending && isPortailProtege(url) && (
+        <p className="text-xs text-gray-500">
+          Ce portail bloque les requetes simples : lecture via un navigateur pilote, comptez une
+          dizaine de secondes.
+        </p>
+      )}
 
       {analyze.error && (
         <p className="text-xs text-red-600">{analyze.error.message}</p>

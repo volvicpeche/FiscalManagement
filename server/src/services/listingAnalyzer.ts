@@ -1,5 +1,6 @@
 import type { ListingExtraction } from '@shared/listing.js';
 import { extractListingViaLlm } from './llm/index.js';
+import { fetchListingTextViaBrowser, browserFallbackEnabled } from './browserFetch.js';
 
 const MAX_TEXT_CHARS = 20000;
 const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
@@ -125,22 +126,44 @@ async function fetchListingText(url: URL): Promise<string> {
 }
 
 /**
+ * Two ways in, cheapest first.
+ *
+ * A plain fetch handles the sites that allow it (BienIci, agency sites) in
+ * well under a second. Only when that is refused do we pay for a real Chrome,
+ * which is the sole way past DataDome on SeLoger, LeBonCoin and PAP.
+ */
+async function fetchListingWithFallback(url: URL): Promise<string> {
+  try {
+    return await fetchListingText(url);
+  } catch (directErr) {
+    if (!browserFallbackEnabled()) throw directErr;
+
+    try {
+      return await fetchListingTextViaBrowser(url);
+    } catch (browserErr) {
+      // The browser attempt is the more informative failure: it is the one
+      // that actually reached the portal's defences.
+      throw browserErr instanceof Error ? browserErr : directErr;
+    }
+  }
+}
+
+/**
  * Fetches a listing URL and extracts its features + a rough seasonal-rental
  * estimate via whichever LLM provider is configured (LLM_PROVIDER env var —
  * see server/.env.example and services/llm/index.ts).
  */
 export async function analyzeListing(rawUrl: string): Promise<ListingExtraction> {
   const url = assertPublicHttpUrl(rawUrl);
-  const text = await fetchListingText(url);
+  const text = await fetchListingWithFallback(url);
   return extractListingViaLlm(text);
 }
 
 /**
  * Same extraction, from text the user pasted themselves.
  *
- * This is the only route that works for SeLoger, LeBonCoin and PAP: they
- * answer 403 to any server-side request regardless of headers, so their
- * listings can never be fetched — only read by the person browsing them.
+ * The last resort, once both the plain fetch and the browser have been
+ * refused — and the only route at all when LISTING_BROWSER_FALLBACK is off.
  */
 export async function analyzeListingText(rawText: string): Promise<ListingExtraction> {
   const text = rawText.trim().slice(0, MAX_TEXT_CHARS);
