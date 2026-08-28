@@ -386,6 +386,26 @@ export const SimulationResultSchema = z.object({
     fraisConstitution: z.string(),
     totalOperatingCosts: z.string(),
     successionCost: z.string(),
+    /**
+     * Selling at the horizon. Reported rather than folded into the projection:
+     * an SCI at IS pays almost nothing for twenty years precisely because
+     * depreciation lowers the book value the exit gain is measured against, so
+     * a comparison that stops before the sale flatters it.
+     */
+    sortie: z.object({
+      regime: z.enum(['IS', 'IR', 'LMP']),
+      prixVente: z.string(),
+      valeurNetteComptable: z.string(),
+      prixAcquisition: z.string(),
+      plusValueBrute: z.string(),
+      /** Gain that exists only because depreciation lowered the book value. */
+      amortissementsRepris: z.string(),
+      impot: z.string(),
+      detteResiduelle: z.string(),
+      produitNet: z.string(),
+    }),
+    /** IRR once the exit tax is paid — the rate over the whole cycle. */
+    irrNetDeRevente: z.string().nullable(),
     /** What the acquisition really needs versus what the associes declared. */
     financement: z.object({
       coutAcquisition: z.string(),

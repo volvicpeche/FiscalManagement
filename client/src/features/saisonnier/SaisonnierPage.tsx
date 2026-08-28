@@ -11,6 +11,7 @@ import { SaisonnierCashFlowChart } from './SaisonnierCashFlowChart';
 import { SaisonnierProjectionTable } from './SaisonnierProjectionTable';
 import { SaisonnierSuccession } from './SaisonnierSuccession';
 import { SidebarLayout } from '@/components/SidebarLayout';
+import { ScenarioManager } from '@/features/scenarios';
 
 function Panel({ children }: { children: React.ReactNode }) {
   return <div className="bg-white rounded-lg border p-4">{children}</div>;
@@ -34,6 +35,18 @@ export function SaisonnierPage() {
       onToggle={() => setPanelOpen(!panelOpen)}
       sidebar={
         <>
+          <Panel>
+            <ScenarioManager
+              kind="saisonnier"
+              getData={() => ({
+                asset: store.asset,
+                proprietaire: store.proprietaire,
+                params: store.params,
+                tauxCotisationsSocialesLMP: store.tauxCotisationsSocialesLMP,
+              })}
+              onLoad={(data) => store.hydrate(data as Parameters<typeof store.hydrate>[0])}
+            />
+          </Panel>
           <Panel><SaisonnierBienForm /></Panel>
           <Panel><SaisonnierSaisonsForm /></Panel>
           <Panel><SaisonnierProprietaireForm /></Panel>
