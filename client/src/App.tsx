@@ -27,8 +27,10 @@ import {
   CostsChart,
   SuccessionCard,
   ProjectionTable,
+  FinancementCard,
 } from '@/features/dashboard';
 import { SaisonnierPage } from '@/features/saisonnier';
+import { AidePage } from '@/features/aide';
 
 function Panel({ children }: { children: React.ReactNode }) {
   return <div className="bg-white rounded-lg border p-4">{children}</div>;
@@ -44,6 +46,7 @@ type TabKey = (typeof TABS)[number]['key'];
 const MODES = [
   { key: 'sci', label: 'SCI / Holding' },
   { key: 'saisonnier', label: 'Location saisonniere' },
+  { key: 'aide', label: 'Aide' },
 ] as const;
 
 type ModeKey = (typeof MODES)[number]['key'];
@@ -125,7 +128,11 @@ function App() {
         </div>
       </header>
 
-      {mode === 'saisonnier' ? (
+      {mode === 'aide' ? (
+        <main className="mx-auto px-4 py-6 max-w-[1800px]">
+          <AidePage />
+        </main>
+      ) : mode === 'saisonnier' ? (
         <main className="mx-auto px-4 py-6 max-w-[1800px]">
           <SaisonnierPage />
         </main>
