@@ -5,7 +5,7 @@ import type { SimulationResult, YearlyData } from '@shared/schemas.js';
  * around accounting categories: what comes in, what goes out, what is left, and
  * what it leaves on the balance sheet.
  */
-export type Flux = 'ENTREES' | 'SORTIES' | 'SOLDE' | 'BILAN';
+export type Flux = 'ENTREES' | 'SORTIES' | 'FISCAL' | 'SOLDE' | 'BILAN';
 
 export interface RowDetail {
   loyerNu: number;
@@ -33,6 +33,8 @@ export interface Row {
   irAssocies: number;
   psAssocies: number;
   ifi: number;
+  amortissement: number;
+  resultatImposable: number;
   cashFlow: number;
   effortReel: number;
   dividendeNet: number;
@@ -87,6 +89,8 @@ export function toRows(result: SimulationResult): Row[] {
       irAssocies: sumAssocies(y, 'irTax'),
       psAssocies: sumAssocies(y, 'psTax'),
       ifi: parseFloat(y.ifiTax),
+      amortissement: sumEntities(y, 'depreciation'),
+      resultatImposable: sumEntities(y, 'taxableProfit'),
       cashFlow,
       // Capital repayment is forced saving, not a loss: adding it back shows
       // what the year actually costs.
@@ -214,6 +218,28 @@ export const COLUMNS: Column[] = [
     quoi: 'Impot sur la fortune immobiliere : valeur des biens moins la dette bancaire, nul en dessous de 1,3 M EUR net.',
   },
   {
+    key: 'amortissement',
+    label: 'Amortissement',
+    flux: 'FISCAL',
+    cumulable: true,
+    quoi: "Charge purement comptable : elle efface le resultat imposable sans qu'un euro ne sorte. Terrain non amortissable (15 %), bati sur 25 ans, travaux sur 15 ans. A l'IS et en LMP au reel uniquement.",
+  },
+  {
+    key: 'resultatImposable',
+    label: 'Resultat imposable',
+    flux: 'FISCAL',
+    cumulable: true,
+    quoi: "La base sur laquelle l'impot est calcule, pas de l'argent disponible. Negatif = deficit, reporte ou impute selon le regime.",
+    decompose: (r) => [
+      { label: 'Revenus locatifs', montant: r.loyers },
+      { label: 'Charges + TF', montant: -r.chargesBien },
+      { label: 'Frais exploitation', montant: -r.fraisExploitation },
+      { label: 'Couts structure', montant: -r.coutsStructure },
+      { label: 'Interets + assurance', montant: -r.interets },
+      { label: 'Amortissement', montant: -r.amortissement },
+    ].filter((l) => l.montant !== 0),
+  },
+  {
     key: 'cashFlow',
     label: 'Cash-flow net',
     flux: 'SOLDE',
@@ -291,6 +317,12 @@ export const FLUX_META: Record<Flux, { titre: string; sous: string; header: stri
     sous: 'ce qui sort',
     header: 'bg-rose-100 text-rose-900 border-rose-200',
     cell: 'bg-rose-50/30',
+  },
+  FISCAL: {
+    titre: 'Base fiscale',
+    sous: 'ne sort pas de la poche',
+    header: 'bg-amber-100 text-amber-900 border-amber-200',
+    cell: 'bg-amber-50/40',
   },
   SOLDE: {
     titre: 'Solde',
