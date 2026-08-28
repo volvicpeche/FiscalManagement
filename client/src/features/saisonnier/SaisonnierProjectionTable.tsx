@@ -1,78 +1,38 @@
 import type { SimulationResult } from '@shared/schemas.js';
-import { formatEur } from '@/lib/profiles';
+import { FluxTable, type ColumnOverrides } from '@/features/dashboard/FluxTable';
+import { toRows, visibleColumns } from '@/features/dashboard/projectionColumns';
+
+/**
+ * An LMP at BIC reel is taxed on its own terms: the social levy is TNS (SSI)
+ * contributions on a professional result, not the CSG/CRDS/PS that apply to
+ * passive foncier income. Same column, different meaning — so it gets its own
+ * wording here rather than a vague label shared by both.
+ */
+const LMP_OVERRIDES: ColumnOverrides = {
+  psAssocies: {
+    label: 'Cotisations sociales',
+    quoi: "Cotisations TNS (SSI) sur le resultat BIC, et non les prelevements sociaux du foncier. Elles ouvrent des droits (retraite, maladie), contrairement aux PS.",
+  },
+  irAssocies: {
+    label: 'IR',
+    quoi: "Impot du par l'exploitant, calcule en differentiel sur son propre foyer. Un deficit BIC professionnel s'impute en totalite sur le revenu global, sans le plafond de 10 700 EUR du foncier — d'ou des montants negatifs les premieres annees.",
+  },
+  amortissement: {
+    quoi: "Le coeur du LMP au reel : l'amortissement du bien et du mobilier efface le resultat imposable pendant des annees sans qu'un euro ne sorte. Terrain non amortissable (15 %), bati sur 25 ans, travaux sur 15 ans.",
+  },
+};
 
 export function SaisonnierProjectionTable({ result }: { result: SimulationResult }) {
-  const columns = [
-    'Annee',
-    'CA brut',
-    'Charges',
-    'Interets',
-    'Amortissement',
-    'Resultat imposable',
-    'IR',
-    'Cotisations sociales',
-    'Cash flow net',
-    'Dette restante',
-    'Valeur bien',
-  ];
+  const rows = toRows(result);
 
   return (
     <div className="bg-white rounded-lg border overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b bg-gray-50">
-              {columns.map((c) => (
-                <th
-                  key={c}
-                  className="text-right first:text-left font-medium text-gray-500 px-3 py-2 text-xs uppercase tracking-wide whitespace-nowrap"
-                >
-                  {c}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {result.yearlyData.map((y) => {
-              const entity = y.entities['LMP'];
-              const associe = Object.values(y.associes)[0];
-              if (!entity) return null;
-
-              return (
-                <tr key={y.year} className="border-b last:border-0 hover:bg-gray-50/60">
-                  <td className="px-3 py-2 text-gray-700 font-medium">{y.year}</td>
-                  <td className="px-3 py-2 text-right font-mono text-gray-700">{formatEur(entity.grossRevenue)}</td>
-                  <td className="px-3 py-2 text-right font-mono text-gray-600">{formatEur(entity.charges)}</td>
-                  <td className="px-3 py-2 text-right font-mono text-gray-600">{formatEur(entity.loanInterest)}</td>
-                  <td className="px-3 py-2 text-right font-mono text-gray-600">{formatEur(entity.depreciation)}</td>
-                  <td
-                    className={`px-3 py-2 text-right font-mono font-semibold ${
-                      parseFloat(entity.taxableProfit) < 0 ? 'text-red-600' : 'text-gray-900'
-                    }`}
-                  >
-                    {formatEur(entity.taxableProfit)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono text-gray-600">
-                    {associe ? formatEur(associe.irTax) : '—'}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono text-gray-600">
-                    {associe ? formatEur(associe.psTax) : '—'}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono font-semibold text-gray-900">
-                    {formatEur(y.totalNetCashFlow)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono text-gray-500">{formatEur(entity.remainingDebt)}</td>
-                  <td className="px-3 py-2 text-right font-mono text-gray-500">{formatEur(entity.assetMarketValue)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <p className="px-3 py-2 text-xs text-gray-400 bg-gray-50 border-t">
-        « Cotisations sociales » = TNS (SSI) sur le resultat BIC, pas les prelevements sociaux du
-        foncier.
-      </p>
+      <FluxTable
+        rows={rows}
+        columns={visibleColumns(rows)}
+        overrides={LMP_OVERRIDES}
+        footerClass="bg-orange-50 text-orange-900"
+      />
     </div>
   );
 }
