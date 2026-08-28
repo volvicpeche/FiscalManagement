@@ -874,3 +874,79 @@ describe('runSimulation — succession', () => {
     expect(parseFloat(result.succession.total)).toBe(0);
   });
 });
+
+describe('runSimulation — traceable detail', () => {
+  it('should break the rent down to the same total', () => {
+    const result = runSimulation(baseRequest);
+    const e = yearOf(result, 3).entities['SCI Alpha'];
+    expect(parseFloat(e.detail.loyerNu)).toBeCloseTo(parseFloat(e.grossRevenue), 2);
+  });
+
+  it('should split the charges into copro and taxe fonciere', () => {
+    const result = runSimulation(baseRequest);
+    const e = yearOf(result, 1).entities['SCI Alpha'];
+    // Year 1 is unindexed: 2 400 of copro, 1 200 of taxe fonciere.
+    expect(parseFloat(e.detail.chargesCopro)).toBeCloseTo(2400, 2);
+    expect(parseFloat(e.detail.taxeFonciere)).toBeCloseTo(1200, 2);
+    expect(parseFloat(e.detail.chargesCopro) + parseFloat(e.detail.taxeFonciere)).toBeCloseTo(
+      parseFloat(e.charges),
+      2,
+    );
+  });
+
+  it('should split the loan cost into interest and insurance', () => {
+    const result = runSimulation(baseRequest);
+    for (const year of [1, 10, 20]) {
+      const e = yearOf(result, year).entities['SCI Alpha'];
+      expect(parseFloat(e.detail.interets) + parseFloat(e.detail.assurance)).toBeCloseTo(
+        parseFloat(e.loanInterest),
+        2,
+      );
+    }
+  });
+
+  it('should leave every detail line at zero on year 0', () => {
+    const result = runSimulation(baseRequest);
+    const detail = yearOf(result, 0).entities['SCI Alpha'].detail;
+    for (const value of Object.values(detail)) {
+      expect(parseFloat(value)).toBe(0);
+    }
+  });
+
+  it('should reconcile the gross revenue from the seasonal buckets', () => {
+    const saisonnier = {
+      gestion: 'SOI_MEME' as const,
+      hauteSaison: { tauxOccupation: 0.9, caPeriode: '15000.00' },
+      moyenneSaison: { tauxOccupation: 0.6, caPeriode: '8000.00' },
+      basseSaison: { tauxOccupation: 0.2, caPeriode: '2000.00' },
+      commissionPlateforme: 0.15,
+      fraisMenageLingeAnnuel: '1800.00',
+      fraisConciergeriePercent: 0.2,
+    };
+    const result = runSimulation({
+      ...baseRequest,
+      structures: [
+        {
+          ...baseRequest.structures[0],
+          assets: [{ ...baseRequest.structures[0].assets[0], saisonnier }],
+        },
+      ],
+      params: { ...baseRequest.params, horizonYears: 2, rentGrowthRate: 0 },
+    } as typeof baseRequest);
+
+    const e = yearOf(result, 1).entities['SCI Alpha'];
+    const { caHauteSaison, caMoyenneSaison, caBasseSaison } = e.detail;
+
+    expect(parseFloat(caHauteSaison)).toBeCloseTo(15000, 2);
+    expect(parseFloat(caMoyenneSaison)).toBeCloseTo(8000, 2);
+    expect(parseFloat(caBasseSaison)).toBeCloseTo(2000, 2);
+    // The tooltip's whole promise: the parts add up to the headline figure.
+    expect(
+      parseFloat(caHauteSaison) + parseFloat(caMoyenneSaison) + parseFloat(caBasseSaison),
+    ).toBeCloseTo(parseFloat(e.grossRevenue), 2);
+    // 15 % of 25 000 in platform commission, plus the flat cleaning fee.
+    expect(parseFloat(e.detail.commissionPlateforme)).toBeCloseTo(3750, 2);
+    expect(parseFloat(e.detail.fraisMenageLinge)).toBeCloseTo(1800, 2);
+    expect(parseFloat(e.detail.fraisConciergerie)).toBe(0);
+  });
+});

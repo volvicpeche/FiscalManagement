@@ -111,6 +111,13 @@ function zeroEntityYear(overrides: Partial<Record<keyof EntityYear, Decimal>> = 
     netCashFlow: get('netCashFlow'),
     remainingDebt: get('remainingDebt'),
     assetMarketValue: get('assetMarketValue'),
+    // Year 0 is incorporation: nothing has been earned or spent on the asset yet.
+    detail: {
+      loyerNu: '0.00', caHauteSaison: '0.00', caMoyenneSaison: '0.00', caBasseSaison: '0.00',
+      chargesCopro: '0.00', taxeFonciere: '0.00',
+      commissionPlateforme: '0.00', fraisMenageLinge: '0.00', fraisConciergerie: '0.00',
+      interets: '0.00', assurance: '0.00',
+    },
   };
 }
 
@@ -365,6 +372,13 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       let entityPropertyTax = d(0);
       let entityRemainingDebt = d(0);
       let entityMarketValue = d(0);
+      // Kept alongside the totals so the table can show where each one comes from.
+      const detail = {
+        loyerNu: d(0), caHauteSaison: d(0), caMoyenneSaison: d(0), caBasseSaison: d(0),
+        chargesCopro: d(0), taxeFonciere: d(0),
+        commissionPlateforme: d(0), fraisMenageLinge: d(0), fraisConciergerie: d(0),
+        interets: d(0), assurance: d(0),
+      };
 
       for (const asset of state.assets) {
         // 1. Gross revenue with rent growth — seasonal assets go through the
@@ -392,9 +406,17 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
           const revenue = computeSaisonnierRevenue(grown);
           entityGrossRevenue = entityGrossRevenue.plus(revenue.caAnnuelBrut);
           entityCharges = entityCharges.plus(revenue.totalFraisExploitation);
+
+          detail.caHauteSaison = detail.caHauteSaison.plus(revenue.caParSaison.hauteSaison);
+          detail.caMoyenneSaison = detail.caMoyenneSaison.plus(revenue.caParSaison.moyenneSaison);
+          detail.caBasseSaison = detail.caBasseSaison.plus(revenue.caParSaison.basseSaison);
+          detail.commissionPlateforme = detail.commissionPlateforme.plus(revenue.commissionPlateforme);
+          detail.fraisMenageLinge = detail.fraisMenageLinge.plus(revenue.fraisMenageLinge);
+          detail.fraisConciergerie = detail.fraisConciergerie.plus(revenue.fraisConciergerie);
         } else {
           const rent = asset.annualRent.mul(growthMultiplier(rentGrowth));
           entityGrossRevenue = entityGrossRevenue.plus(rent);
+          detail.loyerNu = detail.loyerNu.plus(rent);
         }
 
         // Charges & property tax with growth
@@ -402,6 +424,8 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         const propTax = asset.propertyTax.mul(growthMultiplier(propTaxGrowth));
         entityCharges = entityCharges.plus(charges);
         entityPropertyTax = entityPropertyTax.plus(propTax);
+        detail.chargesCopro = detail.chargesCopro.plus(charges);
+        detail.taxeFonciere = detail.taxeFonciere.plus(propTax);
 
         // 2. Loan payments
         const loanYear = asset.loanYearlySummary.find(l => l.year === year);
@@ -409,6 +433,8 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
           entityLoanPayment = entityLoanPayment.plus(loanYear.totalPayment);
           entityInterest = entityInterest.plus(loanYear.totalInterest);
           entityInsurance = entityInsurance.plus(loanYear.totalInsurance);
+          detail.interets = detail.interets.plus(loanYear.totalInterest);
+          detail.assurance = detail.assurance.plus(loanYear.totalInsurance);
           entityRemainingDebt = entityRemainingDebt.plus(loanYear.remainingPrincipal);
         } else if (asset.loanYearlySummary.length > 0) {
           // Loan finished, no more debt
@@ -588,6 +614,9 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         netCashFlow: entityNetCashFlow.toFixed(2),
         remainingDebt: entityRemainingDebt.toFixed(2),
         assetMarketValue: entityMarketValue.toFixed(2),
+        detail: Object.fromEntries(
+          Object.entries(detail).map(([k, v]) => [k, v.toFixed(2)]),
+        ) as EntityYear['detail'],
       };
 
       yearTotalNetCashFlow = yearTotalNetCashFlow.plus(entityNetCashFlow);
