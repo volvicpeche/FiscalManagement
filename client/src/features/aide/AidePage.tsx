@@ -238,6 +238,14 @@ const SECTIONS: Section[] = [
             dont 6 328 EUR de capital, c’est une operation a l’equilibre, pas un gouffre. C’est
             l’indicateur a regarder pour savoir ce que l’operation vous coute vraiment.
           </Terme>
+          <Terme mot="Situation nette (et pourquoi ce n’est pas de l’argent)">
+            ce que valent les parts : tout ce que la societe possede moins tout ce qu’elle doit.
+            Une situation nette de 60 000 EUR ne veut pas dire que la SCI a 60 000 EUR en caisse —
+            l’essentiel est immobilise dans les murs. Pour en faire quelque chose, il faut vendre le
+            bien ou reemprunter dessus. La <em>tresorerie</em>, elle, est l’argent reellement
+            disponible ; elle peut meme etre negative, ce qui signale que quelqu’un doit remettre au
+            pot.
+          </Terme>
           <Terme mot="Compte courant d’associe">
             de l’argent que vous <em>pretez</em> a la societe, au lieu de le lui donner en capital.
             Difference decisive : le remboursement d’un compte courant n’est pas un revenu, donc

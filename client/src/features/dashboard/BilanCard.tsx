@@ -86,6 +86,16 @@ export function BilanCard({ results }: ResultsProps) {
   const actif = row.valeurBien + row.tresorerie;
   const passif = row.detteRestante + row.ccaSolde;
 
+  // A company cannot really hold negative cash: it means the operation consumes
+  // more than it produces and somebody covers the gap. The model lets the
+  // balance go below zero without recording who paid, so the least it can do is
+  // say how much and when.
+  const anneesADecouvert = rows.filter((r) => r.tresorerie < -0.005);
+  const pire = anneesADecouvert.reduce<Row | null>(
+    (min, r) => (min === null || r.tresorerie < min.tresorerie ? r : min),
+    null,
+  );
+
   // How the year's cash flow was disposed of, from the COMPANY's point of view.
   // `row.cashFlow` is the family's and nets off the associes' personal tax, so
   // using it here would leave the treasury short by that amount.
@@ -185,7 +195,48 @@ export function BilanCard({ results }: ResultsProps) {
         <p className="text-xs text-blue-800 mt-0.5">
           Ce que valent les parts. C’est la base que la succession valorise, avant decote.
         </p>
+
+        {/* The distinction that decides whether anything can be bought with it */}
+        <div className="mt-2 pt-2 border-t border-blue-200 space-y-1">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-xs text-blue-800">dont immobilise dans les murs</span>
+            <span className="text-xs font-mono tabular-nums text-blue-900">
+              {formatEur(row.valeurBien)}
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-xs text-blue-800">dont disponible en caisse</span>
+            <span
+              className={`text-xs font-mono tabular-nums font-semibold ${
+                row.tresorerie < 0 ? 'text-rose-700' : 'text-blue-900'
+              }`}
+            >
+              {formatEur(row.tresorerie)}
+            </span>
+          </div>
+          <p className="text-xs text-blue-700 pt-0.5">
+            La situation nette n’est pas de l’argent disponible : l’essentiel est immobilise dans
+            le bien. Pour acheter autre chose il faut vendre, ou reemprunter.
+          </p>
+        </div>
       </div>
+
+      {pire && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5">
+          <p className="text-sm font-medium text-amber-900">
+            Tresorerie negative sur {anneesADecouvert.length} annee
+            {anneesADecouvert.length > 1 ? 's' : ''}, jusqu’a {formatEur(pire.tresorerie)} en annee{' '}
+            {pire.year}
+          </p>
+          <p className="text-xs text-amber-800 mt-1">
+            Une societe ne peut pas avoir une caisse negative : l’operation consomme plus qu’elle ne
+            genere, et quelqu’un doit combler. La simulation laisse le solde passer sous zero sans
+            enregistrer qui remet au pot — en pratique ce sont les associes, par un apport en compte
+            courant, ou la banque par un decouvert. Reduisez la distribution de dividendes ou le
+            remboursement de compte courant pour rester a flot.
+          </p>
+        </div>
+      )}
 
       {/* Where this year's cash flow went */}
       {row.year > 0 && (

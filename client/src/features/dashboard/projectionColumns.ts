@@ -325,7 +325,7 @@ export const COLUMNS: Column[] = [
     label: 'Tresorerie',
     flux: 'BILAN',
     cumulable: false,
-    quoi: "L'argent qui dort dans la societe. C'est la que va le cash-flow net quand il n'est ni distribue en dividende ni rendu en compte courant : il s'y accumule d'annee en annee.",
+    quoi: "L'argent qui dort dans la societe. C'est la que va le cash-flow net quand il n'est ni distribue en dividende ni rendu en compte courant. NEGATIF signifie que l'operation consomme plus qu'elle ne genere : une societe ne peut pas avoir une caisse negative, quelqu'un doit remettre au pot — la simulation n'enregistre pas qui.",
     decompose: (r) => [
       { label: 'Cash-flow de la societe', montant: r.cashFlowSociete },
       { label: 'CCA rembourse', montant: -r.ccaRembourse },
@@ -359,7 +359,7 @@ export const COLUMNS: Column[] = [
     flux: 'BILAN',
     cumulable: false,
     emphasise: true,
-    quoi: "Ce que valent reellement les parts : tout ce que la societe possede, moins tout ce qu'elle doit. C'est la base sur laquelle la succession valorise les parts, avant decote d'illiquidite.",
+    quoi: "Ce que valent reellement les parts : tout ce que la societe possede, moins tout ce qu'elle doit. Ce n'est PAS de l'argent disponible — l'essentiel est immobilise dans le bien. Pour en faire quelque chose il faut vendre ou reemprunter. C'est la base sur laquelle la succession valorise les parts, avant decote d'illiquidite.",
     decompose: (r) => [
       { label: 'Valeur du bien', montant: r.valeurBien },
       { label: 'Tresorerie', montant: r.tresorerie },
