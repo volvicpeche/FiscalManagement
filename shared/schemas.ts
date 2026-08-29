@@ -58,6 +58,18 @@ export type AssocieRelation = z.infer<typeof AssocieRelation>;
 export const GestionSaisonniere = z.enum(['SOI_MEME', 'CONCIERGERIE']);
 export type GestionSaisonniere = z.infer<typeof GestionSaisonniere>;
 
+/**
+ * What the operation is for, which decides how it ends.
+ *
+ * TRANSMISSION: the shares are kept and passed on, so succession duties apply
+ *   and the exit tax is worth knowing about.
+ * RENDEMENT: a pure yield play — the question is what it earns while it runs,
+ *   not what leaving it costs. Succession and resale are left out entirely
+ *   rather than shown as zero, which would read as "free".
+ */
+export const ObjectifPatrimonial = z.enum(['TRANSMISSION', 'RENDEMENT']);
+export type ObjectifPatrimonial = z.infer<typeof ObjectifPatrimonial>;
+
 // ─── Decimal string (validated as numeric) ───────────────────────────────────
 
 const decimalString = z.string().regex(/^-?\d+(\.\d{1,2})?$/, 'Must be a decimal with up to 2 decimal places');
@@ -222,6 +234,8 @@ export const SimulationParamsSchema = z.object({
   illiquidityDiscount: z.number().min(0).max(0.5).default(0.10),
   /** Transmit nue-propriete only, keeping the usufruit (Art. 669 CGI bareme). */
   demembrement: z.boolean().default(false),
+  /** Drives whether succession and resale are computed at all. */
+  objectif: ObjectifPatrimonial.default('TRANSMISSION'),
 });
 export type SimulationParams = z.infer<typeof SimulationParamsSchema>;
 
@@ -386,6 +400,11 @@ export const SimulationResultSchema = z.object({
     fraisConstitution: z.string(),
     totalOperatingCosts: z.string(),
     successionCost: z.string(),
+    /**
+     * Echoed back so the UI hides the end-of-life figures based on what was
+     * actually computed, not on a form the user may have edited since.
+     */
+    objectif: ObjectifPatrimonial,
     /**
      * Selling at the horizon. Reported rather than folded into the projection:
      * an SCI at IS pays almost nothing for twenty years precisely because

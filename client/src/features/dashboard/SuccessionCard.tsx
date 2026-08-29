@@ -4,6 +4,9 @@ import type { ResultsProps } from './KpiCards';
 export function SuccessionCard({ results }: ResultsProps) {
   const available = PROFILE_ORDER.filter((p) => results[p]);
   if (available.length === 0) return null;
+  // A pure-yield run never modelled a death: showing an empty card would
+  // suggest the transmission is free rather than out of scope.
+  if (available.every((p) => results[p]!.summary.objectif === 'RENDEMENT')) return null;
 
   const anyHeirs = available.some((p) => results[p]!.succession.heritiers.length > 0);
 

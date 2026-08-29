@@ -764,7 +764,21 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
     ? new Date().getFullYear() - new Date(selfAssocie.birthDate).getFullYear() + horizon
     : undefined;
 
-  const succession = computeSuccessionForAssocies({
+  // A pure-yield simulation asks what the operation earns while it runs, not
+  // what leaving it costs — so the end-of-life figures are not computed at all.
+  const objectif = params.objectif ?? 'TRANSMISSION';
+  const transmission = objectif === 'TRANSMISSION';
+
+  const succession = !transmission
+    ? {
+        navTotal: navSocietes,
+        valeurPartsDefunt: d(0),
+        ccaDefunt: d(0),
+        baseTransmise: d(0),
+        heritiers: [],
+        total: d(0),
+      }
+    : computeSuccessionForAssocies({
     nav: navSocietes,
     associes: holder?.associes.map(a => a.input) ?? [],
     ccaBalances,
@@ -830,7 +844,15 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
   const vendeur = holderPrincipal?.associes[0]?.input;
 
   let sortie: ExitResult;
-  if (holderPrincipal?.isBic && vendeur) {
+  if (!transmission) {
+    // Not sold and not transmitted: the operation simply keeps running.
+    sortie = {
+      regime: holderPrincipal?.taxRegime === 'IS' ? 'IS' : 'IR',
+      prixVente: d(0), valeurNetteComptable: d(0), prixAcquisition: d(0),
+      plusValueBrute: d(0), amortissementsRepris: d(0), impot: d(0),
+      detteResiduelle: sortieParams.detteResiduelle, produitNet: d(0),
+    };
+  } else if (holderPrincipal?.isBic && vendeur) {
     sortie = computeExitLMP(sortieParams, vendeur, holderPrincipal.tauxCotisationsSocialesLMP);
   } else if (holderPrincipal?.taxRegime === 'IS') {
     sortie = computeExitIS(sortieParams);
@@ -853,6 +875,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       fraisConstitution: totalFraisConstitution.toFixed(2),
       totalOperatingCosts: totalOperatingCosts.toFixed(2),
       successionCost: succession.total.toFixed(2),
+      objectif,
       sortie: {
         regime: sortie.regime,
         prixVente: sortie.prixVente.toFixed(2),

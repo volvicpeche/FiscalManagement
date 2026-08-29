@@ -64,6 +64,7 @@ const baseRequest: SimulationRequest = {
     ccaRepaymentRate: 0,
     illiquidityDiscount: 0.1,
     demembrement: false,
+    objectif: 'TRANSMISSION',
   },
 };
 
@@ -1178,5 +1179,80 @@ describe('runSimulation — selling at the horizon', () => {
       parseFloat(s.prixVente) - parseFloat(s.impot) - parseFloat(s.detteResiduelle),
       2,
     );
+  });
+});
+
+describe('runSimulation — objectif rendement', () => {
+  const avecAssocies = (objectif: 'TRANSMISSION' | 'RENDEMENT'): SimulationRequest => ({
+    ...baseRequest,
+    structures: [
+      {
+        ...baseRequest.structures[0],
+        costs: NO_COSTS,
+        associes: [
+          associe({ nom: 'Moi', partsPercent: 0.5, relation: 'SELF' }),
+          associe({ nom: 'Enfant', partsPercent: 0.5, relation: 'CHILD' }),
+        ],
+      },
+    ],
+    params: { ...baseRequest.params, objectif },
+  });
+
+  it('should leave out the succession entirely', () => {
+    const r = runSimulation(avecAssocies('RENDEMENT'));
+    expect(r.succession.heritiers).toHaveLength(0);
+    expect(parseFloat(r.summary.successionCost)).toBe(0);
+  });
+
+  it('should leave out the resale entirely', () => {
+    const r = runSimulation(avecAssocies('RENDEMENT'));
+    expect(parseFloat(r.summary.sortie.impot)).toBe(0);
+    expect(parseFloat(r.summary.sortie.plusValueBrute)).toBe(0);
+  });
+
+  it('should still compute both under the transmission objective', () => {
+    const r = runSimulation(avecAssocies('TRANSMISSION'));
+    expect(r.succession.heritiers.length).toBeGreaterThan(0);
+    expect(parseFloat(r.summary.sortie.impot)).toBeGreaterThan(0);
+  });
+
+  it('should echo the objective back so the UI follows what was computed', () => {
+    expect(runSimulation(avecAssocies('RENDEMENT')).summary.objectif).toBe('RENDEMENT');
+    expect(runSimulation(avecAssocies('TRANSMISSION')).summary.objectif).toBe('TRANSMISSION');
+  });
+
+  it('should leave the yearly figures untouched', () => {
+    // The objective decides how the story ends, not how the years run.
+    const rendement = runSimulation(avecAssocies('RENDEMENT'));
+    const transmission = runSimulation(avecAssocies('TRANSMISSION'));
+
+    for (const year of [1, 15, 30]) {
+      expect(yearOf(rendement, year).totalNetCashFlow).toBe(
+        yearOf(transmission, year).totalNetCashFlow,
+      );
+    }
+    expect(rendement.summary.totalNetWealth).toBe(transmission.summary.totalNetWealth);
+    expect(rendement.summary.irr).toBe(transmission.summary.irr);
+  });
+
+  it('should make the after-sale IRR equal the plain one, there being no sale', () => {
+    const r = runSimulation(avecAssocies('RENDEMENT'));
+    expect(r.summary.irrNetDeRevente).toBe(r.summary.irr);
+  });
+
+  it('should keep the running tax bill identical — only the end-of-life differs', () => {
+    const rendement = runSimulation(avecAssocies('RENDEMENT'));
+    const transmission = runSimulation(avecAssocies('TRANSMISSION'));
+    expect(rendement.summary.totalTaxPaid).toBe(transmission.summary.totalTaxPaid);
+  });
+
+  it('should default to transmission when the objective is not given', () => {
+    // Backwards compatible: an older payload keeps the behaviour it had.
+    const { objectif: _o, ...paramsSansObjectif } = baseRequest.params;
+    const r = runSimulation({
+      ...baseRequest,
+      params: paramsSansObjectif as typeof baseRequest.params,
+    });
+    expect(r.summary.objectif).toBe('TRANSMISSION');
   });
 });

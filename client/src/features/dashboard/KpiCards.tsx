@@ -14,6 +14,8 @@ interface Metric {
   /** Percentages rather than euros. */
   format?: 'eur' | 'pct';
   aide?: string;
+  /** Only meaningful when the run actually modelled the end of the operation. */
+  transmissionSeulement?: boolean;
 }
 
 const METRICS: Metric[] = [
@@ -45,6 +47,7 @@ const METRICS: Metric[] = [
   },
   {
     label: 'Impot de sortie (revente)',
+    transmissionSeulement: true,
     value: (r) => parseFloat(r.summary.sortie.impot),
     better: 'lower',
     tone: 'cost',
@@ -52,6 +55,7 @@ const METRICS: Metric[] = [
   },
   {
     label: 'TRI net de revente',
+    transmissionSeulement: true,
     value: (r) => (r.summary.irrNetDeRevente === null ? NaN : parseFloat(r.summary.irrNetDeRevente) * 100),
     better: 'higher',
     format: 'pct',
@@ -59,6 +63,7 @@ const METRICS: Metric[] = [
   },
   {
     label: 'Droits de succession',
+    transmissionSeulement: true,
     value: (r) => parseFloat(r.summary.successionCost),
     better: 'lower',
     tone: 'cost',
@@ -67,6 +72,9 @@ const METRICS: Metric[] = [
 
 export function KpiCards({ results }: ResultsProps) {
   const available = PROFILE_ORDER.filter((p) => results[p]);
+  // Driven by what was computed, not by the form, which may have moved since.
+  const rendementPur = available.every((p) => results[p]!.summary.objectif === 'RENDEMENT');
+  const metrics = METRICS.filter((m) => !(rendementPur && m.transmissionSeulement));
 
   return (
     <div className="bg-white rounded-lg border overflow-hidden">
@@ -88,7 +96,7 @@ export function KpiCards({ results }: ResultsProps) {
             </tr>
           </thead>
           <tbody>
-            {METRICS.map((metric) => {
+            {metrics.map((metric) => {
               const values = available.map((p) => metric.value(results[p]!));
               // A montage with no meaningful rate must not decide the winner.
               const comparables = values.filter((v) => Number.isFinite(v));
@@ -155,6 +163,7 @@ export function KpiCards({ results }: ResultsProps) {
       </div>
       <p className="px-4 py-2 text-xs text-gray-400 bg-gray-50 border-t">
         En vert, le montage le plus favorable pour chaque indicateur.
+        {rendementPur && ' Objectif rendement pur : ni succession, ni revente, ni plus-value.'}
       </p>
     </div>
   );

@@ -7,22 +7,68 @@ export function SuccessionForm() {
   const defunt = associes.find((a) => a.relation === 'SELF');
   const heritiers = associes.filter((a) => a.relation !== 'SELF' && a !== defunt);
 
+  const objectif = params.objectif ?? 'TRANSMISSION';
+  const transmission = objectif === 'TRANSMISSION';
+
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-semibold text-gray-900">Transmission</h3>
+        <h3 className="text-lg font-semibold text-gray-900">Objectif de l’operation</h3>
         <p className="text-xs text-gray-500 mt-0.5">
-          Estimation des droits au terme de l’horizon, au deces de l’associe « Moi-meme ».
+          Ce que vous comptez faire du bien decide de ce qui est calcule au terme.
         </p>
       </div>
 
-      {!defunt && (
+      <div className="space-y-2">
+        {([
+          {
+            valeur: 'TRANSMISSION' as const,
+            titre: 'Transmission',
+            texte: 'Vous gardez les parts et les transmettez. Les droits de succession et le cout de revente sont estimes.',
+          },
+          {
+            valeur: 'RENDEMENT' as const,
+            titre: 'Rendement pur',
+            texte: 'Seul compte ce que l’operation rapporte pendant qu’elle tourne. Ni succession, ni revente, ni plus-value.',
+          },
+        ]).map((o) => (
+          <label
+            key={o.valeur}
+            className={`flex gap-2.5 items-start rounded-md border p-3 cursor-pointer transition-colors ${
+              objectif === o.valeur
+                ? 'bg-blue-50 border-blue-300'
+                : 'bg-white border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            <input
+              type="radio"
+              name="objectif"
+              className="mt-0.5 accent-blue-600"
+              checked={objectif === o.valeur}
+              onChange={() => updateParams({ objectif: o.valeur })}
+            />
+            <span>
+              <span className="block text-sm font-medium text-gray-800">{o.titre}</span>
+              <span className="block text-xs text-gray-500 mt-0.5">{o.texte}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+
+      {!transmission && (
+        <p className="text-xs text-gray-500 border-t pt-3">
+          Les reglages de transmission ci-dessous ne s’appliquent pas a un objectif de rendement
+          pur. Le remboursement du compte courant, lui, reste actif.
+        </p>
+      )}
+
+      {transmission && !defunt && (
         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
           Aucun associe n’a le lien « Moi-meme » : la succession ne peut pas etre estimee.
         </p>
       )}
 
-      {defunt && (
+      {transmission && defunt && (
         <div className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-md px-3 py-2 space-y-1">
           <p>
             <span className="font-medium text-gray-800">{defunt.nom}</span> transmet{' '}
@@ -38,6 +84,7 @@ export function SuccessionForm() {
         </div>
       )}
 
+      {transmission && (
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           Decote d’illiquidite : {Math.round((params.illiquidityDiscount ?? 0) * 100)} %
@@ -55,7 +102,9 @@ export function SuccessionForm() {
           Des parts de SCI ne se vendent pas librement : leur valeur retenue est minoree.
         </p>
       </div>
+      )}
 
+      {transmission && (
       <label className="flex items-start gap-2 cursor-pointer">
         <input
           type="checkbox"
@@ -70,6 +119,7 @@ export function SuccessionForm() {
           </span>
         </span>
       </label>
+      )}
 
       <div className="pt-2 border-t">
         <label className="block text-sm font-medium text-gray-700 mb-2">
