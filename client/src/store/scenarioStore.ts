@@ -52,6 +52,7 @@ const DEFAULT_PARAMS: SimulationParams = {
   ccaRepaymentRate: 0,
   illiquidityDiscount: 0.1,
   demembrement: false,
+  objectif: 'TRANSMISSION',
 };
 
 const DEFAULT_PROFILE: UserProfile = {
