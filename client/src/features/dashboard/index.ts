@@ -7,3 +7,4 @@ export { CostsChart } from './CostsChart';
 export { SuccessionCard } from './SuccessionCard';
 export { ProjectionTable } from './ProjectionTable';
 export { FinancementCard } from './FinancementCard';
+export { BilanCard } from './BilanCard';

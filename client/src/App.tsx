@@ -28,6 +28,7 @@ import {
   SuccessionCard,
   ProjectionTable,
   FinancementCard,
+  BilanCard,
 } from '@/features/dashboard';
 import { SaisonnierPage } from '@/features/saisonnier';
 import { AidePage } from '@/features/aide';

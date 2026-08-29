@@ -118,6 +118,10 @@ function zeroEntityYear(overrides: Partial<Record<keyof EntityYear, Decimal>> = 
     netCashFlow: get('netCashFlow'),
     remainingDebt: get('remainingDebt'),
     assetMarketValue: get('assetMarketValue'),
+    tresorerie: get('tresorerie'),
+    ccaRembourse: get('ccaRembourse'),
+    ccaSolde: get('ccaSolde'),
+    dividendeVerse: get('dividendeVerse'),
     // Year 0 is incorporation: nothing has been earned or spent on the asset yet.
     detail: {
       loyerNu: '0.00', caHauteSaison: '0.00', caMoyenneSaison: '0.00', caBasseSaison: '0.00',
@@ -338,6 +342,8 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
 
       entitiesResult[name] = zeroEntityYear({
         operatingCosts: state.costs.constitution,
+        // The comptes courants are funded at incorporation, before anything runs.
+        ccaSolde: state.associes.reduce((acc, a) => acc.plus(a.ccaBalance), d(0)),
         // What year 0 really costs the family: the whole down payment, of
         // which the incorporation costs are one line.
         netCashFlow: state.financement.apportRequis.neg(),
@@ -376,6 +382,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
     const growthMultiplier = (rate: Decimal) => rate.plus(1).pow(year - 1);
     const entitiesResult: YearlyData['entities'] = {};
     const associesBucket = new Map<string, AssocieYear>();
+    const dividendesVerses = new Map<string, Decimal>();
     let totalRealEstateMarketValue = d(0);
     let totalRemainingDebt = d(0);
     let yearTotalNetCashFlow = d(0);
@@ -637,6 +644,12 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         netCashFlow: entityNetCashFlow.toFixed(2),
         remainingDebt: entityRemainingDebt.toFixed(2),
         assetMarketValue: entityMarketValue.toFixed(2),
+        // Provisional: dividends move cash after this loop, so tresorerie and
+        // dividendeVerse are rewritten once every movement is known.
+        tresorerie: state.accumulatedCash.toFixed(2),
+        ccaRembourse: totalRemboursement.toFixed(2),
+        ccaSolde: state.associes.reduce((acc, a) => acc.plus(a.ccaBalance), d(0)).toFixed(2),
+        dividendeVerse: '0.00',
         detail: Object.fromEntries(
           Object.entries(detail).map(([k, v]) => [k, v.toFixed(2)]),
         ) as EntityYear['detail'],
@@ -654,6 +667,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         if (parentState && parentState.taxRegime === 'IS') {
           const distribue = state.accumulatedCash;
           const dividend = distribue.mul(state.ownershipShare);
+          dividendesVerses.set(name, (dividendesVerses.get(name) ?? d(0)).plus(distribue));
           const quotePart = computeMereFilleQuotePart(dividend);
           // Quote-part taxed at IS in the parent
           const qpTax = computeIS(quotePart);
@@ -694,6 +708,10 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
             );
             const bestTax = Decimal.min(pfuTax, baremeTax);
 
+            dividendesVerses.set(
+              state.name,
+              (dividendesVerses.get(state.name) ?? d(0)).plus(grossDividend),
+            );
             userNetDividend = userNetDividend.plus(grossDividend.minus(bestTax));
             dividendTax = dividendTax.plus(bestTax);
             state.accumulatedCash = state.accumulatedCash.minus(grossDividend);
@@ -708,6 +726,14 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       .minus(ifiTax)
       .minus(yearAssocieTax)
       .plus(userNetDividend);
+
+    // Every movement is now known: write the closing balances.
+    for (const [name, state] of entityStates) {
+      const row = entitiesResult[name];
+      if (!row) continue;
+      row.tresorerie = state.accumulatedCash.toFixed(2);
+      row.dividendeVerse = (dividendesVerses.get(name) ?? d(0)).toFixed(2);
+    }
 
     yearlyData.push({
       year,
