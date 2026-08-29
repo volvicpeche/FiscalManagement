@@ -12,7 +12,6 @@ import { useSimulation } from '@/hooks/useSimulation';
 import { PROFILE_ORDER } from '@/lib/profiles';
 import {
   UserProfileForm,
-  StructureForm,
   AssociesForm,
   AssetForm,
   LoanForm,
@@ -169,7 +168,6 @@ function App() {
                     onLoad={(data) => store.hydrate(data as Partial<SharedInputs>)}
                   />
                 </Panel>
-                <Panel><StructureForm /></Panel>
                 <Panel><AssociesForm /></Panel>
                 <Panel><AssetForm /></Panel>
                 <Panel><LoanForm /></Panel>
