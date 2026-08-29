@@ -4,6 +4,12 @@ import { PROFILE_META, PROFILE_ORDER, formatEur } from '@/lib/profiles';
 import type { ResultsProps } from './KpiCards';
 import { FluxTable, useFluxTooltip } from './FluxTable';
 import { toRows, visibleColumns } from './projectionColumns';
+import { exportSimulationCsv, nomFichier, telechargerCsv } from '@/lib/csv';
+import {
+  useScenarioStore,
+  selectSharedInputs,
+  buildScenario,
+} from '@/store/scenarioStore';
 
 // ─── Associe recap ───────────────────────────────────────────────────────────
 
@@ -60,6 +66,7 @@ export function ProjectionTable({ results }: ResultsProps) {
 
   // Every hook runs before the early return below.
   const tooltip = useFluxTooltip();
+  const store = useScenarioStore();
 
   const result = results[profile] ?? results[available[0]];
   if (!result) return null;
@@ -91,7 +98,7 @@ export function ProjectionTable({ results }: ResultsProps) {
           pour voir d’ou il vient.
         </p>
 
-        <div className="flex gap-1 mt-3">
+        <div className="flex items-center gap-1 mt-3">
           {available.map((p) => (
             <button
               key={p}
@@ -106,6 +113,25 @@ export function ProjectionTable({ results }: ResultsProps) {
               {PROFILE_META[p].label}
             </button>
           ))}
+
+          <button
+            type="button"
+            onClick={() => {
+              const shared = selectSharedInputs(store);
+              telechargerCsv(
+                exportSimulationCsv(
+                  buildScenario(profile, shared),
+                  result,
+                  PROFILE_META[profile].label,
+                ),
+                nomFichier(profile),
+              );
+            }}
+            title="Exporter les hypotheses, la projection et le detail au format CSV"
+            className="ml-auto px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 hover:text-gray-900 transition-colors"
+          >
+            Exporter en CSV
+          </button>
         </div>
       </div>
 
