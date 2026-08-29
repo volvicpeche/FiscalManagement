@@ -339,6 +339,18 @@ export const EntityYearSchema = z.object({
   netCashFlow: z.string(),
   remainingDebt: z.string(),
   assetMarketValue: z.string(),
+
+  // ── Stocks: what the company holds and owes at the end of the year ────────
+  // Flows alone never answered "where did the cash go" — it goes here.
+  /** Cash still sitting in the company after everything has moved. */
+  tresorerie: z.string(),
+  /** Compte courant capital handed back to the associes this year. */
+  ccaRembourse: z.string(),
+  /** Compte courant still owed to the associes. */
+  ccaSolde: z.string(),
+  /** Gross dividend taken out of the company — to a parent, or to the associes. */
+  dividendeVerse: z.string(),
+
   detail: EntityYearDetailSchema,
 });
 export type EntityYear = z.infer<typeof EntityYearSchema>;

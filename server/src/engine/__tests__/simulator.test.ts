@@ -1256,3 +1256,165 @@ describe('runSimulation — objectif rendement', () => {
     expect(r.summary.objectif).toBe('TRANSMISSION');
   });
 });
+
+describe('runSimulation — what is left inside the company', () => {
+  const avecCCA = (repaymentRate = 0, dividendRate = 0): SimulationRequest => ({
+    ...baseRequest,
+    structures: [
+      {
+        ...baseRequest.structures[0],
+        costs: NO_COSTS,
+        associes: [associe({ nom: 'Moi', partsPercent: 1, apportCompteCourant: '40000.00' })],
+        assets: [{ ...baseRequest.structures[0].assets[0], annualRent: '30000.00' }],
+      },
+    ],
+    params: {
+      ...baseRequest.params,
+      horizonYears: 15,
+      ccaRepaymentRate: repaymentRate,
+      dividendDistributionRate: dividendRate,
+    },
+  });
+
+  it('should show the comptes courants funded at year 0', () => {
+    const e = yearOf(runSimulation(avecCCA()), 0).entities['SCI Alpha'];
+    expect(parseFloat(e.ccaSolde)).toBe(40000);
+    expect(parseFloat(e.tresorerie)).toBe(0);
+  });
+
+  it('should accumulate the cash flow into the treasury', () => {
+    // The answer to "where does the net cash flow go": it stays here.
+    //
+    // Asserted year over year rather than cumulatively, and to the nearest few
+    // cents: the treasury is rounded independently each year, so the difference
+    // of two rounded balances cannot match a rounded flow exactly. A cent of
+    // that is arithmetic, not a defect.
+    const r = runSimulation(avecCCA());
+    for (const y of r.yearlyData.filter((y) => y.year > 0)) {
+      const precedent = yearOf(r, y.year - 1).entities['SCI Alpha'];
+      const courant = y.entities['SCI Alpha'];
+      expect(parseFloat(courant.tresorerie) - parseFloat(precedent.tresorerie)).toBeCloseTo(
+        parseFloat(courant.netCashFlow),
+        1,
+      );
+    }
+  });
+
+  it('should draw the compte courant down as it is repaid', () => {
+    const r = runSimulation(avecCCA(0.5));
+    const solde = (year: number) => parseFloat(yearOf(r, year).entities['SCI Alpha'].ccaSolde);
+    expect(solde(0)).toBe(40000);
+    expect(solde(15)).toBeLessThan(solde(1));
+  });
+
+  it('should tie each repayment to the fall in the balance', () => {
+    const r = runSimulation(avecCCA(0.5));
+    for (const year of [1, 5, 10]) {
+      const avant = parseFloat(yearOf(r, year - 1).entities['SCI Alpha'].ccaSolde);
+      const apres = parseFloat(yearOf(r, year).entities['SCI Alpha'].ccaSolde);
+      const rembourse = parseFloat(yearOf(r, year).entities['SCI Alpha'].ccaRembourse);
+      expect(avant - apres).toBeCloseTo(rembourse, 2);
+    }
+  });
+
+  it('should report the dividend that actually left the company', () => {
+    const sans = runSimulation(avecCCA(0, 0));
+    const avec = runSimulation(avecCCA(0, 0.5));
+    const verse = (r: SimulationResult, y: number) =>
+      parseFloat(yearOf(r, y).entities['SCI Alpha'].dividendeVerse);
+
+    expect(verse(sans, 10)).toBe(0);
+    expect(verse(avec, 10)).toBeGreaterThan(0);
+  });
+
+  it('should leave less in the treasury once dividends are paid out', () => {
+    const capitalise = runSimulation(avecCCA(0, 0));
+    const distribue = runSimulation(avecCCA(0, 0.5));
+    const tresorerie = (r: SimulationResult) =>
+      parseFloat(yearOf(r, 15).entities['SCI Alpha'].tresorerie);
+
+    expect(tresorerie(distribue)).toBeLessThan(tresorerie(capitalise));
+  });
+
+  it('should balance: assets minus debts equals what the shares are worth', () => {
+    // The identity the balance-sheet card states, and the same figure the
+    // succession values the parts against.
+    const r = runSimulation(avecCCA(0.3, 0.2));
+    const e = yearOf(r, 15).entities['SCI Alpha'];
+
+    const actif = parseFloat(e.assetMarketValue) + parseFloat(e.tresorerie);
+    const passif = parseFloat(e.remainingDebt) + parseFloat(e.ccaSolde);
+    const situationNette = actif - passif;
+
+    expect(situationNette).toBeCloseTo(parseFloat(r.succession.navTotal), 0);
+  });
+});
+
+describe('runSimulation — the treasury adds up', () => {
+  it('should account for every euro the company generated', () => {
+    // The identity the "where did the cash go" panel draws: what the company
+    // had to dispose of is either handed back, distributed, or still there.
+    const r = runSimulation({
+      ...baseRequest,
+      structures: [
+        {
+          ...baseRequest.structures[0],
+          costs: NO_COSTS,
+          associes: [associe({ nom: 'Moi', partsPercent: 1, apportCompteCourant: '40000.00' })],
+          assets: [{ ...baseRequest.structures[0].assets[0], annualRent: '30000.00' }],
+        },
+      ],
+      params: {
+        ...baseRequest.params,
+        horizonYears: 20,
+        ccaRepaymentRate: 0.3,
+        dividendDistributionRate: 0.2,
+      },
+    });
+
+    for (const y of r.yearlyData.filter((y) => y.year > 0)) {
+      const e = y.entities['SCI Alpha'];
+      const precedent = yearOf(r, y.year - 1).entities['SCI Alpha'];
+
+      // netCashFlow already has the repayment taken out; add it back to get
+      // what the company actually had in hand.
+      const disponible = parseFloat(e.netCashFlow) + parseFloat(e.ccaRembourse);
+      const emplois =
+        parseFloat(e.ccaRembourse) +
+        parseFloat(e.dividendeVerse) +
+        (parseFloat(e.tresorerie) - parseFloat(precedent.tresorerie));
+
+      expect(disponible).toBeCloseTo(emplois, 1);
+    }
+  });
+
+  it('should not confuse the company cash flow with the family one', () => {
+    // They differ by the associes' personal tax and the IFI. Using the family
+    // figure to explain the treasury leaves a hole exactly that size.
+    const r = runSimulation({
+      ...baseRequest,
+      structures: [
+        {
+          ...baseRequest.structures[0],
+          type: 'SCI_IR',
+          taxRegime: 'IR',
+          costs: NO_COSTS,
+          associes: [associe({ nom: 'Moi', partsPercent: 1, autresRevenus: '90000.00' })],
+          assets: [{ ...baseRequest.structures[0].assets[0], annualRent: '30000.00' }],
+        },
+      ],
+      params: { ...baseRequest.params, horizonYears: 5 },
+    });
+
+    const y = yearOf(r, 3);
+    const societe = parseFloat(y.entities['SCI Alpha'].netCashFlow);
+    const famille = parseFloat(y.totalNetCashFlow);
+    const impotAssocies = Object.values(y.associes).reduce(
+      (acc, a) => acc + parseFloat(a.irTax) + parseFloat(a.psTax),
+      0,
+    );
+
+    expect(famille).not.toBeCloseTo(societe, 0);
+    expect(societe - impotAssocies - parseFloat(y.ifiTax)).toBeCloseTo(famille, 1);
+  });
+});

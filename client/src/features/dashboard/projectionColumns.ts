@@ -41,6 +41,17 @@ export interface Row {
   ccaRembourse: number;
   detteRestante: number;
   valeurBien: number;
+  tresorerie: number;
+  ccaSolde: number;
+  situationNette: number;
+  /**
+   * The company's own cash flow, before the comptes courants are repaid —
+   * distinct from `cashFlow`, which is the FAMILY's and nets off the associes'
+   * personal tax. Mixing the two makes the treasury fail to add up.
+   */
+  cashFlowSociete: number;
+  /** Gross dividend that actually left the company, before the associe's tax. */
+  dividendeVerse: number;
   /** Component figures behind the totals, for the per-cell tooltips. */
   detail: RowDetail;
 }
@@ -99,6 +110,19 @@ export function toRows(result: SimulationResult): Row[] {
       ccaRembourse: sumAssocies(y, 'ccaRepayment'),
       detteRestante: sumEntities(y, 'remainingDebt'),
       valeurBien: sumEntities(y, 'assetMarketValue'),
+      tresorerie: sumEntities(y, 'tresorerie'),
+      ccaSolde: sumEntities(y, 'ccaSolde'),
+      // netCashFlow already has the CCA repayment taken out; adding it back
+      // gives what the company had to dispose of.
+      cashFlowSociete: sumEntities(y, 'netCashFlow') + sumEntities(y, 'ccaRembourse'),
+      dividendeVerse: sumEntities(y, 'dividendeVerse'),
+      // What the shares are worth: what is owned, less what is owed — to the
+      // bank and to the associes alike.
+      situationNette:
+        sumEntities(y, 'assetMarketValue') +
+        sumEntities(y, 'tresorerie') -
+        sumEntities(y, 'remainingDebt') -
+        sumEntities(y, 'ccaSolde'),
       detail,
     };
   });
@@ -290,11 +314,30 @@ export const COLUMNS: Column[] = [
     quoi: 'Compte courant rendu aux associes, sans aucune imposition. Transfert egalement : la societe rend une dette.',
   },
   {
+    key: 'tresorerie',
+    label: 'Tresorerie',
+    flux: 'BILAN',
+    cumulable: false,
+    quoi: "L'argent qui dort dans la societe. C'est la que va le cash-flow net quand il n'est ni distribue en dividende ni rendu en compte courant : il s'y accumule d'annee en annee.",
+    decompose: (r) => [
+      { label: 'Cash-flow de la societe', montant: r.cashFlowSociete },
+      { label: 'CCA rembourse', montant: -r.ccaRembourse },
+      { label: 'Dividende verse', montant: -r.dividendeVerse },
+    ].filter((l) => l.montant !== 0),
+  },
+  {
     key: 'detteRestante',
-    label: 'Dette restante',
+    label: 'Dette bancaire',
     flux: 'BILAN',
     cumulable: false,
     quoi: "Capital bancaire restant du a la fin de l'annee. A l'annee 0, le montant emprunte. C'est un solde : le cumuler n'aurait aucun sens.",
+  },
+  {
+    key: 'ccaSolde',
+    label: 'Dette CCA',
+    flux: 'BILAN',
+    cumulable: false,
+    quoi: "Ce que la societe doit encore aux associes au titre de leurs comptes courants. Elle diminue a chaque remboursement. Contrairement a la dette bancaire, celle-ci est due a vous-meme — et elle entre dans votre succession a sa valeur nominale.",
   },
   {
     key: 'valeurBien',
@@ -302,6 +345,20 @@ export const COLUMNS: Column[] = [
     flux: 'BILAN',
     cumulable: false,
     quoi: "Prix d'achat + frais de notaire, revalorises chaque annee. Les travaux ne sont pas ajoutes a la valeur. Solde, non cumulable.",
+  },
+  {
+    key: 'situationNette',
+    label: 'Situation nette',
+    flux: 'BILAN',
+    cumulable: false,
+    emphasise: true,
+    quoi: "Ce que valent reellement les parts : tout ce que la societe possede, moins tout ce qu'elle doit. C'est la base sur laquelle la succession valorise les parts, avant decote d'illiquidite.",
+    decompose: (r) => [
+      { label: 'Valeur du bien', montant: r.valeurBien },
+      { label: 'Tresorerie', montant: r.tresorerie },
+      { label: 'Dette bancaire', montant: -r.detteRestante },
+      { label: 'Dette CCA', montant: -r.ccaSolde },
+    ].filter((l) => l.montant !== 0),
   },
 ];
 
