@@ -69,6 +69,19 @@ export function ProjectionTable({ results }: ResultsProps) {
   const associes = associeTotals(result);
   const meta = PROFILE_META[profile];
 
+  // At IS the company carries the tax, so the associes decaisse nothing
+  // personally and this table is legitimately blank. Saying so beats letting it
+  // look broken — and it points at where the figures do appear.
+  const riensDePersonnel = associes.every(
+    (a) =>
+      Math.abs(a.quotePart) < 0.005 &&
+      Math.abs(a.irTax) < 0.005 &&
+      Math.abs(a.psTax) < 0.005 &&
+      Math.abs(a.ccaInterest) < 0.005 &&
+      Math.abs(a.ccaRepayment) < 0.005,
+  );
+  const aDuCompteCourant = associes.some((a) => Math.abs(a.ccaBalance) > 0.005);
+
   return (
     <div className="bg-white rounded-lg border">
       <div className="p-4 pb-3 border-b">
@@ -105,8 +118,28 @@ export function ProjectionTable({ results }: ResultsProps) {
           <div className="p-4 pb-2">
             <h4 className="text-sm font-semibold text-gray-800">Par associe, sur tout l’horizon</h4>
             <p className="text-xs text-gray-500 mt-0.5">
-              Ce que chacun a personnellement paye et encaisse.
+              Ce que chacun a personnellement paye et encaisse — hors de la societe.
             </p>
+
+            {riensDePersonnel && (
+              <div className="mt-2 rounded-md bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-900">
+                <p className="font-medium">Vide, et c’est normal sur ce montage.</p>
+                <p className="mt-1 text-blue-800">
+                  A l’IS, c’est la societe qui paie l’impot : les associes ne decaissent rien
+                  personnellement. Ces lignes se remplissent sur{' '}
+                  <strong>le montage a l’IR</strong>, ou chacun est impose sur sa quote-part a son
+                  propre bareme
+                  {aDuCompteCourant && (
+                    <>
+                      , et des que vous activez le{' '}
+                      <strong>remboursement de compte courant</strong> dans le bloc Transmission —
+                      le solde ci-dessous sortira alors sans aucune imposition
+                    </>
+                  )}
+                  .
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="overflow-x-auto">

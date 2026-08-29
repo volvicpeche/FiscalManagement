@@ -2,10 +2,13 @@ import { useState, type MouseEvent, type ReactNode } from 'react';
 import { formatEur } from '@/lib/profiles';
 import {
   FLUX_META,
+  collapsedColumn,
+  columnValue,
   explainCell,
   fluxGroups,
   type CellExplanation,
   type Column,
+  type Flux,
   type Row,
 } from './projectionColumns';
 
@@ -121,11 +124,28 @@ export function FluxTable({
   note?: ReactNode;
 }) {
   const tooltip = useFluxTooltip();
-  const cols = applyOverrides(columns, overrides);
+  const [replies, setReplies] = useState<Set<Flux>>(new Set());
+
+  const toggle = (flux: Flux) =>
+    setReplies((prev) => {
+      const next = new Set(prev);
+      if (next.has(flux)) next.delete(flux);
+      else next.add(flux);
+      return next;
+    });
+
+  const toutes = applyOverrides(columns, overrides);
+  // A folded band contributes one synthetic column carrying its members.
+  const cols = fluxGroups(toutes).flatMap((g) => {
+    const membres = toutes.filter((c) => c.flux === g.flux);
+    return replies.has(g.flux) ? [collapsedColumn(g.flux, membres)] : membres;
+  });
   const groups = fluxGroups(cols);
 
   const totals = cols.reduce<Record<string, number>>((acc, col) => {
-    acc[col.key] = col.cumulable ? rows.reduce((s, r) => s + (r[col.key] as number), 0) : NaN;
+    acc[col.key] = col.cumulable
+      ? rows.reduce((s, r) => s + columnValue(col, r), 0)
+      : NaN;
     return acc;
   }, {});
 
@@ -141,16 +161,37 @@ export function FluxTable({
               <th className="sticky left-0 z-20 bg-white px-2 py-2" />
               {groups.map((g, i) => {
                 const fm = FLUX_META[g.flux];
+                const replie = replies.has(g.flux);
+                // A single column has nothing to fold away.
+                const pliable = replie || toutes.filter((c) => c.flux === g.flux).length > 1;
+
                 return (
                   <th
                     key={`${g.flux}-${i}`}
                     colSpan={g.span}
                     className={`px-2 py-2 text-center border-x-2 border-white ${fm.header}`}
                   >
-                    <span className="text-[11px] font-bold uppercase tracking-wider">{fm.titre}</span>
-                    <span className="block text-[10px] font-normal opacity-70 normal-case">
-                      {fm.sous}
-                    </span>
+                    <button
+                      type="button"
+                      disabled={!pliable}
+                      onClick={() => toggle(g.flux)}
+                      title={
+                        pliable
+                          ? replie
+                            ? 'Deplier les colonnes'
+                            : 'Replier en une seule colonne'
+                          : undefined
+                      }
+                      className={`w-full ${pliable ? 'cursor-pointer hover:opacity-70' : 'cursor-default'} transition-opacity`}
+                    >
+                      <span className="text-[11px] font-bold uppercase tracking-wider">
+                        {pliable && <span aria-hidden>{replie ? '▸ ' : '▾ '}</span>}
+                        {fm.titre}
+                      </span>
+                      <span className="block text-[10px] font-normal opacity-70 normal-case">
+                        {replie ? 'replie' : fm.sous}
+                      </span>
+                    </button>
                   </th>
                 );
               })}
@@ -185,7 +226,7 @@ export function FluxTable({
                   {row.year === 0 ? 'Creation' : row.year}
                 </th>
                 {cols.map((col) => {
-                  const value = row[col.key] as number;
+                  const value = columnValue(col, row);
                   return (
                     <td
                       key={col.key}
@@ -220,8 +261,9 @@ export function FluxTable({
       </div>
 
       <p className="px-4 py-2 text-xs text-gray-400 border-t">
-        Les sorties portent leur signe negatif. Les colonnes de bilan sont des soldes de fin
-        d’annee : elles ne se cumulent pas. Survolez un chiffre pour voir d’ou il vient.
+        Cliquez sur un bandeau pour replier ses colonnes ; le detail reste accessible au survol.
+        Les sorties portent leur signe negatif, et les colonnes de bilan sont des soldes de fin
+        d’annee : elles ne se cumulent pas.
         {note ? <> {note}</> : null}
       </p>
     </>

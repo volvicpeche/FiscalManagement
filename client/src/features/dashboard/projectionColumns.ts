@@ -146,6 +146,13 @@ export interface Column {
   quoi: string;
   /** Component lines behind this cell, with their actual figures. */
   decompose?: (r: Row) => DecomposeLine[];
+  /** Overrides `r[key]` — used by the synthetic column of a folded band. */
+  value?: (r: Row) => number;
+}
+
+/** Reads a column's figure, whether it is a plain field or a computed one. */
+export function columnValue(col: Column, row: Row): number {
+  return col.value ? col.value(row) : (row[col.key] as number);
 }
 
 export const COLUMNS: Column[] = [
@@ -395,6 +402,77 @@ export const FLUX_META: Record<Flux, { titre: string; sous: string; header: stri
   },
 };
 
+/**
+ * What a band shows once its columns are folded away.
+ *
+ * Only SORTIES is genuinely additive — every one of its columns is money
+ * leaving. Elsewhere a sum would be nonsense: Amortissement is a component of
+ * Resultat imposable, Effort reel already contains Cash-flow net, and Situation
+ * nette IS the combination of the other Bilan columns. Those bands collapse to
+ * their headline figure instead of to a meaningless total.
+ */
+export const FLUX_AGGREGATE: Record<
+  Flux,
+  { key: keyof Row; label: string; quoi: string; somme: boolean; cumulable: boolean }
+> = {
+  ENTREES: {
+    key: 'loyers',
+    label: 'Total entrees',
+    quoi: "Tout ce que le bien encaisse sur l'annee.",
+    somme: false,
+    cumulable: true,
+  },
+  SORTIES: {
+    key: 'chargesBien',
+    label: 'Total sorties',
+    quoi: "Tout ce qui quitte la tresorerie sur l'annee : charges, structure, credit, impots. La seule bande dont la somme ait un sens — chaque colonne y est de l'argent qui part.",
+    somme: true,
+    cumulable: true,
+  },
+  FISCAL: {
+    key: 'resultatImposable',
+    label: 'Resultat imposable',
+    quoi: "La base d'imposition. L'amortissement n'est pas ajoute : il en est deja deduit, l'additionner le compterait deux fois.",
+    somme: false,
+    cumulable: true,
+  },
+  SOLDE: {
+    key: 'cashFlow',
+    label: 'Cash-flow net',
+    quoi: "Ce qui reste sur l'annee. Les autres colonnes de la bande ne s'y ajoutent pas : l'effort reel en est une relecture, le dividende et le compte courant sont des transferts.",
+    somme: false,
+    cumulable: true,
+  },
+  BILAN: {
+    key: 'situationNette',
+    label: 'Situation nette',
+    quoi: "Ce que valent les parts. C'est deja la combinaison des autres colonnes du bilan : actif moins dettes.",
+    somme: false,
+    cumulable: false,
+  },
+};
+
+/** The single column a folded band shows, keeping its members in the tooltip. */
+export function collapsedColumn(flux: Flux, membres: Column[]): Column {
+  const agg = FLUX_AGGREGATE[flux];
+  return {
+    key: agg.key,
+    label: agg.label,
+    flux,
+    cumulable: agg.cumulable,
+    emphasise: true,
+    quoi: agg.quoi,
+    value: agg.somme
+      ? (r) => membres.reduce((total, c) => total + columnValue(c, r), 0)
+      : undefined,
+    // Folding hides the columns but not the figures: they move into the tooltip.
+    decompose: (r) =>
+      membres
+        .map((c) => ({ label: c.label, montant: columnValue(c, r) }))
+        .filter((l) => l.montant !== 0),
+  };
+}
+
 /** Consecutive runs of columns sharing a flux, for the top header row. */
 export function fluxGroups(columns: Column[]): { flux: Flux; span: number }[] {
   return columns.reduce<{ flux: Flux; span: number }[]>((acc, col) => {
@@ -429,6 +507,7 @@ export function explainCell(col: Column, row: Row): CellExplanation {
     titre: `${col.label} — ${row.year === 0 ? 'creation' : `annee ${row.year}`}`,
     quoi: col.quoi,
     lignes: col.decompose?.(row) ?? [],
-    total: row[col.key] as number,
+    // Not row[col.key]: a folded band's column computes its own figure.
+    total: columnValue(col, row),
   };
 }
