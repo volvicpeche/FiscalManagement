@@ -114,9 +114,19 @@ describe('applyDeficitFoncier', () => {
     expect(r.vintages[0].montant.toNumber()).toBe(1000);
   });
 
-  it('should drop vintages older than 10 years', () => {
-    const r = applyDeficitFoncier(new Decimal('5000'), [{ year: 1, montant: new Decimal('4000') }], 11);
+  it('should drop vintages past the tenth year that follows', () => {
+    // A deficit born in year 1 is chargeable against the foncier income of
+    // years 2 to 11. In year 12 it is gone.
+    const r = applyDeficitFoncier(new Decimal('5000'), [{ year: 1, montant: new Decimal('4000') }], 12);
     expect(r.revenuFoncierNet.toNumber()).toBe(5000);
+    expect(r.vintages).toHaveLength(0);
+  });
+
+  it('should still charge a vintage on its tenth and last year', () => {
+    // Regression: a strict comparison dropped it one year early, costing a
+    // full year of report.
+    const r = applyDeficitFoncier(new Decimal('5000'), [{ year: 1, montant: new Decimal('4000') }], 11);
+    expect(r.revenuFoncierNet.toNumber()).toBe(1000);
     expect(r.vintages).toHaveLength(0);
   });
 
@@ -295,5 +305,58 @@ describe('helpers', () => {
 
   it('should total the comptes courants', () => {
     expect(totalComptesCourants(associes).toNumber()).toBe(40000);
+  });
+});
+
+describe('computeAssocieLMP — cotisations et assiette', () => {
+  it('should tax income on the result net of the contributions', () => {
+    // Regression: IR used to bite on the gross BIC result. TNS charges are a
+    // deductible charge of that result, so income tax sees what is left.
+    const brut = new Decimal('40000');
+    const taux = new Decimal('0.35');
+    const r = computeAssocieLMP(associe({ autresRevenus: '30000.00' }), brut, taux);
+
+    expect(r.cotisationsSociales.toNumber()).toBeCloseTo(14000, 2);
+
+    // The IR charged must match a 26 000 EUR supplement, not a 40 000 one.
+    const net = computeAssocieLMP(associe({ autresRevenus: '30000.00' }), new Decimal('26000'), new Decimal('0'));
+    expect(r.ir.toNumber()).toBeCloseTo(net.ir.toNumber(), 2);
+  });
+
+  it('should floor the contributions even in a loss-making year', () => {
+    const r = computeAssocieLMP(
+      associe({ autresRevenus: '50000.00' }),
+      new Decimal('-10000'),
+      new Decimal('0.35'),
+      new Decimal('1200'),
+    );
+    expect(r.cotisationsSociales.toNumber()).toBe(1200);
+  });
+
+  it('should deepen the deficit by the minimum contributions', () => {
+    // The floor is a real charge: it makes the loss bigger, so it lowers the
+    // income tax on the rest of the household a little further.
+    const avecPlancher = computeAssocieLMP(
+      associe({ autresRevenus: '50000.00' }),
+      new Decimal('-10000'),
+      new Decimal('0.35'),
+      new Decimal('1200'),
+    );
+    const sansPlancher = computeAssocieLMP(
+      associe({ autresRevenus: '50000.00' }),
+      new Decimal('-10000'),
+      new Decimal('0.35'),
+    );
+    expect(avecPlancher.ir.lt(sansPlancher.ir)).toBe(true);
+  });
+
+  it('should still charge the proportional rate when it exceeds the floor', () => {
+    const r = computeAssocieLMP(
+      associe(),
+      new Decimal('40000'),
+      new Decimal('0.35'),
+      new Decimal('1200'),
+    );
+    expect(r.cotisationsSociales.toNumber()).toBeCloseTo(14000, 2);
   });
 });

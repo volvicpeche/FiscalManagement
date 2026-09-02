@@ -294,6 +294,52 @@ export function computeCapitalGainIS(
   return { taxableGain: gain, tax: computeIS(gain) };
 }
 
+// ─── Surtaxe sur les plus-values immobilieres elevees (art. 1609 nonies G) ───
+
+/**
+ * Bands of the surtaxe, with the smoothing term the law applies at the foot
+ * of each rate step. The coefficients are what make the schedule continuous
+ * from 100 000 EUR upwards: at 100 000 the 2 % band gives 2 000, and the 3 %
+ * band with its correction gives the same figure a euro later.
+ */
+const SURTAXE_PALIERS: { plafond: Decimal; taux: Decimal; lissage: Decimal | null }[] = [
+  { plafond: new Decimal('60000'), taux: new Decimal('0.02'), lissage: new Decimal('0.05') },
+  { plafond: new Decimal('100000'), taux: new Decimal('0.02'), lissage: null },
+  { plafond: new Decimal('110000'), taux: new Decimal('0.03'), lissage: new Decimal('0.10') },
+  { plafond: new Decimal('150000'), taux: new Decimal('0.03'), lissage: null },
+  { plafond: new Decimal('160000'), taux: new Decimal('0.04'), lissage: new Decimal('0.15') },
+  { plafond: new Decimal('200000'), taux: new Decimal('0.04'), lissage: null },
+  { plafond: new Decimal('210000'), taux: new Decimal('0.05'), lissage: new Decimal('0.20') },
+  { plafond: new Decimal('250000'), taux: new Decimal('0.05'), lissage: null },
+  { plafond: new Decimal('260000'), taux: new Decimal('0.06'), lissage: new Decimal('0.25') },
+  { plafond: new Decimal('Infinity'), taux: new Decimal('0.06'), lissage: null },
+];
+
+/**
+ * Surtaxe due on a real-estate gain above 50 000 EUR, on top of the 19 % and
+ * the social charges. It applies to individuals and to an SCI at IR, never to
+ * a company taxed at IS.
+ *
+ * Simplification: the 50 000 EUR threshold is legally assessed on each
+ * associe's own share of the gain. Applying it to the whole gain over-states
+ * the surtaxe when several associes split a mid-sized operation.
+ */
+export function computeSurtaxePlusValue(pvImposable: Decimal): Decimal {
+  if (pvImposable.lte(50000)) return new Decimal(0);
+
+  for (const palier of SURTAXE_PALIERS) {
+    if (pvImposable.lte(palier.plafond)) {
+      const brut = pvImposable.mul(palier.taux);
+      const correction = palier.lissage
+        ? palier.plafond.minus(pvImposable).mul(palier.lissage)
+        : new Decimal(0);
+      return Decimal.max(new Decimal(0), brut.minus(correction));
+    }
+  }
+
+  return pvImposable.mul('0.06');
+}
+
 /**
  * SCI IR: Taxable gain = Sale Price - Purchase Price, with duration abatements.
  * IR abatement: full exemption after 22 years.
@@ -304,13 +350,14 @@ export function computeCapitalGainIR(
   purchasePrice: Decimal,
   holdingYears: number,
   regime: SocialChargeRegime,
-): { taxableGain: Decimal; irTax: Decimal; psTax: Decimal; total: Decimal } {
+): { taxableGain: Decimal; irTax: Decimal; psTax: Decimal; surtaxe: Decimal; total: Decimal } {
   const rawGain = salePrice.minus(purchasePrice);
   if (rawGain.lte(0)) {
     return {
       taxableGain: new Decimal(0),
       irTax: new Decimal(0),
       psTax: new Decimal(0),
+      surtaxe: new Decimal(0),
       total: new Decimal(0),
     };
   }
@@ -356,11 +403,14 @@ export function computeCapitalGainIR(
   const irTax = taxableForIR.mul('0.19'); // flat 19% for real estate capital gains
   const psRate = getSocialChargeRate(regime);
   const psTax = taxableForPS.mul(psRate);
+  // The surtaxe bites on the gain left after the duration abatements.
+  const surtaxe = computeSurtaxePlusValue(taxableForIR);
 
   return {
     taxableGain: rawGain,
     irTax,
     psTax,
-    total: irTax.plus(psTax),
+    surtaxe,
+    total: irTax.plus(psTax).plus(surtaxe),
   };
 }

@@ -61,8 +61,10 @@ export function applyDeficitFoncier(
   carried: DeficitVintage[],
   year: number,
 ): DeficitResult {
-  // Drop vintages past their 10-year life.
-  let vintages = carried.filter((v) => year - v.year < DUREE_REPORT_ANNEES);
+  // Drop vintages past their 10-year life. A deficit born in year N is
+  // chargeable against the foncier income of years N+1 to N+10 inclusive, so
+  // the comparison is inclusive too — a strict `<` cost a full year of report.
+  let vintages = carried.filter((v) => year - v.year <= DUREE_REPORT_ANNEES);
 
   if (quotePart.lt(0)) {
     const deficit = quotePart.abs();
@@ -155,26 +157,42 @@ export interface AssocieLMPResult {
 /**
  * Per-associe taxation of an LMP (Loueur Meuble Professionnel) BIC result.
  *
- * Two things set this apart from `computeAssocieIR`:
+ * Three things set this apart from `computeAssocieIR`:
  *  - A BIC pro deficit imputes in full against the associe's global income —
  *    unlike a foncier deficit there is no 10 700 EUR/year cap.
  *  - The social levy is TNS (SSI) contributions on the professional result,
  *    not CSG/CRDS/PS on passive income, so it uses its own rate rather than
  *    `getSocialChargeRate`.
+ *  - Those contributions are themselves a deductible charge of the BIC
+ *    result, so income tax bites on what is left after them. Taxing the gross
+ *    result over-stated the IR by roughly a third of the contributions.
+ *
+ * @param cotisationsMinimales - Floor the SSI charges whatever the result,
+ *   including in deficit. An indicative yearly amount, overridable like every
+ *   other cost in the model.
  */
 export function computeAssocieLMP(
   associe: AssocieInput,
   quotePart: Decimal,
   tauxCotisationsSocialesTNS: Decimal,
+  cotisationsMinimales: Decimal = new Decimal(0),
 ): AssocieLMPResult {
   const autresRevenus = new Decimal(associe.autresRevenus);
-  const revenuAvecLMP = Decimal.max(new Decimal(0), autresRevenus.plus(quotePart));
+
+  // Contributions are due on a positive result, and never fall below the
+  // SSI floor — a loss-making year still costs the operator their minimum.
+  const proportionnelles = quotePart.gt(0)
+    ? quotePart.mul(tauxCotisationsSocialesTNS)
+    : new Decimal(0);
+  const cotisationsSociales = Decimal.max(proportionnelles, cotisationsMinimales);
+
+  // What income tax actually sees, once the contributions are deducted.
+  const resultatImposable = quotePart.minus(cotisationsSociales);
+  const revenuAvecLMP = Decimal.max(new Decimal(0), autresRevenus.plus(resultatImposable));
 
   const irAvec = computeIR(revenuAvecLMP, associe.maritalStatus, associe.childrenCount);
   const irSans = computeIR(autresRevenus, associe.maritalStatus, associe.childrenCount);
   const ir = irAvec.minus(irSans);
-
-  const cotisationsSociales = quotePart.gt(0) ? quotePart.mul(tauxCotisationsSocialesTNS) : new Decimal(0);
 
   return { ir, cotisationsSociales, total: ir.plus(cotisationsSociales) };
 }

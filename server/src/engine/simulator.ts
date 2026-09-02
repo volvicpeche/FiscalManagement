@@ -86,6 +86,8 @@ interface EntityState {
   associes: AssocieState[];
   costs: ResolvedCosts;
   carriedDeficit: Decimal;
+  /** Taxable result of the current year, after the deficit offset. */
+  lastTaxableAfterOffset: Decimal;
   accumulatedCash: Decimal;
   /** Bank debt outstanding at the end of the last simulated year. */
   lastRemainingDebt: Decimal;
@@ -94,6 +96,7 @@ interface EntityState {
   /** LMP: BIC reel — depreciation applies and the per-associe tax uses TNS charges, not foncier PS. */
   isBic: boolean;
   tauxCotisationsSocialesLMP: Decimal;
+  cotisationsMinimalesLMP: Decimal;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -295,6 +298,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       associes: buildAssocieStates(entity, taxRegime, userProfile),
       costs,
       carriedDeficit: d(0),
+      lastTaxableAfterOffset: d(0),
       // The apport covers the acquisition AND the setup costs exactly, so the
       // company opens at zero. Starting at -constitution would charge those
       // costs twice: once here and once inside apportRequis.
@@ -303,6 +307,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       financement: computeFinancement(entity.assets, entity.associes ?? [], costs.constitution),
       isBic: entity.type === 'LMP',
       tauxCotisationsSocialesLMP: d(entity.tauxCotisationsSocialesLMP ?? 0.35),
+      cotisationsMinimalesLMP: d(entity.cotisationsMinimalesLMP ?? '1200.00'),
     });
   }
 
@@ -311,6 +316,26 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
   for (const { entity, parent } of flatEntities) {
     if (parent) parentMap.set(entity.name, parent);
   }
+
+  /**
+   * Share of the group held by the declarant's own foyer fiscal.
+   *
+   * The IFI is a personal tax on the taxpayer's share of the real estate, not
+   * on the whole building. Charging the full value over-stated it as soon as
+   * parts had been given away — which is the entire point of the transmission
+   * scenario. The spouse sits in the same foyer, any other associe does not.
+   */
+  const foyerShare = (() => {
+    const porteur =
+      flatEntities.find((f) => !f.parent && (f.entity.associes?.length ?? 0) > 0) ??
+      flatEntities.find((f) => (f.entity.associes?.length ?? 0) > 0);
+    const associes = porteur?.entity.associes ?? [];
+    if (associes.length === 0) return d(1);
+
+    const foyer = associes.filter((a) => a.relation === 'SELF' || a.relation === 'SPOUSE');
+    if (foyer.length === 0) return d(1);
+    return foyer.reduce((acc, a) => acc.plus(a.partsPercent), d(0));
+  })();
 
   const yearlyData: YearlyData[] = [];
   let totalTaxPaid = d(0);
@@ -537,6 +562,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         const deficitResult = applyISDeficit(taxableProfit, state.carriedDeficit);
         state.carriedDeficit = deficitResult.remainingDeficit;
         const adjustedProfit = deficitResult.taxableAfterOffset;
+        state.lastTaxableAfterOffset = adjustedProfit;
 
         entityTax = computeIS(adjustedProfit);
       } else if (state.isBic) {
@@ -550,6 +576,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
             a.input,
             quotePart,
             state.tauxCotisationsSocialesLMP,
+            state.cotisationsMinimalesLMP.mul(a.input.partsPercent),
           );
           yearAssocieTax = yearAssocieTax.plus(total);
           totalTaxPaid = totalTaxPaid.plus(total);
@@ -678,11 +705,33 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
           const distribue = state.accumulatedCash;
           const dividend = distribue.mul(state.ownershipShare);
           dividendesVerses.set(name, (dividendesVerses.get(name) ?? d(0)).plus(distribue));
+          // The 5 % quote-part de frais et charges is an ordinary piece of the
+          // parent's own result: it absorbs the parent's carried deficit, and
+          // it must not get a second run at the 15 % band the parent has
+          // already used on its own profit. Hence a differential, computed on
+          // top of the result taxed a moment ago rather than in isolation.
           const quotePart = computeMereFilleQuotePart(dividend);
-          // Quote-part taxed at IS in the parent
-          const qpTax = computeIS(quotePart);
+          const qpDeficit = applyISDeficit(quotePart, parentState.carriedDeficit);
+          parentState.carriedDeficit = qpDeficit.remainingDeficit;
+
+          const socleTaxable = parentState.lastTaxableAfterOffset;
+          const qpTax = computeIS(socleTaxable.plus(qpDeficit.taxableAfterOffset)).minus(
+            computeIS(socleTaxable),
+          );
+          parentState.lastTaxableAfterOffset = socleTaxable.plus(qpDeficit.taxableAfterOffset);
+
           parentState.accumulatedCash = parentState.accumulatedCash.plus(dividend).minus(qpTax);
           totalTaxPaid = totalTaxPaid.plus(qpTax);
+
+          // Report it on the parent's own tax line, otherwise totalTaxPaid no
+          // longer reconciles with the yearly rows.
+          const parentRow = entitiesResult[parentName];
+          if (parentRow) {
+            parentRow.tax = d(parentRow.tax).plus(qpTax).toFixed(2);
+            parentRow.taxableProfit = d(parentRow.taxableProfit)
+              .plus(qpDeficit.taxableAfterOffset)
+              .toFixed(2);
+          }
           // The minority share leaves the group with the other shareholders.
           state.accumulatedCash = d(0);
         }
@@ -690,7 +739,8 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
     }
 
     // ── IFI (user level) ─────────────────────────────────────────────────────
-    const netRealEstate = totalRealEstateMarketValue.minus(totalRemainingDebt);
+    // Only the foyer's own share of the net real estate enters their base.
+    const netRealEstate = totalRealEstateMarketValue.minus(totalRemainingDebt).mul(foyerShare);
     const ifiTax = computeIFI(netRealEstate);
     totalTaxPaid = totalTaxPaid.plus(ifiTax);
     personalWealth = personalWealth.minus(ifiTax);
@@ -894,6 +944,8 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
     (acc, s) => {
       for (const a of s.assets) {
         acc.prixVente = acc.prixVente.plus(a.marketValue);
+        acc.prixAchat = acc.prixAchat.plus(a.purchasePrice);
+        acc.travauxReels = acc.travauxReels.plus(a.renovationCosts);
         // Works count towards the acquisition price at IR: leaving them out
         // inflated the taxable gain by their whole amount.
         acc.prixAcquisition = acc.prixAcquisition
@@ -911,6 +963,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
     },
     {
       prixVente: d(0), prixAcquisition: d(0), baseAmortissable: d(0),
+      prixAchat: d(0), travauxReels: d(0),
       cumulAmortissements: d(0), detteResiduelle: d(0),
       dureeDetention: horizon,
       regimeSocial: userProfile.socialChargeRegime ?? ('STANDARD' as const),

@@ -28,6 +28,7 @@ const baseRequest: SimulationRequest = {
       taxRegime: 'IS',
       ownershipShare: 1.0,
       tauxCotisationsSocialesLMP: 0.35,
+    cotisationsMinimalesLMP: '1200.00',
       associes: [],
       costs: NO_COSTS,
       assets: [
@@ -240,6 +241,7 @@ function holdingRequest(ownershipShare: number): SimulationRequest {
         taxRegime: 'IS',
         ownershipShare: 1.0,
         tauxCotisationsSocialesLMP: 0.35,
+    cotisationsMinimalesLMP: '1200.00',
         associes: [],
         costs: NO_COSTS,
         assets: [],
@@ -1640,5 +1642,124 @@ describe('runSimulation — flux famille', () => {
       parseFloat(garde.summary.totalNetWealth),
       0,
     );
+  });
+});
+
+describe('runSimulation — IFI sur la part du foyer', () => {
+  const grosPatrimoine = {
+    ...baseRequest.structures[0].assets[0],
+    purchasePrice: '2000000.00',
+    notaryFees: '160000.00',
+    annualRent: '80000.00',
+    loan: {
+      ...baseRequest.structures[0].assets[0].loan!,
+      principal: '500000.00',
+    },
+  };
+
+  const avec = (associes: AssocieInput[]) =>
+    runSimulation({
+      ...baseRequest,
+      structures: [
+        { ...baseRequest.structures[0], costs: NO_COSTS, associes, assets: [grosPatrimoine] },
+      ],
+      params: { ...baseRequest.params, horizonYears: 3 },
+    });
+
+  it('should reach the whole value when the foyer owns everything', () => {
+    const r = avec([associe({ nom: 'Moi', partsPercent: 1, relation: 'SELF' })]);
+    expect(parseFloat(yearOf(r, 1).ifiTax)).toBeGreaterThan(0);
+  });
+
+  it('should count the spouse inside the same foyer', () => {
+    const seul = avec([associe({ nom: 'Moi', partsPercent: 1, relation: 'SELF' })]);
+    const couple = avec([
+      associe({ nom: 'Moi', partsPercent: 0.5, relation: 'SELF' }),
+      associe({ nom: 'Conjoint', partsPercent: 0.5, relation: 'SPOUSE' }),
+    ]);
+    // Spouses are taxed together, so splitting the parts between them changes
+    // nothing at all.
+    expect(parseFloat(yearOf(couple, 1).ifiTax)).toBeCloseTo(
+      parseFloat(yearOf(seul, 1).ifiTax),
+      2,
+    );
+  });
+
+  it('should drop the base when parts have been given to a child', () => {
+    // Regression: the IFI used to be assessed on the whole building whoever
+    // owned it, which over-stated it exactly when the transmission scenario
+    // starts to pay off. Half of this patrimony sits below the threshold.
+    const donne = avec([
+      associe({ nom: 'Moi', partsPercent: 0.5, relation: 'SELF' }),
+      associe({ nom: 'Enfant', partsPercent: 0.5, relation: 'CHILD' }),
+    ]);
+    expect(parseFloat(yearOf(donne, 1).ifiTax)).toBe(0);
+  });
+});
+
+describe('runSimulation — quote-part mere-fille', () => {
+  const holdingAvecCouts = (montantAnnuel: string): SimulationRequest => ({
+    userProfile: baseRequest.userProfile,
+    structures: [
+      {
+        name: 'Holding',
+        type: 'HOLDING',
+        taxRegime: 'IS',
+        ownershipShare: 1.0,
+        tauxCotisationsSocialesLMP: 0.35,
+        cotisationsMinimalesLMP: '1200.00',
+        associes: [],
+        costs: {
+          mode: 'SOI_MEME',
+          constitution: [{ label: 'Aucun', montant: '0.00' }],
+          annuel: [{ label: 'Frais', montant: montantAnnuel }],
+        },
+        assets: [],
+        subsidiaries: [
+          {
+            ...baseRequest.structures[0],
+            name: 'SCI Fille',
+            assets: [{ ...baseRequest.structures[0].assets[0], annualRent: '30000.00' }],
+          },
+        ],
+      },
+    ],
+    params: { ...baseRequest.params, horizonYears: 10 },
+  });
+
+  it('should shelter the quote-part with the holding own deficit', () => {
+    // Regression: the 5 % quote-part used to be taxed on its own, beside the
+    // parent's result. It could not be absorbed by the holding's deficit, and
+    // it got a second run at the 15 % band the parent had already used.
+    const chere = runSimulation(holdingAvecCouts('8000.00'));
+    for (const y of chere.yearlyData) {
+      const holding = y.entities['Holding'];
+      if (holding) expect(parseFloat(holding.tax)).toBe(0);
+    }
+  });
+
+  it('should tax the quote-part once the holding is in profit', () => {
+    const gratuite = runSimulation(holdingAvecCouts('0.00'));
+    const taxee = gratuite.yearlyData.some((y) => parseFloat(y.entities['Holding'].tax) > 0);
+    expect(taxee).toBe(true);
+  });
+
+  it('should reconcile the total tax with the yearly lines', () => {
+    // Every euro of totalTaxPaid must show up in a row somewhere, the
+    // quote-part included.
+    const r = runSimulation(holdingAvecCouts('0.00'));
+    const cumul = r.yearlyData.reduce(
+      (acc, y) =>
+        acc +
+        Object.values(y.entities).reduce((a, e) => a + parseFloat(e.tax), 0) +
+        Object.values(y.associes).reduce(
+          (a, x) => a + parseFloat(x.irTax) + parseFloat(x.psTax) + parseFloat(x.ccaInterestTax),
+          0,
+        ) +
+        parseFloat(y.ifiTax) +
+        parseFloat(y.dividendTax),
+      0,
+    );
+    expect(parseFloat(r.summary.totalTaxPaid)).toBeCloseTo(cumul, 0);
   });
 });
