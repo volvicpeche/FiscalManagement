@@ -25,6 +25,40 @@ describe('computeSuccessionTax', () => {
     expect(result.tax.toNumber()).toBeGreaterThan(38000);
     expect(result.tax.toNumber()).toBeLessThan(40000);
   });
+
+  // Regression: the ligne directe table used to be applied to every heir, so a
+  // brother was taxed as if he were a child. Only the abatements differed,
+  // which made the estate look far cheaper to pass on to anyone but a child.
+  it('should tax a grandchild on the ligne directe table', () => {
+    const result = computeSuccessionTax(new Decimal('300000'), 'GRANDCHILD');
+    expect(result.taxableBase.toNumber()).toBe(268135);
+    expect(result.tax.toNumber()).toBeCloseTo(51821.35, 2);
+  });
+
+  it('should tax a sibling at 35% then 45%', () => {
+    const result = computeSuccessionTax(new Decimal('300000'), 'SIBLING');
+    expect(result.taxableBase.toNumber()).toBe(284068);
+    // 24 430 a 35 %, puis le solde a 45 %.
+    expect(result.tax.toNumber()).toBeCloseTo(125387.6, 2);
+  });
+
+  it('should tax a nephew at a flat 55%', () => {
+    const result = computeSuccessionTax(new Decimal('300000'), 'NEPHEW_NIECE');
+    expect(result.taxableBase.toNumber()).toBe(292033);
+    expect(result.tax.toNumber()).toBeCloseTo(160618.15, 2);
+  });
+
+  it('should tax an unrelated heir at a flat 60%', () => {
+    const result = computeSuccessionTax(new Decimal('300000'), 'OTHER');
+    expect(result.taxableBase.toNumber()).toBe(298406);
+    expect(result.tax.toNumber()).toBeCloseTo(179043.6, 2);
+  });
+
+  it('should cost a child far less than a sibling on the same estate', () => {
+    const enfant = computeSuccessionTax(new Decimal('300000'), 'CHILD').tax;
+    const frere = computeSuccessionTax(new Decimal('300000'), 'SIBLING').tax;
+    expect(frere.toNumber()).toBeGreaterThan(enfant.mul(3).toNumber());
+  });
 });
 
 describe('computeSCIShareValue', () => {

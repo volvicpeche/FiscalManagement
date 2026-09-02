@@ -59,6 +59,9 @@ const DEFAULT_PROFILE: UserProfile = {
   maritalStatus: 'MARRIED',
   childrenCount: 2,
   socialChargeRegime: 'SWISS_EXEMPT',
+  // Fallback only: when associes are declared, each one carries their own
+  // other income and this is never read.
+  autresRevenus: '0.00',
 };
 
 export function makeAssocie(over: Partial<AssocieInput> = {}): AssocieInput {
