@@ -13,6 +13,7 @@ const asset = (over: Partial<AssetInput> = {}): AssetInput => ({
   annualRent: '12000.00',
   chargesYearly: '2400.00',
   propertyTax: '1200.00',
+  landRatio: 0.15,
   loan: {
     principal: '180000.00',
     interestRate: 0.035,

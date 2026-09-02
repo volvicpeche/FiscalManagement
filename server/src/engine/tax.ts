@@ -1,36 +1,61 @@
 import Decimal from 'decimal.js';
 import type { MaritalStatus, SocialChargeRegime } from '@shared/schemas.js';
+import {
+  IR_BRACKETS,
+  PLAFOND_DEMI_PART,
+  PLAFOND_PARENT_ISOLE,
+  DECOTE_SEUIL_CELIBATAIRE,
+  DECOTE_SEUIL_COUPLE,
+  DECOTE_TAUX,
+  IS_SEUIL_TAUX_REDUIT,
+  IS_TAUX_REDUIT,
+  IS_TAUX_NORMAL,
+  IS_DEFICIT_PLAFOND_FIXE,
+  IS_DEFICIT_PART_VARIABLE,
+  PS_PATRIMOINE,
+  PS_SOLIDARITE_SEULE,
+  PS_PFU,
+  PFU_TAUX_IR,
+  PV_TAUX_IR,
+  IFI_SEUIL_ENTREE,
+  IFI_BRACKETS,
+  DUREE_AMORTISSEMENT_IMMEUBLE,
+  DUREE_AMORTISSEMENT_TRAVAUX,
+} from './baremes.js';
 
 // ─── Social Charges ──────────────────────────────────────────────────────────
 
-/** Returns the applicable PS rate based on the user's social charge regime. */
+/**
+ * PS rate on revenus du patrimoine — foncier income and real-estate gains.
+ *
+ * SWISS_EXEMPT: affiliated to a foreign social security scheme, so exempt from
+ * CSG and CRDS; only the prelevement de solidarite remains.
+ */
 export function getSocialChargeRate(regime: SocialChargeRegime): Decimal {
-  // SWISS_EXEMPT: only prelevement de solidarite (7.5%)
-  // STANDARD: CSG 10.2% + CRDS 0.5% + solidarity 7.5% = 18.2% (standalone)
-  return regime === 'SWISS_EXEMPT' ? new Decimal('0.075') : new Decimal('0.172');
+  return regime === 'SWISS_EXEMPT' ? PS_SOLIDARITE_SEULE : PS_PATRIMOINE;
 }
 
-/** PS rate used within PFU context (slightly different from standalone). */
+/**
+ * PS rate applied inside the PFU. Deliberately higher than the rate above:
+ * see the note on PS_PFU in baremes.ts — it is a forward assumption of the
+ * project, not the rate in force.
+ */
 export function getPfuSocialChargeRate(regime: SocialChargeRegime): Decimal {
-  return regime === 'SWISS_EXEMPT' ? new Decimal('0.075') : new Decimal('0.186');
+  return regime === 'SWISS_EXEMPT' ? PS_SOLIDARITE_SEULE : PS_PFU;
 }
 
 // ─── IS (Corporate Tax) ─────────────────────────────────────────────────────
-
-const IS_REDUCED_THRESHOLD = new Decimal('42500');
-const IS_REDUCED_RATE = new Decimal('0.15');
-const IS_NORMAL_RATE = new Decimal('0.25');
 
 /** Computes IS (Impot sur les Societes) for a given taxable profit. */
 export function computeIS(taxableProfit: Decimal): Decimal {
   if (taxableProfit.lte(0)) return new Decimal(0);
 
-  if (taxableProfit.lte(IS_REDUCED_THRESHOLD)) {
-    return taxableProfit.mul(IS_REDUCED_RATE);
+  if (taxableProfit.lte(IS_SEUIL_TAUX_REDUIT)) {
+    return taxableProfit.mul(IS_TAUX_REDUIT);
   }
 
-  return IS_REDUCED_THRESHOLD.mul(IS_REDUCED_RATE).plus(
-    taxableProfit.minus(IS_REDUCED_THRESHOLD).mul(IS_NORMAL_RATE),
+  return IS_SEUIL_TAUX_REDUIT.mul(IS_TAUX_REDUIT).plus(
+    taxableProfit.minus(IS_SEUIL_TAUX_REDUIT).mul(IS_TAUX_NORMAL),
   );
 }
 
@@ -56,10 +81,10 @@ export function applyISDeficit(
   }
 
   // Legal cap: 1,000,000 + 50% of the profit beyond 1,000,000.
-  const plafondLegal = Decimal.max(new Decimal('1000000'), profit)
-    .minus(new Decimal('1000000'))
-    .mul('0.5')
-    .plus('1000000');
+  const plafondLegal = Decimal.max(IS_DEFICIT_PLAFOND_FIXE, profit)
+    .minus(IS_DEFICIT_PLAFOND_FIXE)
+    .mul(IS_DEFICIT_PART_VARIABLE)
+    .plus(IS_DEFICIT_PLAFOND_FIXE);
 
   // The imputation can never exceed the profit of the year either. Without
   // this bound the taxable result went negative and the unused deficit was
@@ -75,15 +100,10 @@ export function applyISDeficit(
 
 // ─── IR (Income Tax — Bareme Progressif) ─────────────────────────────────────
 
-const IR_BRACKETS: { threshold: Decimal; rate: Decimal }[] = [
-  { threshold: new Decimal('11294'), rate: new Decimal('0') },
-  { threshold: new Decimal('28797'), rate: new Decimal('0.11') },
-  { threshold: new Decimal('82341'), rate: new Decimal('0.30') },
-  { threshold: new Decimal('177106'), rate: new Decimal('0.41') },
-  { threshold: new Decimal('Infinity'), rate: new Decimal('0.45') },
-];
-
-const PLAFONNEMENT_PER_HALF_PART = new Decimal('1759');
+/** A single person raising children alone gets an extra half-part (case T). */
+export function isParentIsole(maritalStatus: MaritalStatus, childrenCount: number): boolean {
+  return maritalStatus === 'SINGLE' && childrenCount > 0;
+}
 
 /** Computes the number of quotient familial parts. */
 export function computeQuotientParts(
@@ -95,6 +115,13 @@ export function computeQuotientParts(
   const firstTwo = Math.min(childrenCount, 2);
   const beyond = Math.max(childrenCount - 2, 0);
   parts = parts.plus(new Decimal(firstTwo).mul('0.5')).plus(beyond);
+
+  // Case T: raising a child alone is worth an additional half-part, so the
+  // first child brings a full part rather than a half. Leaving it out taxed
+  // every single parent as if they had a partner to share the burden with.
+  if (isParentIsole(maritalStatus, childrenCount)) {
+    parts = parts.plus('0.5');
+  }
 
   return parts;
 }
@@ -139,9 +166,15 @@ export function computeIR(
   const taxPerBasePart = computeTaxPerPart(incomePerBasePart);
   const taxWithoutQF = taxPerBasePart.mul(baseParts);
 
-  // Plafonnement: cap the advantage of extra half-parts
+  // Plafonnement: cap the advantage of the extra half-parts. A parent isole
+  // gets a full part for their first child, capped on its own and far higher
+  // than an ordinary half-part; anything beyond follows the common ceiling.
   const extraHalfParts = parts.minus(baseParts).mul(2); // number of half-parts
-  const maxReduction = PLAFONNEMENT_PER_HALF_PART.mul(extraHalfParts);
+  const maxReduction = isParentIsole(maritalStatus, childrenCount)
+    ? PLAFOND_PARENT_ISOLE.plus(
+        Decimal.max(new Decimal(0), extraHalfParts.minus(2)).mul(PLAFOND_DEMI_PART),
+      )
+    : PLAFOND_DEMI_PART.mul(extraHalfParts);
   const actualReduction = taxWithoutQF.minus(taxWithQF);
 
   let grossTax: Decimal;
@@ -153,10 +186,10 @@ export function computeIR(
 
   // Decote
   const isCouple = maritalStatus !== 'SINGLE';
-  const decoteThreshold = isCouple ? new Decimal('3191') : new Decimal('1929');
+  const decoteThreshold = isCouple ? DECOTE_SEUIL_COUPLE : DECOTE_SEUIL_CELIBATAIRE;
 
   if (grossTax.lt(decoteThreshold)) {
-    const decote = decoteThreshold.minus(grossTax.mul('0.4525'));
+    const decote = decoteThreshold.minus(grossTax.mul(DECOTE_TAUX));
     grossTax = Decimal.max(new Decimal(0), grossTax.minus(decote));
   }
 
@@ -170,9 +203,8 @@ export function computeIR(
  * PFU = 12.8% IR + PS rate (18.6% standard or 7.5% Swiss-exempt).
  */
 export function computePFU(grossDividend: Decimal, regime: SocialChargeRegime): Decimal {
-  const irFlat = new Decimal('0.128');
   const psRate = getPfuSocialChargeRate(regime);
-  return grossDividend.mul(irFlat.plus(psRate));
+  return grossDividend.mul(PFU_TAUX_IR.plus(psRate));
 }
 
 /**
@@ -213,19 +245,9 @@ export function computeMereFilleQuotePart(dividend: Decimal): Decimal {
 
 // ─── IFI (Impot sur la Fortune Immobiliere) ──────────────────────────────────
 
-const IFI_ENTRY_THRESHOLD = new Decimal('1300000');
-const IFI_BRACKETS: { threshold: Decimal; rate: Decimal }[] = [
-  { threshold: new Decimal('800000'), rate: new Decimal('0') },
-  { threshold: new Decimal('1300000'), rate: new Decimal('0.005') },
-  { threshold: new Decimal('2570000'), rate: new Decimal('0.007') },
-  { threshold: new Decimal('5000000'), rate: new Decimal('0.01') },
-  { threshold: new Decimal('10000000'), rate: new Decimal('0.0125') },
-  { threshold: new Decimal('Infinity'), rate: new Decimal('0.015') },
-];
-
 /** Computes IFI for a given net real estate patrimony value. */
 export function computeIFI(netTaxableBase: Decimal): Decimal {
-  if (netTaxableBase.lt(IFI_ENTRY_THRESHOLD)) return new Decimal(0);
+  if (netTaxableBase.lt(IFI_SEUIL_ENTREE)) return new Decimal(0);
 
   let tax = new Decimal(0);
   let previousThreshold = new Decimal(0);
@@ -270,10 +292,10 @@ export function computeYearlyDepreciation(params: DepreciationParams): YearlyDep
   const buildingValue = base.mul(new Decimal(1).minus(params.landRatio));
 
   // Building: linear over 25 years (4%/year)
-  const buildingDepreciation = buildingValue.div(25);
+  const buildingDepreciation = buildingValue.div(DUREE_AMORTISSEMENT_IMMEUBLE);
 
   // Renovation: linear over 15 years
-  const renovationDepreciation = params.renovationCosts.div(15);
+  const renovationDepreciation = params.renovationCosts.div(DUREE_AMORTISSEMENT_TRAVAUX);
 
   return {
     building: buildingDepreciation,
@@ -400,7 +422,7 @@ export function computeCapitalGainIR(
   const taxableForIR = rawGain.mul(new Decimal(1).minus(irAbatement));
   const taxableForPS = rawGain.mul(new Decimal(1).minus(psAbatement));
 
-  const irTax = taxableForIR.mul('0.19'); // flat 19% for real estate capital gains
+  const irTax = taxableForIR.mul(PV_TAUX_IR);
   const psRate = getSocialChargeRate(regime);
   const psTax = taxableForPS.mul(psRate);
   // The surtaxe bites on the gain left after the duration abatements.

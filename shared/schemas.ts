@@ -197,6 +197,11 @@ export const AssetSchema = z.object({
   annualRent: decimalString.default('0.00'),
   chargesYearly: decimalString,
   propertyTax: decimalString,
+  /**
+   * Share of the price attributable to the land, which is never depreciable.
+   * Usually 15 to 20 %, higher in dense urban areas. IS and LMP only.
+   */
+  landRatio: z.number().min(0).max(0.5).default(0.15),
   /** When set, revenue is computed from the seasonal buckets, not `annualRent`. */
   saisonnier: SaisonnierParamsSchema.optional(),
   loan: LoanSchema.optional(),

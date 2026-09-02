@@ -42,6 +42,47 @@ describe('computeQuotientParts', () => {
   it('married 3 children = 4 parts', () => {
     expect(computeQuotientParts('MARRIED', 3).toNumber()).toBe(4);
   });
+
+  // Case T: raising a child alone is worth an extra half-part. It was in the
+  // project spec but never implemented, so every single parent was taxed as
+  // if they had a partner to share the burden with.
+  it('single parent with 1 child = 2 parts', () => {
+    expect(computeQuotientParts('SINGLE', 1).toNumber()).toBe(2);
+  });
+
+  it('single parent with 2 children = 2.5 parts', () => {
+    expect(computeQuotientParts('SINGLE', 2).toNumber()).toBe(2.5);
+  });
+
+  it('single parent with 3 children = 3.5 parts', () => {
+    expect(computeQuotientParts('SINGLE', 3).toNumber()).toBe(3.5);
+  });
+
+  it('should give the extra half-part only to a single parent', () => {
+    expect(computeQuotientParts('SINGLE', 0).toNumber()).toBe(1);
+    expect(computeQuotientParts('PACSED', 1).toNumber()).toBe(2.5);
+  });
+});
+
+describe('computeIR — parent isole', () => {
+  it('should tax a single parent less than a childless single person', () => {
+    const avecEnfant = computeIR(new Decimal('45000'), 'SINGLE', 1);
+    const sansEnfant = computeIR(new Decimal('45000'), 'SINGLE', 0);
+    expect(avecEnfant.lt(sansEnfant)).toBe(true);
+  });
+
+  it('should cap the advantage of the case T part on its own ceiling', () => {
+    // High income, so the quotient advantage is worth more than the ceiling
+    // and the plafonnement bites. The saving must stop at the parent isole
+    // ceiling, not at an ordinary half-part.
+    const revenu = new Decimal('200000');
+    const avecEnfant = computeIR(revenu, 'SINGLE', 1);
+    const sansEnfant = computeIR(revenu, 'SINGLE', 0);
+    const avantage = sansEnfant.minus(avecEnfant).toNumber();
+
+    expect(avantage).toBeGreaterThan(1759 * 2 - 1);
+    expect(avantage).toBeCloseTo(4149, 0);
+  });
 });
 
 describe('computeIR', () => {
