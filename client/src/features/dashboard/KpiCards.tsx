@@ -51,7 +51,7 @@ const METRICS: Metric[] = [
     value: (r) => parseFloat(r.summary.sortie.impot),
     better: 'lower',
     tone: 'cost',
-    aide: "Ce que coute la vente au terme. A l'IS la plus-value se calcule sur la valeur comptable amortie, pas sur le prix d'achat : les vingt ans d'impot economise par l'amortissement reviennent ici. A l'IR, la plus-value est exoneree apres 22 ans (impot) et 30 ans (prelevements sociaux).",
+    aide: "Ce que coute la vente au terme, les deux etages compris. A l'IS la plus-value se calcule sur la valeur comptable amortie, pas sur le prix d'achat : les vingt ans d'impot economise par l'amortissement reviennent ici, et il reste ensuite a sortir l'argent de la societe, ce qui coute la flat tax sur le boni de liquidation. A l'IR l'impot est personnel et definitif du premier coup, et la plus-value est exoneree apres 22 ans (impot) et 30 ans (prelevements sociaux).",
   },
   {
     label: 'TRI net de revente',

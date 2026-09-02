@@ -463,6 +463,13 @@ export const SimulationResultSchema = z.object({
       plusValueBrute: z.string(),
       /** Gain that exists only because depreciation lowered the book value. */
       amortissementsRepris: z.string(),
+      /** Tax borne by the company. Zero at IR and for an LMP. */
+      impotSociete: z.string(),
+      /** Tax borne by the associes to take the money home. */
+      impotAssocies: z.string(),
+      /** Proceeds left to distribute once the capital has been returned. */
+      boniLiquidation: z.string(),
+      /** Both floors together — what leaving actually costs. */
       impot: z.string(),
       detteResiduelle: z.string(),
       produitNet: z.string(),

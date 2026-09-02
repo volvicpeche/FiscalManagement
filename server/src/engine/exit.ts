@@ -1,6 +1,12 @@
 import Decimal from 'decimal.js';
 import type { AssocieInput, SocialChargeRegime } from '@shared/schemas.js';
-import { computeCapitalGainIS, computeCapitalGainIR, computeIR, getSocialChargeRate } from './tax.js';
+import {
+  computeCapitalGainIS,
+  computeCapitalGainIR,
+  computeIR,
+  computePFU,
+  getSocialChargeRate,
+} from './tax.js';
 
 /**
  * What selling at the end of the horizon actually costs.
@@ -28,6 +34,19 @@ export interface ExitResult {
   plusValueBrute: Decimal;
   /** Portion that only exists because depreciation lowered the book value. */
   amortissementsRepris: Decimal;
+  /** Tax the COMPANY pays on the gain. Zero at IR and for an LMP. */
+  impotSociete: Decimal;
+  /**
+   * Tax the ASSOCIES pay to get the money out. At IS this is the second floor
+   * of the building: the company has paid its corporate tax, but the proceeds
+   * are still inside it, and taking them home costs the flat tax on the boni
+   * de liquidation. At IR and LMP the tax is already personal, so the whole
+   * bill sits here.
+   */
+  impotAssocies: Decimal;
+  /** Sale proceeds after corporate tax and debt, less the capital returned. */
+  boniLiquidation: Decimal;
+  /** The two floors added up — what leaving actually costs. */
   impot: Decimal;
   detteResiduelle: Decimal;
   /** Sale price, less the tax, less what is still owed to the bank. */
@@ -47,6 +66,8 @@ export interface ExitParams {
   detteResiduelle: Decimal;
   dureeDetention: number;
   regimeSocial: SocialChargeRegime;
+  /** Share capital, handed back to the associes free of tax on a winding-up. */
+  capitalSocial: Decimal;
 }
 
 const PFU_IR_RATE = new Decimal('0.128');
@@ -59,6 +80,9 @@ function empty(regime: ExitRegime, p: ExitParams): ExitResult {
     prixAcquisition: p.prixAcquisition,
     plusValueBrute: new Decimal(0),
     amortissementsRepris: new Decimal(0),
+    impotSociete: new Decimal(0),
+    impotAssocies: new Decimal(0),
+    boniLiquidation: new Decimal(0),
     impot: new Decimal(0),
     detteResiduelle: p.detteResiduelle,
     produitNet: p.prixVente.minus(p.detteResiduelle),
@@ -75,6 +99,16 @@ export function computeExitIS(p: ExitParams): ExitResult {
 
   if (taxableGain.lte(0)) return empty('IS', p);
 
+  // Second floor. The corporate tax leaves the money inside the company; the
+  // associes still have to take it home. Winding the SCI up returns their
+  // share capital free of tax and taxes the rest — the boni de liquidation —
+  // as a distribution. Reporting only the corporate tax made the IS look
+  // cheaper to leave than the IR, which settles in one go and is final.
+  const produitApresIS = p.prixVente.minus(tax).minus(p.detteResiduelle);
+  const boni = Decimal.max(new Decimal(0), produitApresIS.minus(p.capitalSocial));
+  const impotAssocies = computePFU(boni, p.regimeSocial);
+  const impot = tax.plus(impotAssocies);
+
   return {
     regime: 'IS',
     prixVente: p.prixVente,
@@ -83,9 +117,12 @@ export function computeExitIS(p: ExitParams): ExitResult {
     plusValueBrute: taxableGain,
     // The share of the gain that exists purely because of depreciation.
     amortissementsRepris: Decimal.min(taxableGain, p.cumulAmortissements),
-    impot: tax,
+    impotSociete: tax,
+    impotAssocies,
+    boniLiquidation: boni,
+    impot,
     detteResiduelle: p.detteResiduelle,
-    produitNet: p.prixVente.minus(tax).minus(p.detteResiduelle),
+    produitNet: p.prixVente.minus(impot).minus(p.detteResiduelle),
   };
 }
 
@@ -121,6 +158,10 @@ export function computeExitIR(p: ExitParams): ExitResult {
     plusValueBrute: taxableGain,
     // No depreciation at IR, so nothing is ever added back.
     amortissementsRepris: new Decimal(0),
+    // Translucent: the associes are taxed directly, the SCI pays nothing.
+    impotSociete: new Decimal(0),
+    impotAssocies: total,
+    boniLiquidation: new Decimal(0),
     impot: total,
     detteResiduelle: p.detteResiduelle,
     produitNet: p.prixVente.minus(total).minus(p.detteResiduelle),
@@ -187,6 +228,10 @@ export function computeExitLMP(
     prixAcquisition: p.prixAcquisition,
     plusValueBrute: plusValue,
     amortissementsRepris: courtTerme,
+    // A sole trader: the whole bill is personal, there is no company floor.
+    impotSociete: new Decimal(0),
+    impotAssocies: impot,
+    boniLiquidation: new Decimal(0),
     impot,
     detteResiduelle: p.detteResiduelle,
     produitNet: p.prixVente.minus(impot).minus(p.detteResiduelle),
