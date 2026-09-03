@@ -10,6 +10,7 @@ import {
   getSocialChargeRate,
   computeYearlyDepreciation,
   applyISDeficit,
+  computeSurtaxePlusValue,
 } from '../tax.js';
 
 describe('computeIS', () => {
@@ -158,5 +159,37 @@ describe('applyISDeficit', () => {
     const result = applyISDeficit(new Decimal('3000000'), new Decimal('5000000'));
     expect(result.taxableAfterOffset.toNumber()).toBe(1000000);
     expect(result.remainingDeficit.toNumber()).toBe(3000000);
+  });
+});
+
+describe('computeSurtaxePlusValue', () => {
+  it('should charge nothing at or below 50 000 EUR', () => {
+    expect(computeSurtaxePlusValue(new Decimal('50000')).toNumber()).toBe(0);
+    expect(computeSurtaxePlusValue(new Decimal('20000')).toNumber()).toBe(0);
+  });
+
+  it('should smooth the entry band', () => {
+    // 2 % de 55 000, moins (60 000 - 55 000) / 20.
+    expect(computeSurtaxePlusValue(new Decimal('55000')).toNumber()).toBeCloseTo(850, 2);
+  });
+
+  it('should charge a flat rate inside a plain band', () => {
+    expect(computeSurtaxePlusValue(new Decimal('80000')).toNumber()).toBeCloseTo(1600, 2);
+    expect(computeSurtaxePlusValue(new Decimal('300000')).toNumber()).toBeCloseTo(18000, 2);
+  });
+
+  it('should stay continuous across the rate steps', () => {
+    // The smoothing coefficients exist precisely so the bill does not jump.
+    for (const seuil of [100000, 150000, 200000, 250000]) {
+      const avant = computeSurtaxePlusValue(new Decimal(seuil)).toNumber();
+      const apres = computeSurtaxePlusValue(new Decimal(seuil + 1)).toNumber();
+      expect(Math.abs(apres - avant)).toBeLessThan(1);
+    }
+  });
+
+  it('should never go negative', () => {
+    for (let pv = 50000; pv <= 300000; pv += 1000) {
+      expect(computeSurtaxePlusValue(new Decimal(pv)).toNumber()).toBeGreaterThanOrEqual(0);
+    }
   });
 });

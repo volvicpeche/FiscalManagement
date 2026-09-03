@@ -171,6 +171,7 @@ export function buildSaisonnierRequest(state: {
         assets: [state.asset],
         subsidiaries: [],
         tauxCotisationsSocialesLMP: state.tauxCotisationsSocialesLMP,
+        cotisationsMinimalesLMP: '1200.00',
       },
     ],
     params: state.params,

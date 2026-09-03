@@ -37,6 +37,10 @@ export interface ExitResult {
 export interface ExitParams {
   prixVente: Decimal;
   prixAcquisition: Decimal;
+  /** Bare purchase price, before fees and works — the base of the 15 % forfait. */
+  prixAchat: Decimal;
+  /** Works actually carried out, already inside `prixAcquisition`. */
+  travauxReels: Decimal;
   /** Cost basis for book value: acquisition plus works. */
   baseAmortissable: Decimal;
   cumulAmortissements: Decimal;
@@ -91,20 +95,29 @@ export function computeExitIS(p: ExitParams): ExitResult {
  * from social charges after 30.
  */
 export function computeExitIR(p: ExitParams): ExitResult {
+  // Past five years of holding the seller may value the works at a flat 15 %
+  // of the purchase price instead of the invoices. It is an option, so the
+  // more favourable of the two applies — here, a top-up when the real works
+  // fall short of the forfait.
+  const forfaitTravaux = p.dureeDetention > 5 ? p.prixAchat.mul('0.15') : new Decimal(0);
+  const complementForfait = Decimal.max(new Decimal(0), forfaitTravaux.minus(p.travauxReels));
+  const baseAcquisition = p.prixAcquisition.plus(complementForfait);
+
   const { taxableGain, total } = computeCapitalGainIR(
     p.prixVente,
-    p.prixAcquisition,
+    baseAcquisition,
     p.dureeDetention,
     p.regimeSocial,
   );
 
-  if (taxableGain.lte(0)) return empty('IR', p);
+  if (taxableGain.lte(0)) return empty('IR', { ...p, prixAcquisition: baseAcquisition });
 
   return {
     regime: 'IR',
     prixVente: p.prixVente,
     valeurNetteComptable: p.baseAmortissable.minus(p.cumulAmortissements),
-    prixAcquisition: p.prixAcquisition,
+    // The basis actually used against the sale price, forfait included.
+    prixAcquisition: baseAcquisition,
     plusValueBrute: taxableGain,
     // No depreciation at IR, so nothing is ever added back.
     amortissementsRepris: new Decimal(0),
@@ -119,7 +132,9 @@ export function computeExitIR(p: ExitParams): ExitResult {
  *
  * The short-term part — capped at the depreciation taken — goes back into the
  * BIC result and is taxed at the operator's own marginal rate plus TNS
- * contributions. The long-term part is taxed at 12,8 % plus social charges.
+ * contributions. The long-term part is taxed at 12,8 % plus social charges,
+ * after the article 151 septies B abatement of 10 % per year of holding
+ * beyond the fifth, which exempts it entirely at fifteen years.
  *
  * Simplification: the article 151 septies exemption (available below roughly
  * 90 000 EUR of annual receipts after five years of activity) is NOT applied.
@@ -137,7 +152,18 @@ export function computeExitLMP(
   if (plusValue.lte(0)) return empty('LMP', p);
 
   const courtTerme = Decimal.min(plusValue, p.cumulAmortissements);
-  const longTerme = plusValue.minus(courtTerme);
+  const longTermeBrut = plusValue.minus(courtTerme);
+
+  // Article 151 septies B: the long-term share of a gain on a building used
+  // for the business is abated 10 % per year of holding beyond the fifth, so
+  // it is fully exempt at fifteen years. Over a long horizon this is most of
+  // the LMP exit bill, and leaving it out made the regime look far worse than
+  // it is.
+  const abattement151B = Decimal.min(
+    new Decimal(1),
+    Decimal.max(new Decimal(0), new Decimal(p.dureeDetention - 5).mul('0.10')),
+  );
+  const longTerme = longTermeBrut.mul(new Decimal(1).minus(abattement151B));
 
   // Short-term: added to the operator's income, so taxed differentially.
   const autresRevenus = new Decimal(associe.autresRevenus);

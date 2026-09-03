@@ -7,6 +7,8 @@ import { computeExitIS, computeExitIR, computeExitLMP, type ExitParams } from '.
 const base = (over: Partial<ExitParams> = {}): ExitParams => ({
   prixVente: new Decimal('340000'),
   prixAcquisition: new Decimal('216000'),
+  prixAchat: new Decimal('200000'),
+  travauxReels: new Decimal('30000'),
   baseAmortissable: new Decimal('246000'),
   cumulAmortissements: new Decimal('0'),
   detteResiduelle: new Decimal('0'),
@@ -157,5 +159,65 @@ describe('the regimes compared at the exit', () => {
     // At 30 years the IR exit is entirely exempt.
     expect(ir.impot.toNumber()).toBe(0);
     expect(is.impot.toNumber()).toBeGreaterThan(50000);
+  });
+});
+
+describe('computeExitIR — forfait travaux', () => {
+  it('should value the works at 15% of the price when the invoices fall short', () => {
+    // Past five years the seller may take the flat 15 % instead of the real
+    // works. With no works at all, the forfait alone lowers the gain.
+    const sansTravaux = computeExitIR(
+      base({ dureeDetention: 10, travauxReels: new Decimal('0'), prixAcquisition: new Decimal('216000') }),
+    );
+    // 216 000 + 15 % de 200 000.
+    expect(sansTravaux.prixAcquisition.toNumber()).toBeCloseTo(246000, 2);
+  });
+
+  it('should keep the real works when they exceed the forfait', () => {
+    const grosTravaux = computeExitIR(
+      base({
+        dureeDetention: 10,
+        travauxReels: new Decimal('80000'),
+        prixAcquisition: new Decimal('296000'),
+      }),
+    );
+    expect(grosTravaux.prixAcquisition.toNumber()).toBeCloseTo(296000, 2);
+  });
+
+  it('should not offer the forfait before five years of holding', () => {
+    const court = computeExitIR(
+      base({ dureeDetention: 4, travauxReels: new Decimal('0'), prixAcquisition: new Decimal('216000') }),
+    );
+    expect(court.prixAcquisition.toNumber()).toBeCloseTo(216000, 2);
+  });
+});
+
+describe('computeExitLMP — abattement 151 septies B', () => {
+  const tns = new Decimal('0.35');
+
+  it('should exempt the long-term share entirely after fifteen years', () => {
+    // No depreciation taken, so the whole gain is long term.
+    const r = computeExitLMP(base({ dureeDetention: 15, cumulAmortissements: new Decimal('0') }), associe(), tns);
+    expect(r.impot.toNumber()).toBe(0);
+  });
+
+  it('should abate the long-term share by 10% per year past the fifth', () => {
+    const dix = computeExitLMP(base({ dureeDetention: 10, cumulAmortissements: new Decimal('0') }), associe(), tns);
+    const six = computeExitLMP(base({ dureeDetention: 6, cumulAmortissements: new Decimal('0') }), associe(), tns);
+    // 50 % abated at ten years against 10 % at six.
+    expect(dix.impot.lt(six.impot)).toBe(true);
+    expect(dix.impot.gt(0)).toBe(true);
+  });
+
+  it('should leave the recaptured depreciation fully taxable', () => {
+    // The abatement reaches the long-term share only: the short-term part is
+    // the depreciation coming back, and it is taxed in full whatever the age.
+    const r = computeExitLMP(
+      base({ dureeDetention: 30, cumulAmortissements: new Decimal('200000') }),
+      associe(),
+      tns,
+    );
+    expect(r.amortissementsRepris.toNumber()).toBe(200000);
+    expect(r.impot.gt(new Decimal('70000'))).toBe(true);
   });
 });

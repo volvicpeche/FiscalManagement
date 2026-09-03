@@ -220,6 +220,11 @@ export const StructureSchema = z.object({
    * income. Ignored for every other structure type.
    */
   tauxCotisationsSocialesLMP: z.number().min(0).max(1).default(0.35),
+  /**
+   * LMP only — indicative yearly floor for the SSI contributions, due even in
+   * a loss-making year. Ignored for every other structure type.
+   */
+  cotisationsMinimalesLMP: decimalString.default('1200.00'),
 });
 export type StructureInput = z.infer<typeof StructureSchema>;
 
