@@ -19,6 +19,7 @@ const baseRequest: SimulationRequest = {
     maritalStatus: 'MARRIED',
     childrenCount: 2,
     socialChargeRegime: 'SWISS_EXEMPT',
+    autresRevenus: '0.00',
   },
   structures: [
     {
@@ -1047,16 +1048,58 @@ describe('runSimulation — financing', () => {
 });
 
 describe('runSimulation — IRR', () => {
-  it('should turn positive only once the loan is behind you', () => {
-    const at = (horizon: number) =>
-      parseFloat(
-        runSimulation({ ...baseRequest, params: { ...baseRequest.params, horizonYears: horizon } })
-          .summary.irr!,
-      );
+  const at = (horizon: number) =>
+    parseFloat(
+      runSimulation({ ...baseRequest, params: { ...baseRequest.params, horizonYears: horizon } })
+        .summary.irr!,
+    );
 
-    expect(at(10)).toBeLessThan(0);
+  it('should discount every euro once and only once', () => {
+    // The guard that matters. The series used to be built on
+    // `totalNetCashFlow`, which counts cash retained inside the company — cash
+    // the terminal value already holds. Every euro was therefore discounted
+    // twice, and the apport three times. This ties the series back to the
+    // wealth figure: they must describe the same operation.
+    const result = runSimulation(baseRequest);
+    const flows = result.yearlyData.map((y) => parseFloat(y.fluxFamille));
+    const somme = flows.reduce((a, f) => a + f, 0);
+    const navBrute = parseFloat(result.summary.totalNetWealth) - somme;
+
+    // Net wealth is what the family put in plus what it got back plus what it
+    // still holds. Nothing else may appear in the series.
+    expect(somme + navBrute).toBeCloseTo(parseFloat(result.summary.totalNetWealth), 2);
+
+    // And the reported rate must actually zero that series. The rate is
+    // published rounded to four decimals, so the root is checked to bracket
+    // zero across that rounding interval rather than against an absolute
+    // euro threshold, which would depend on the size of the operation.
+    const serie = [...flows];
+    serie[serie.length - 1] += navBrute;
+    const npvAt = (taux: number) =>
+      serie.reduce((acc, f, year) => acc + f / (1 + taux) ** year, 0);
+
+    const taux = parseFloat(result.summary.irr!);
+    expect(npvAt(taux - 0.00005) * npvAt(taux + 0.00005)).toBeLessThanOrEqual(0);
+  });
+
+  it('should charge the apport once, at year 0', () => {
+    // `totalNetWealth` is a wealth-created figure, already net of the apport.
+    // Adding it as a terminal value on top of a t0 outflow charged it twice.
+    const result = runSimulation(baseRequest);
+    expect(parseFloat(result.yearlyData[0].fluxFamille)).toBeCloseTo(
+      -parseFloat(result.summary.financement.apportRequis),
+      2,
+    );
+  });
+
+  it('should peak around the loan maturity, then dilute', () => {
+    // Leverage builds the rate up to the last instalment; past it the idle
+    // treasury earns nothing while the property grows slowly, so the rate
+    // drifts back down. The loan runs 20 years.
+    expect(at(10)).toBeGreaterThan(0);
+    expect(at(20)).toBeGreaterThan(at(10));
+    expect(at(30)).toBeLessThan(at(20));
     expect(at(30)).toBeGreaterThan(0);
-    expect(at(30)).toBeGreaterThan(at(20));
   });
 
   it('should reward a better rent with a better rate', () => {
@@ -1416,5 +1459,186 @@ describe('runSimulation — the treasury adds up', () => {
 
     expect(famille).not.toBeCloseTo(societe, 0);
     expect(societe - impotAssocies - parseFloat(y.ifiTax)).toBeCloseTo(famille, 1);
+  });
+});
+
+describe('runSimulation — deficit reportable a l\'IS', () => {
+  it('should only charge IS once the cumulative result has turned positive', () => {
+    // With an unlimited carry-forward, no euro of IS is due while the running
+    // fiscal result is still negative. The imputation used to be capped at
+    // 1 M EUR but not at the profit of the year, so a small profit absorbed a
+    // much larger carried deficit, the excess was destroyed, and the SCI paid
+    // IS on years it should have sheltered.
+    const result = runSimulation(baseRequest);
+
+    let cumul = 0;
+    for (const y of result.yearlyData) {
+      const entite = y.entities['SCI Alpha'];
+      if (!entite) continue;
+      cumul += parseFloat(entite.taxableProfit);
+      if (parseFloat(entite.tax) > 0) {
+        expect(cumul).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('should shelter later profits with an early loss', () => {
+    // Same operation, one with a heavy first-year charge. The extra deficit
+    // must lower the total IS by real money, not vanish.
+    const withLoss = (renovationCosts: string) =>
+      parseFloat(
+        runSimulation({
+          ...baseRequest,
+          structures: [
+            {
+              ...baseRequest.structures[0],
+              assets: [{ ...baseRequest.structures[0].assets[0], renovationCosts }],
+            },
+          ],
+        }).summary.totalTaxPaid,
+      );
+
+    expect(withLoss('90000.00')).toBeLessThan(withLoss('30000.00'));
+  });
+});
+
+describe('runSimulation — dividendes imposes chez chaque associe', () => {
+  const avecAssocie = (autresRevenus: string) => ({
+    ...baseRequest,
+    structures: [
+      {
+        ...baseRequest.structures[0],
+        costs: NO_COSTS,
+        associes: [
+          associe({
+            nom: 'Moi',
+            partsPercent: 1,
+            maritalStatus: 'MARRIED' as const,
+            childrenCount: 2,
+            autresRevenus,
+            socialChargeRegime: 'SWISS_EXEMPT' as const,
+          }),
+        ],
+        assets: [{ ...baseRequest.structures[0].assets[0], annualRent: '40000.00' }],
+      },
+    ],
+    params: { ...baseRequest.params, horizonYears: 15, dividendDistributionRate: 0.8 },
+  });
+
+  it('should tax the same dividend more heavily in a higher bracket', () => {
+    // Regression: the arbitrage passed a zero other income, so the bareme won
+    // almost every time and the tax was the same whatever the household.
+    const modeste = runSimulation(avecAssocie('0.00'));
+    const aise = runSimulation(avecAssocie('150000.00'));
+
+    const impot = (r: typeof modeste) =>
+      r.yearlyData.reduce((acc, y) => acc + parseFloat(y.dividendTax), 0);
+
+    expect(impot(aise)).toBeGreaterThan(impot(modeste));
+    expect(parseFloat(aise.summary.totalNetWealth)).toBeLessThan(
+      parseFloat(modeste.summary.totalNetWealth),
+    );
+  });
+
+  it('should never retain more than the PFU — it is the fallback option', () => {
+    // The associe picks the cheaper of the two, so the retained tax is capped
+    // at the flat rate: 12,8 % + 7,5 % for a Swiss-affiliated associe.
+    const r = runSimulation(avecAssocie('150000.00'));
+    for (const y of r.yearlyData) {
+      const brut = parseFloat(y.userNetDividend) + parseFloat(y.dividendTax);
+      if (brut > 0) {
+        expect(parseFloat(y.dividendTax)).toBeLessThanOrEqual(brut * 0.203 + 0.01);
+      }
+    }
+  });
+
+  it('should attribute the dividend to the associe who received it', () => {
+    const r = runSimulation(avecAssocie('90000.00'));
+    const y = r.yearlyData.find((row) => parseFloat(row.userNetDividend) > 0)!;
+    expect(parseFloat(y.associes['Moi'].dividendeNet)).toBeCloseTo(
+      parseFloat(y.userNetDividend),
+      2,
+    );
+  });
+});
+
+describe('runSimulation — travaux et prix d\'acquisition', () => {
+  it('should count the works in the acquisition price at IR', () => {
+    // Regression: the works were in the depreciable basis but not in the IR
+    // acquisition price, so they never reduced the taxable gain.
+    const r = runSimulation({
+      ...baseRequest,
+      structures: [
+        {
+          ...baseRequest.structures[0],
+          type: 'SCI_IR',
+          taxRegime: 'IR',
+          costs: NO_COSTS,
+          associes: [associe({ nom: 'Moi', partsPercent: 1 })],
+        },
+      ],
+    });
+    // 200 000 + 16 000 de frais + 30 000 de travaux.
+    expect(parseFloat(r.summary.sortie.prixAcquisition)).toBeCloseTo(246000, 2);
+  });
+
+  it('should lower the exit tax at IR when works were carried out', () => {
+    const withWorks = (renovationCosts: string) =>
+      parseFloat(
+        runSimulation({
+          ...baseRequest,
+          structures: [
+            {
+              ...baseRequest.structures[0],
+              type: 'SCI_IR',
+              taxRegime: 'IR',
+              costs: NO_COSTS,
+              associes: [associe({ nom: 'Moi', partsPercent: 1 })],
+              assets: [{ ...baseRequest.structures[0].assets[0], renovationCosts }],
+            },
+          ],
+          // Before the 30-year mark the social charges still bite, so the
+          // works have a visible effect.
+          params: { ...baseRequest.params, horizonYears: 20 },
+        }).summary.sortie.impot,
+      );
+
+    expect(withWorks('60000.00')).toBeLessThan(withWorks('0.00'));
+  });
+});
+
+describe('runSimulation — flux famille', () => {
+  it('should carry the repaid compte courant into the family flow', () => {
+    // Regression: the repayment left the company but was never added back on
+    // the family side, so the IRR series lost it altogether.
+    const withCCA = (ccaRepaymentRate: number) =>
+      runSimulation({
+        ...baseRequest,
+        structures: [
+          {
+            ...baseRequest.structures[0],
+            costs: NO_COSTS,
+            associes: [
+              associe({ nom: 'Moi', partsPercent: 1, apportCompteCourant: '50000.00' }),
+            ],
+            assets: [{ ...baseRequest.structures[0].assets[0], annualRent: '40000.00' }],
+          },
+        ],
+        params: { ...baseRequest.params, horizonYears: 15, ccaRepaymentRate },
+      });
+
+    const garde = withCCA(0);
+    const rembourse = withCCA(1);
+
+    const flux = (r: typeof garde) =>
+      r.yearlyData.slice(1).reduce((acc, y) => acc + parseFloat(y.fluxFamille), 0);
+
+    // Repaying moves cash out of the company and into the associe's pocket.
+    expect(flux(rembourse)).toBeGreaterThan(flux(garde));
+    // And it stays wealth-neutral: what left the company arrived somewhere.
+    expect(parseFloat(rembourse.summary.totalNetWealth)).toBeCloseTo(
+      parseFloat(garde.summary.totalNetWealth),
+      0,
+    );
   });
 });

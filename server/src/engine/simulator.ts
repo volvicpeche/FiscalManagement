@@ -190,7 +190,7 @@ function implicitAssocie(userProfile: UserProfile, ownershipShare: number): Asso
     birthDate: userProfile.birthDate,
     maritalStatus: userProfile.maritalStatus,
     childrenCount: userProfile.childrenCount,
-    autresRevenus: '0.00',
+    autresRevenus: userProfile.autresRevenus ?? '0.00',
     socialChargeRegime: userProfile.socialChargeRegime ?? 'STANDARD',
     apportCapital: '0.00',
     apportCompteCourant: '0.00',
@@ -246,8 +246,10 @@ function addAssocieYear(
     irTax: '0.00',
     psTax: '0.00',
     ccaInterest: '0.00',
+    ccaInterestTax: '0.00',
     ccaRepayment: '0.00',
     ccaBalance: '0.00',
+    dividendeNet: '0.00',
     netCashFlow: '0.00',
   };
 
@@ -370,15 +372,22 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       entities: entitiesResult,
       associes: Object.fromEntries(associesBucket),
       userNetDividend: '0.00',
+      dividendTax: '0.00',
       ifiTax: '0.00',
       operatingCosts: constitutionTotal.toFixed(2),
       totalNetCashFlow: apportTotal.neg().toFixed(2),
+      // The apport is the family's only movement at incorporation.
+      fluxFamille: apportTotal.neg().toFixed(2),
     });
   }
 
   // ─── 30-year loop ────────────────────────────────────────────────────────
 
   for (let year = 1; year <= horizon; year++) {
+    // Everything that crosses into the associes' own pockets moves
+    // personalWealth. Taking its delta over the year gives the family cash
+    // flow without having to re-derive it from the entity lines.
+    const personalWealthAtStart = personalWealth;
     const growthMultiplier = (rate: Decimal) => rate.plus(1).pow(year - 1);
     const entitiesResult: YearlyData['entities'] = {};
     const associesBucket = new Map<string, AssocieYear>();
@@ -613,6 +622,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
 
         addAssocieYear(associesBucket, a.input.nom, {
           ccaInterest: interets,
+          ccaInterestTax: interetTax,
           ccaRepayment: remboursement,
           ccaBalance: soldeRestant,
           netCashFlow: remboursement.plus(interets).minus(interetTax),
@@ -696,24 +706,45 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         if (isTopLevel && state.taxRegime === 'IS' && state.accumulatedCash.gt(0)) {
           const grossDividend = state.accumulatedCash.mul(dividendRate);
           if (grossDividend.gt(0)) {
-            // Compare PFU vs Bareme, pick cheapest
-            const regime = userProfile.socialChargeRegime ?? 'STANDARD';
-            const pfuTax = computePFU(grossDividend, regime);
-            const baremeTax = computeDividendBareme(
-              grossDividend,
-              d(0), // other income is now tracked per associe
-              userProfile.maritalStatus,
-              userProfile.childrenCount,
-              regime,
-            );
-            const bestTax = Decimal.min(pfuTax, baremeTax);
+            // A dividend is taxed in the hands of each associe, pro-rata to
+            // their parts, on their own household and on top of their own
+            // income. Arbitrating PFU against bareme at a zero other income
+            // made the bareme win almost every time and under-stated the tax
+            // by more than half on a household in the upper brackets.
+            const beneficiaires: AssocieInput[] =
+              state.associes.length > 0
+                ? state.associes.map((a) => a.input)
+                : [implicitAssocie(userProfile, 1)];
+
+            for (const benef of beneficiaires) {
+              const part = grossDividend.mul(benef.partsPercent);
+              if (part.lte(0)) continue;
+
+              const regime = benef.socialChargeRegime ?? 'STANDARD';
+              const pfuTax = computePFU(part, regime);
+              const baremeTax = computeDividendBareme(
+                part,
+                d(benef.autresRevenus),
+                benef.maritalStatus,
+                benef.childrenCount,
+                regime,
+              );
+              const bestTax = Decimal.min(pfuTax, baremeTax);
+              const net = part.minus(bestTax);
+
+              userNetDividend = userNetDividend.plus(net);
+              dividendTax = dividendTax.plus(bestTax);
+
+              addAssocieYear(associesBucket, benef.nom, {
+                dividendeNet: net,
+                netCashFlow: net,
+              });
+            }
 
             dividendesVerses.set(
               state.name,
               (dividendesVerses.get(state.name) ?? d(0)).plus(grossDividend),
             );
-            userNetDividend = userNetDividend.plus(grossDividend.minus(bestTax));
-            dividendTax = dividendTax.plus(bestTax);
             state.accumulatedCash = state.accumulatedCash.minus(grossDividend);
           }
         }
@@ -740,9 +771,11 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       entities: entitiesResult,
       associes: Object.fromEntries(associesBucket),
       userNetDividend: userNetDividend.toFixed(2),
+      dividendTax: dividendTax.toFixed(2),
       ifiTax: ifiTax.toFixed(2),
       operatingCosts: yearOperatingCosts.toFixed(2),
       totalNetCashFlow: yearTotalNetCashFlow.toFixed(2),
+      fluxFamille: personalWealth.minus(personalWealthAtStart).toFixed(2),
     });
   }
 
@@ -818,10 +851,18 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
   // not part of the running tax bill.
 
   // ── IRR ──────────────────────────────────────────────────────────────────
-  // From the family's point of view: the apport and the setup costs go out at
-  // t0, each year brings its net cash flow, and the horizon returns whatever
-  // the structures are worth. Terminal wealth stands in for a sale, so the
-  // rate ignores the capital-gains tax an actual exit would trigger.
+  // From the family's point of view: the apport goes out at t0, each year
+  // brings whatever actually crossed into the associes' pockets, and the
+  // horizon returns the gross net asset value of the structures. Terminal
+  // wealth stands in for a sale, so the rate ignores the capital-gains tax an
+  // actual exit would trigger — `irrNetDeRevente` below prices that.
+  //
+  // The series must be built on `fluxFamille`, never on `totalNetCashFlow`:
+  // the latter counts cash retained inside the company, which the terminal
+  // value already holds, so each euro was discounted twice — once at its own
+  // date and once at the horizon. The apport suffered the same fate, charged
+  // at t0 and again inside `totalNetWealth`, which is a wealth-created figure
+  // and therefore already net of it.
   const financementTotal = [...entityStates.values()].reduce(
     (acc, s) => ({
       coutAcquisition: acc.coutAcquisition.plus(s.financement.coutAcquisition),
@@ -836,9 +877,14 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
     },
   );
 
-  // Year 0 already carries the full apport, so the series is taken as it is.
-  const cashFlows: Decimal[] = yearlyData.map((y) => d(y.totalNetCashFlow));
-  cashFlows[cashFlows.length - 1] = cashFlows[cashFlows.length - 1].plus(totalWealth);
+  // Gross value of what the family still owns through the companies. The
+  // comptes courants are NOT deducted: they are owed to the associes, so from
+  // the family's side they are part of the terminal position, and what has
+  // already been repaid left as a flow in its own year.
+  const navBrute = totalWealth.minus(personalWealth);
+
+  const cashFlows: Decimal[] = yearlyData.map((y) => d(y.fluxFamille));
+  cashFlows[cashFlows.length - 1] = cashFlows[cashFlows.length - 1].plus(navBrute);
   const irr = computeIRR(cashFlows);
 
   // ── Selling at the horizon ───────────────────────────────────────────────
@@ -848,7 +894,12 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
     (acc, s) => {
       for (const a of s.assets) {
         acc.prixVente = acc.prixVente.plus(a.marketValue);
-        acc.prixAcquisition = acc.prixAcquisition.plus(a.purchasePrice).plus(a.notaryFees);
+        // Works count towards the acquisition price at IR: leaving them out
+        // inflated the taxable gain by their whole amount.
+        acc.prixAcquisition = acc.prixAcquisition
+          .plus(a.purchasePrice)
+          .plus(a.notaryFees)
+          .plus(a.renovationCosts);
         acc.baseAmortissable = acc.baseAmortissable
           .plus(a.purchasePrice)
           .plus(a.notaryFees)

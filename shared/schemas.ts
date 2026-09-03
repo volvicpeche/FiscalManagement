@@ -81,6 +81,12 @@ export const UserProfileSchema = z.object({
   childrenCount: z.number().int().min(0),
   birthDate: z.string().datetime().optional(),
   socialChargeRegime: SocialChargeRegime.default('STANDARD'),
+  /**
+   * Other taxable income of the declarant. Sets the bracket a dividend lands
+   * in when the distributing entity declares no associe of its own — without
+   * it the bareme option is compared at a zero income and always wins.
+   */
+  autresRevenus: decimalString.default('0.00'),
 });
 export type UserProfile = z.infer<typeof UserProfileSchema>;
 
@@ -361,8 +367,12 @@ export const AssocieYearSchema = z.object({
   irTax: z.string(),
   psTax: z.string(),
   ccaInterest: z.string(),
+  /** PFU owed on the CCA interest — it is RCM in the associe's hands. */
+  ccaInterestTax: z.string(),
   ccaRepayment: z.string(),
   ccaBalance: z.string(),
+  /** Dividend received, net of the PFU or bareme actually retained. */
+  dividendeNet: z.string(),
   /** What actually lands in this associe's pocket for the year. */
   netCashFlow: z.string(),
 });
@@ -374,9 +384,26 @@ export const YearlyDataSchema = z.object({
   entities: z.record(z.string(), EntityYearSchema),
   associes: z.record(z.string(), AssocieYearSchema).default({}),
   userNetDividend: z.string(),
+  /** Tax retained on the dividends distributed this year. */
+  dividendTax: z.string(),
   ifiTax: z.string(),
   operatingCosts: z.string(),
+  /**
+   * The COMPANY's view: what the entities generated and kept, net of the
+   * associes' personal tax. Kept for the projection table, which reads the
+   * operation from the company side.
+   */
   totalNetCashFlow: z.string(),
+  /**
+   * The FAMILY's view: what actually crossed the boundary between the
+   * companies and the associes' own pockets this year — the apport at year 0,
+   * then dividends and compte courant movements less the tax paid personally.
+   *
+   * This is the series the IRR is computed on. `totalNetCashFlow` cannot be:
+   * it counts cash retained inside the company, which the terminal net asset
+   * value already contains, so every euro was discounted twice.
+   */
+  fluxFamille: z.string(),
 });
 export type YearlyData = z.infer<typeof YearlyDataSchema>;
 

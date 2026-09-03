@@ -158,6 +158,7 @@ export function buildSaisonnierRequest(state: {
       maritalStatus: state.proprietaire.maritalStatus,
       childrenCount: state.proprietaire.childrenCount,
       socialChargeRegime: state.proprietaire.socialChargeRegime,
+      autresRevenus: state.proprietaire.autresRevenus,
     },
     structures: [
       {

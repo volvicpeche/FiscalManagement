@@ -136,4 +136,27 @@ describe('applyISDeficit', () => {
     expect(result.taxableAfterOffset.toNumber()).toBe(20000);
     expect(result.remainingDeficit.toNumber()).toBe(0);
   });
+
+  it('should never impute more than the profit of the year', () => {
+    // Regression: the imputation was capped at 1 M EUR but not at the profit,
+    // so the taxable result went negative and the unused deficit was wiped
+    // out. The SCI then paid IS on years it should have sheltered.
+    const result = applyISDeficit(new Decimal('10000'), new Decimal('50000'));
+    expect(result.taxableAfterOffset.toNumber()).toBe(0);
+    expect(result.remainingDeficit.toNumber()).toBe(40000);
+  });
+
+  it('should carry the untouched remainder to the following year', () => {
+    const first = applyISDeficit(new Decimal('10000'), new Decimal('50000'));
+    const second = applyISDeficit(new Decimal('15000'), first.remainingDeficit);
+    expect(second.taxableAfterOffset.toNumber()).toBe(0);
+    expect(second.remainingDeficit.toNumber()).toBe(25000);
+  });
+
+  it('should still cap a very large deficit at 1M + 50% beyond', () => {
+    // 3 M of profit: 1 M plus half of the 2 M above it = 2 M imputable.
+    const result = applyISDeficit(new Decimal('3000000'), new Decimal('5000000'));
+    expect(result.taxableAfterOffset.toNumber()).toBe(1000000);
+    expect(result.remainingDeficit.toNumber()).toBe(3000000);
+  });
 });

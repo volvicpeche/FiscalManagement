@@ -55,15 +55,17 @@ export function applyISDeficit(
     return { taxableAfterOffset: profit, remainingDeficit: new Decimal(0) };
   }
 
-  // Cap: 1,000,000 + 50% of profit beyond 1,000,000
-  const cap = Decimal.min(
-    carriedDeficit,
-    Decimal.max(new Decimal('1000000'), profit)
-      .minus(new Decimal('1000000'))
-      .mul('0.5')
-      .plus('1000000'),
-  );
-  const offset = Decimal.min(carriedDeficit, cap);
+  // Legal cap: 1,000,000 + 50% of the profit beyond 1,000,000.
+  const plafondLegal = Decimal.max(new Decimal('1000000'), profit)
+    .minus(new Decimal('1000000'))
+    .mul('0.5')
+    .plus('1000000');
+
+  // The imputation can never exceed the profit of the year either. Without
+  // this bound the taxable result went negative and the unused deficit was
+  // wiped out instead of staying reportable — the SCI then paid IS on later
+  // years it should have sheltered.
+  const offset = Decimal.min(carriedDeficit, plafondLegal, profit);
 
   return {
     taxableAfterOffset: profit.minus(offset),

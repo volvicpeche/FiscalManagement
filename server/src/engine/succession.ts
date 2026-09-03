@@ -14,9 +14,12 @@ const ABATEMENTS: Record<BeneficiaryRelation, Decimal> = {
   OTHER: new Decimal('1594'),
 };
 
-// ─── Direct Line Rate Table (Parent -> Child) ────────────────────────────────
+// ─── Rate tables per relationship ────────────────────────────────────────────
 
-const DIRECT_LINE_BRACKETS: { threshold: Decimal; rate: Decimal }[] = [
+type RateTable = { threshold: Decimal; rate: Decimal }[];
+
+/** Ligne directe: parents, children and grandchildren. */
+const DIRECT_LINE_BRACKETS: RateTable = [
   { threshold: new Decimal('8072'), rate: new Decimal('0.05') },
   { threshold: new Decimal('12109'), rate: new Decimal('0.10') },
   { threshold: new Decimal('15932'), rate: new Decimal('0.15') },
@@ -26,10 +29,45 @@ const DIRECT_LINE_BRACKETS: { threshold: Decimal; rate: Decimal }[] = [
   { threshold: new Decimal('Infinity'), rate: new Decimal('0.45') },
 ];
 
+/** Brothers and sisters: 35 % then 45 %, on a single threshold. */
+const SIBLING_BRACKETS: RateTable = [
+  { threshold: new Decimal('24430'), rate: new Decimal('0.35') },
+  { threshold: new Decimal('Infinity'), rate: new Decimal('0.45') },
+];
+
+/** Up to the fourth degree of kinship: a flat 55 %. */
+const NEPHEW_BRACKETS: RateTable = [
+  { threshold: new Decimal('Infinity'), rate: new Decimal('0.55') },
+];
+
+/** Beyond the fourth degree, and unrelated beneficiaries: a flat 60 %. */
+const OTHER_BRACKETS: RateTable = [
+  { threshold: new Decimal('Infinity'), rate: new Decimal('0.60') },
+];
+
 /**
- * Computes succession tax for a single beneficiary (direct line).
+ * The rate table is NOT the same for everyone.
+ *
+ * Applying the ligne directe table to a brother or a nephew understated the
+ * duties by more than half: a sibling starts at 35 % where a child starts at
+ * 5 %, and an unrelated heir pays a flat 60 %. Only the abatements used to be
+ * differentiated here, which made the estate look far cheaper to pass on to
+ * anyone but a child.
+ */
+const BRACKETS_BY_RELATION: Record<BeneficiaryRelation, RateTable> = {
+  SPOUSE: [], // Exempt — never reached, handled before the table is read.
+  CHILD: DIRECT_LINE_BRACKETS,
+  GRANDCHILD: DIRECT_LINE_BRACKETS,
+  SIBLING: SIBLING_BRACKETS,
+  NEPHEW_NIECE: NEPHEW_BRACKETS,
+  OTHER: OTHER_BRACKETS,
+};
+
+/**
+ * Computes succession tax for a single beneficiary.
  * @param shareValue - Taxable value of the inherited share
- * @param relation - Relationship to the deceased
+ * @param relation - Relationship to the deceased, which picks both the
+ *   abatement and the rate table
  * @returns { taxableBase, tax }
  */
 export function computeSuccessionTax(
@@ -47,11 +85,11 @@ export function computeSuccessionTax(
     return { taxableBase: new Decimal(0), tax: new Decimal(0) };
   }
 
-  // Apply progressive rate table (direct line only for now)
+  // Apply the rate table for this relationship.
   let tax = new Decimal(0);
   let previousThreshold = new Decimal(0);
 
-  for (const bracket of DIRECT_LINE_BRACKETS) {
+  for (const bracket of BRACKETS_BY_RELATION[relation]) {
     if (taxableBase.lte(previousThreshold)) break;
 
     const taxableInBracket = Decimal.min(taxableBase, bracket.threshold).minus(previousThreshold);
