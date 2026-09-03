@@ -32,6 +32,7 @@ import {
   type DeficitVintage,
 } from './associes.js';
 import { computeSaisonnierRevenue } from './saisonnier.js';
+import { QUOTE_PART_TERRAIN_DEFAUT } from './baremes.js';
 import { computeSuccessionForAssocies } from './succession.js';
 import { computeIRR } from './irr.js';
 import { computeFinancement, type FinancementResult } from './financement.js';
@@ -151,7 +152,10 @@ function buildAssetState(asset: AssetInput, structureType: StructureInput['type'
   const notaryFees = d(asset.notaryFees);
   const renovationCosts = d(asset.renovationCosts);
 
-  const landRatio = d('0.15');
+  // Land is never depreciable. The share is a per-asset input now: hard-coding
+  // 15 % understated the depreciation of a country house and overstated that
+  // of a Paris flat, where the land is worth far more than that.
+  const landRatio = d(asset.landRatio ?? QUOTE_PART_TERRAIN_DEFAUT.toNumber());
   const depParams = { purchasePrice, notaryFees, renovationCosts, landRatio };
   const dep = computeYearlyDepreciation(depParams);
 
@@ -420,6 +424,15 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
 
   // ─── 30-year loop ────────────────────────────────────────────────────────
 
+  // Indexation convention, deliberately asymmetric.
+  //
+  // Rents, charges and running costs are indexed on (1 + rate)^(year - 1):
+  // year 1 is quoted at today's figures, which is what the user typed in.
+  // The property value instead compounds from year 1, so it is a value AT THE
+  // END of each year. The two therefore sit a year apart. It is the honest
+  // reading of each — a rent is collected across the year, a valuation is
+  // taken on a date — and the gap is worth about one year of growth on the
+  // asset line alone.
   for (let year = 1; year <= horizon; year++) {
     // Everything that crosses into the associes' own pockets moves
     // personalWealth. Taking its delta over the year gives the family cash

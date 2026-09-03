@@ -1,18 +1,12 @@
 import Decimal from 'decimal.js';
 import type { AssocieInput, AssocieRelation } from '@shared/schemas.js';
+import { SUCCESSION_ABATTEMENTS } from './baremes.js';
 
 // ─── Succession Abatements ───────────────────────────────────────────────────
 
 export type BeneficiaryRelation = 'SPOUSE' | 'CHILD' | 'GRANDCHILD' | 'SIBLING' | 'NEPHEW_NIECE' | 'OTHER';
 
-const ABATEMENTS: Record<BeneficiaryRelation, Decimal> = {
-  SPOUSE: new Decimal('Infinity'), // Full exemption
-  CHILD: new Decimal('100000'),
-  GRANDCHILD: new Decimal('31865'),
-  SIBLING: new Decimal('15932'),
-  NEPHEW_NIECE: new Decimal('7967'),
-  OTHER: new Decimal('1594'),
-};
+const ABATEMENTS: Record<BeneficiaryRelation, Decimal> = SUCCESSION_ABATTEMENTS;
 
 // ─── Rate tables per relationship ────────────────────────────────────────────
 

@@ -42,6 +42,7 @@ const baseRequest: SimulationRequest = {
           annualRent: '12000.00',
           chargesYearly: '2400.00',
           propertyTax: '1200.00',
+          landRatio: 0.15,
           loan: {
             principal: '180000.00',
             interestRate: 0.035,
@@ -1138,6 +1139,7 @@ describe('runSimulation — IRR', () => {
               annualRent: '0.00',
               chargesYearly: '5000.00',
               propertyTax: '0.00',
+              landRatio: 0.15,
               loan: undefined,
             },
           ],
@@ -1856,5 +1858,47 @@ describe('runSimulation — le cout reel de sortir de l\'IS', () => {
 
     expect(parseFloat(s.impotSociete)).toBe(0);
     expect(parseFloat(s.impotAssocies)).toBe(parseFloat(s.impot));
+  });
+});
+
+describe('runSimulation — quote-part de terrain', () => {
+  const avecTerrain = (landRatio: number) =>
+    runSimulation({
+      ...baseRequest,
+      structures: [
+        {
+          ...baseRequest.structures[0],
+          costs: NO_COSTS,
+          assets: [{ ...baseRequest.structures[0].assets[0], landRatio }],
+        },
+      ],
+      params: { ...baseRequest.params, horizonYears: 5 },
+    });
+
+  it('should depreciate less when the land is worth more', () => {
+    // Regression: the share was hard-coded at 15 %, which understated the
+    // depreciation of a country house and overstated that of a city flat.
+    const campagne = avecTerrain(0.1);
+    const ville = avecTerrain(0.35);
+
+    expect(parseFloat(yearOf(campagne, 1).entities['SCI Alpha'].depreciation)).toBeGreaterThan(
+      parseFloat(yearOf(ville, 1).entities['SCI Alpha'].depreciation),
+    );
+  });
+
+  it('should never depreciate the land itself', () => {
+    // 216 000 of basis, a fifth of it land, plus 30 000 of works written off
+    // over fifteen years. After thirty years only the land is left standing.
+    const r = runSimulation({
+      ...baseRequest,
+      structures: [
+        {
+          ...baseRequest.structures[0],
+          costs: NO_COSTS,
+          assets: [{ ...baseRequest.structures[0].assets[0], landRatio: 0.2 }],
+        },
+      ],
+    });
+    expect(parseFloat(r.summary.sortie.valeurNetteComptable)).toBeCloseTo(43200, 0);
   });
 });

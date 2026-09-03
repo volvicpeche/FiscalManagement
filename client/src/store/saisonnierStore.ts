@@ -42,6 +42,7 @@ const DEFAULT_ASSET: AssetInput = {
   annualRent: '0.00',
   chargesYearly: '4000.00',
   propertyTax: '1800.00',
+  landRatio: 0.15,
   saisonnier: DEFAULT_SAISONNIER,
   loan: {
     principal: '350000.00',

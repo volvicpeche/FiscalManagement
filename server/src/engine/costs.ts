@@ -111,6 +111,18 @@ const JURIDIQUE_ANNUEL: PresetLine = {
 const ASSURANCE_PNO: PresetLine = { label: 'Assurance PNO / RC', parMode: flat('200.00') };
 const BANQUE: PresetLine = { label: 'Frais bancaires (compte pro)', parMode: flat('150.00') };
 
+/**
+ * NOT MODELLED: the contribution sur les revenus locatifs.
+ *
+ * It is a levy of 2,5 % of the rents, owed by companies subject to IS on
+ * buildings completed more than fifteen years before. Two things stop it from
+ * being computed here: whether it still applies in 2026 needs checking, and
+ * the model records an acquisition date, not a completion date, so it cannot
+ * tell whether a given building qualifies. Anyone whose property does should
+ * add it as an annual cost line — the presets are overridable for exactly
+ * this kind of case.
+ */
+
 /** Location nue by a civil SCI is in principle outside the scope of CFE. */
 const CFE_IR: PresetLine = { label: 'CFE', parMode: flat('0.00') };
 const CFE_IS: PresetLine = { label: 'CFE', parMode: flat('250.00') };
