@@ -1,0 +1,28 @@
+# Local dev/build:  docker compose up --build   (podman-compose up --build)
+# Production (VPS): docker compose pull && docker compose up -d
+#   IMAGE_TAG picks the version pulled from GHCR; defaults to latest.
+#   `build:` is only used when building locally — `pull`/`up -d` on the VPS
+#   never touches it, so the VPS needs no copy of the source tree.
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    image: ghcr.io/volvicpeche/fiscalmanagement-server:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file:
+      - server/.env
+    expose:
+      - "3000"
+
+  web:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    image: ghcr.io/volvicpeche/fiscalmanagement-web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "80:80"

@@ -29,6 +29,13 @@ const MAX_TEXT_CHARS = 20000;
 /** Chrome must be visible, but it does not have to be in the way. */
 const OFFSCREEN_ARGS = ['--window-position=-2400,-2400', '--disable-blink-features=AutomationControlled'];
 
+// Chrome refuses its own sandbox as root, which is how it runs in the
+// container image (see server/Dockerfile) — CHROME_NO_SANDBOX is set there
+// only, so local dev keeps the sandbox.
+if (process.env.CHROME_NO_SANDBOX === 'true') {
+  OFFSCREEN_ARGS.push('--no-sandbox');
+}
+
 let contextPromise: Promise<BrowserContext> | null = null;
 
 /**
