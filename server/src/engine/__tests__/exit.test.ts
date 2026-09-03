@@ -14,6 +14,7 @@ const base = (over: Partial<ExitParams> = {}): ExitParams => ({
   detteResiduelle: new Decimal('0'),
   dureeDetention: 30,
   regimeSocial: 'STANDARD',
+  capitalSocial: new Decimal('1000'),
   ...over,
 });
 
@@ -219,5 +220,41 @@ describe('computeExitLMP — abattement 151 septies B', () => {
     );
     expect(r.amortissementsRepris.toNumber()).toBe(200000);
     expect(r.impot.gt(new Decimal('70000'))).toBe(true);
+  });
+});
+
+describe('computeExitIS — les deux etages', () => {
+  it('should add the associes tax on top of the corporate one', () => {
+    const r = computeExitIS(base({ cumulAmortissements: new Decimal('200000') }));
+    expect(r.impotSociete.gt(0)).toBe(true);
+    expect(r.impotAssocies.gt(0)).toBe(true);
+    expect(r.impot.toNumber()).toBeCloseTo(
+      r.impotSociete.plus(r.impotAssocies).toNumber(),
+      2,
+    );
+  });
+
+  it('should hand the share capital back untaxed', () => {
+    // The boni is what is left once the associes have recovered their capital.
+    const petit = computeExitIS(base({ capitalSocial: new Decimal('1000') }));
+    const gros = computeExitIS(base({ capitalSocial: new Decimal('100000') }));
+
+    expect(gros.boniLiquidation.lt(petit.boniLiquidation)).toBe(true);
+    expect(gros.impotAssocies.lt(petit.impotAssocies)).toBe(true);
+    // The corporate floor does not care who put the capital in.
+    expect(gros.impotSociete.toNumber()).toBe(petit.impotSociete.toNumber());
+  });
+
+  it('should exempt a Swiss-affiliated associe from the CSG on the boni', () => {
+    const standard = computeExitIS(base({ regimeSocial: 'STANDARD' }));
+    const suisse = computeExitIS(base({ regimeSocial: 'SWISS_EXEMPT' }));
+    expect(suisse.impotAssocies.lt(standard.impotAssocies)).toBe(true);
+    expect(suisse.impotSociete.toNumber()).toBe(standard.impotSociete.toNumber());
+  });
+
+  it('should leave the IR exit a single, personal floor', () => {
+    const r = computeExitIR(base({ dureeDetention: 10 }));
+    expect(r.impotSociete.toNumber()).toBe(0);
+    expect(r.impotAssocies.toNumber()).toBe(r.impot.toNumber());
   });
 });

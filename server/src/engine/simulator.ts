@@ -88,6 +88,17 @@ interface EntityState {
   carriedDeficit: Decimal;
   /** Taxable result of the current year, after the deficit offset. */
   lastTaxableAfterOffset: Decimal;
+  /**
+   * Accumulated result after tax, less what has already been handed out.
+   *
+   * A company distributes profits, not cash. At IS the two diverge badly and
+   * durably: depreciation is a charge that consumes no cash, so the treasury
+   * fills up while the accounting result stays flat or negative. Letting the
+   * model pay dividends out of that cash handed the associes money the SCI
+   * legally could not have distributed. Losses have to be made good first,
+   * which is why this is allowed to go negative.
+   */
+  reservesDistribuables: Decimal;
   accumulatedCash: Decimal;
   /** Bank debt outstanding at the end of the last simulated year. */
   lastRemainingDebt: Decimal;
@@ -299,6 +310,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       costs,
       carriedDeficit: d(0),
       lastTaxableAfterOffset: d(0),
+      reservesDistribuables: d(0),
       // The apport covers the acquisition AND the setup costs exactly, so the
       // company opens at zero. Starting at -constitution would charge those
       // costs twice: once here and once inside apportRequis.
@@ -613,6 +625,13 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         }
       }
 
+      // The year's accounting result joins the reserves. Taken as the taxable
+      // result net of tax: in this model the two only differ by the deficit
+      // carry-forward, which is a fiscal timing device, not a charge.
+      state.reservesDistribuables = state.reservesDistribuables.plus(
+        taxableProfit.minus(entityTax),
+      );
+
       // 6. Net cash flow for entity, before repaying any compte courant
       let entityNetCashFlow = netRents
         .minus(entityLoanPayment)
@@ -702,7 +721,9 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       if (parentName && state.accumulatedCash.gt(0)) {
         const parentState = entityStates.get(parentName);
         if (parentState && parentState.taxRegime === 'IS') {
-          const distribue = state.accumulatedCash;
+          // Only what is both available in cash AND distributable as profit.
+          const distribue = Decimal.min(state.accumulatedCash, state.reservesDistribuables);
+          if (distribue.lte(0)) continue;
           const dividend = distribue.mul(state.ownershipShare);
           dividendesVerses.set(name, (dividendesVerses.get(name) ?? d(0)).plus(distribue));
           // The 5 % quote-part de frais et charges is an ordinary piece of the
@@ -721,6 +742,12 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
           parentState.lastTaxableAfterOffset = socleTaxable.plus(qpDeficit.taxableAfterOffset);
 
           parentState.accumulatedCash = parentState.accumulatedCash.plus(dividend).minus(qpTax);
+          // A dividend received is income of the parent, so it becomes
+          // distributable in its turn once its own tax is paid.
+          parentState.reservesDistribuables = parentState.reservesDistribuables
+            .plus(dividend)
+            .minus(qpTax);
+          state.reservesDistribuables = state.reservesDistribuables.minus(distribue);
           totalTaxPaid = totalTaxPaid.plus(qpTax);
 
           // Report it on the parent's own tax line, otherwise totalTaxPaid no
@@ -733,7 +760,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
               .toFixed(2);
           }
           // The minority share leaves the group with the other shareholders.
-          state.accumulatedCash = d(0);
+          state.accumulatedCash = state.accumulatedCash.minus(distribue);
         }
       }
     }
@@ -754,7 +781,10 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       for (const [, state] of entityStates) {
         const isTopLevel = !parentMap.has(state.name);
         if (isTopLevel && state.taxRegime === 'IS' && state.accumulatedCash.gt(0)) {
-          const grossDividend = state.accumulatedCash.mul(dividendRate);
+          const grossDividend = Decimal.min(
+            state.accumulatedCash.mul(dividendRate),
+            Decimal.max(d(0), state.reservesDistribuables),
+          );
           if (grossDividend.gt(0)) {
             // A dividend is taxed in the hands of each associe, pro-rata to
             // their parts, on their own household and on top of their own
@@ -796,6 +826,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
               (dividendesVerses.get(state.name) ?? d(0)).plus(grossDividend),
             );
             state.accumulatedCash = state.accumulatedCash.minus(grossDividend);
+            state.reservesDistribuables = state.reservesDistribuables.minus(grossDividend);
           }
         }
       }
@@ -967,6 +998,11 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       cumulAmortissements: d(0), detteResiduelle: d(0),
       dureeDetention: horizon,
       regimeSocial: userProfile.socialChargeRegime ?? ('STANDARD' as const),
+      // Share capital comes back to the associes untaxed on a winding-up.
+      capitalSocial: holders.reduce(
+        (acc, s) => acc.plus(s.associes.reduce((a, x) => a.plus(x.input.apportCapital), d(0))),
+        d(0),
+      ),
     },
   );
 
@@ -979,7 +1015,8 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
     sortie = {
       regime: holderPrincipal?.taxRegime === 'IS' ? 'IS' : 'IR',
       prixVente: d(0), valeurNetteComptable: d(0), prixAcquisition: d(0),
-      plusValueBrute: d(0), amortissementsRepris: d(0), impot: d(0),
+      plusValueBrute: d(0), amortissementsRepris: d(0),
+      impotSociete: d(0), impotAssocies: d(0), boniLiquidation: d(0), impot: d(0),
       detteResiduelle: sortieParams.detteResiduelle, produitNet: d(0),
     };
   } else if (holderPrincipal?.isBic && vendeur) {
@@ -1013,6 +1050,9 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         prixAcquisition: sortie.prixAcquisition.toFixed(2),
         plusValueBrute: sortie.plusValueBrute.toFixed(2),
         amortissementsRepris: sortie.amortissementsRepris.toFixed(2),
+        impotSociete: sortie.impotSociete.toFixed(2),
+        impotAssocies: sortie.impotAssocies.toFixed(2),
+        boniLiquidation: sortie.boniLiquidation.toFixed(2),
         impot: sortie.impot.toFixed(2),
         detteResiduelle: sortie.detteResiduelle.toFixed(2),
         produitNet: sortie.produitNet.toFixed(2),

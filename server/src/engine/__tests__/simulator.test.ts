@@ -1763,3 +1763,98 @@ describe('runSimulation — quote-part mere-fille', () => {
     expect(parseFloat(r.summary.totalTaxPaid)).toBeCloseTo(cumul, 0);
   });
 });
+
+describe('runSimulation — benefice distribuable', () => {
+  // Bought outright, so the treasury fills up fast, but the works are written
+  // off over fifteen years and swallow the whole accounting result.
+  const amortiFort = (horizonYears: number): SimulationRequest => ({
+    ...baseRequest,
+    structures: [
+      {
+        ...baseRequest.structures[0],
+        costs: NO_COSTS,
+        assets: [
+          {
+            ...baseRequest.structures[0].assets[0],
+            purchasePrice: '400000.00',
+            notaryFees: '32000.00',
+            renovationCosts: '300000.00',
+            annualRent: '30000.00',
+            loan: undefined,
+          },
+        ],
+      },
+    ],
+    params: { ...baseRequest.params, horizonYears, dividendDistributionRate: 0.5 },
+  });
+
+  it('should refuse to distribute cash that is not a profit', () => {
+    // Regression: dividends used to be paid out of the treasury. At IS the
+    // two diverge for years — depreciation consumes no cash — so the model
+    // handed the associes money the SCI legally could not distribute.
+    const r = runSimulation(amortiFort(10));
+    const tresorerie = parseFloat(yearOf(r, 10).entities['SCI Alpha'].tresorerie);
+    const distribue = r.yearlyData.reduce((acc, y) => acc + parseFloat(y.userNetDividend), 0);
+
+    expect(tresorerie).toBeGreaterThan(100000);
+    expect(distribue).toBe(0);
+  });
+
+  it('should resume once the result has caught up', () => {
+    // Past the fifteenth year the works are fully written off, the result
+    // turns positive and the reserves eventually go back above water.
+    const r = runSimulation(amortiFort(30));
+    const distribue = r.yearlyData.reduce((acc, y) => acc + parseFloat(y.userNetDividend), 0);
+    expect(distribue).toBeGreaterThan(0);
+  });
+
+  it('should still let a profitable SCI pay out', () => {
+    const r = runSimulation({
+      ...baseRequest,
+      structures: [
+        {
+          ...baseRequest.structures[0],
+          costs: NO_COSTS,
+          assets: [{ ...baseRequest.structures[0].assets[0], annualRent: '40000.00' }],
+        },
+      ],
+      params: { ...baseRequest.params, horizonYears: 15, dividendDistributionRate: 0.5 },
+    });
+    expect(r.yearlyData.some((y) => parseFloat(y.userNetDividend) > 0)).toBe(true);
+  });
+});
+
+describe('runSimulation — le cout reel de sortir de l\'IS', () => {
+  it('should charge both floors when leaving an SCI at IS', () => {
+    const s = runSimulation({
+      ...baseRequest,
+      structures: [{ ...baseRequest.structures[0], costs: NO_COSTS }],
+    }).summary.sortie;
+
+    expect(parseFloat(s.impotSociete)).toBeGreaterThan(0);
+    expect(parseFloat(s.impotAssocies)).toBeGreaterThan(0);
+    expect(parseFloat(s.impot)).toBeCloseTo(
+      parseFloat(s.impotSociete) + parseFloat(s.impotAssocies),
+      2,
+    );
+  });
+
+  it('should not pretend an SCI at IR has a company floor', () => {
+    const s = runSimulation({
+      ...baseRequest,
+      structures: [
+        {
+          ...baseRequest.structures[0],
+          type: 'SCI_IR',
+          taxRegime: 'IR',
+          costs: NO_COSTS,
+          associes: [associe({ nom: 'Moi', partsPercent: 1 })],
+        },
+      ],
+      params: { ...baseRequest.params, horizonYears: 15 },
+    }).summary.sortie;
+
+    expect(parseFloat(s.impotSociete)).toBe(0);
+    expect(parseFloat(s.impotAssocies)).toBe(parseFloat(s.impot));
+  });
+});
