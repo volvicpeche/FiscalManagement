@@ -33,6 +33,10 @@ Copy `docker-compose.yml` from this repo to `~/patrimonia/docker-compose.yml`
 (scp it, or just paste it — it's short). It only references prebuilt images,
 so the VPS never needs the source tree.
 
+**This copy is not updated by the deploy workflow** — the workflow only pulls
+new *images*. Whenever `docker-compose.yml` changes in the repo, re-copy it to
+the VPS by hand, otherwise the VPS keeps running the old one.
+
 Create `~/patrimonia/server/.env` from `server/.env.example`, filled with
 real values (LLM provider key if you want the "Analyser une annonce" feature,
 etc.) — **do not commit this file**, it stays only on the VPS.
@@ -73,6 +77,24 @@ authenticates with `GITHUB_TOKEN` before pulling, so private works too.
 
 Check it worked: `curl http://<VPS_IP>/api/health` → `{"status":"ok"}`, and
 the app itself at `http://<VPS_IP>/`.
+
+## Persistent data
+
+Saved scenarios are JSON files written to disk by
+`server/src/services/scenarioStore.ts`, not rows in a database. They live in
+the named volume `scenarios`, mounted at `/app/server/data` in the `server`
+container — every `docker compose up -d` replaces that container, so without
+the volume each deploy would silently wipe every saved scenario.
+
+```bash
+# Back it up (run on the VPS, adjust the volume name if compose prefixed it —
+# check with `docker volume ls`):
+docker run --rm -v patrimonia_scenarios:/data -v "$PWD":/backup alpine \
+  tar czf /backup/scenarios-$(date +%F).tar.gz -C /data .
+```
+
+`docker compose down` keeps the volume; `docker compose down -v` **deletes**
+it. Never use `-v` on the VPS.
 
 ## 4. Adding a real domain + HTTPS later
 

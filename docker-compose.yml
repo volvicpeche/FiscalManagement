@@ -15,6 +15,11 @@ services:
       - server/.env
     expose:
       - "3000"
+    # Saved scenarios are JSON files on disk (services/scenarioStore.ts), not
+    # rows in a database. Without this volume every `up -d` replaces the
+    # container and takes the user's saved scenarios with it.
+    volumes:
+      - scenarios:/app/server/data
 
   web:
     build:
@@ -26,3 +31,6 @@ services:
       - server
     ports:
       - "80:80"
+
+volumes:
+  scenarios:
