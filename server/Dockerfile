@@ -4,7 +4,7 @@
 # package-lock.json plus every workspace's package.json to install).
 
 # ---------- build ----------
-FROM node:20-bookworm-slim AS builder
+FROM node:24-bookworm-slim AS builder
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -20,7 +20,7 @@ RUN npm run build --workspace=server
 RUN npm prune --omit=dev
 
 # ---------- runtime ----------
-FROM node:20-bookworm-slim AS runtime
+FROM node:24-bookworm-slim AS runtime
 ENV NODE_ENV=production \
     DISPLAY=:99 \
     CHROME_NO_SANDBOX=true

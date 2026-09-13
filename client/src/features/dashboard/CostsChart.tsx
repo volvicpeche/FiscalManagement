@@ -51,7 +51,7 @@ export function CostsChart({ results }: ResultsProps) {
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="annee" label={{ value: 'Annee', position: 'insideBottom', offset: -5 }} />
           <YAxis tickFormatter={(v: number) => formatEur(v)} width={100} />
-          <Tooltip formatter={(val: number) => formatEur(val)} />
+          <Tooltip formatter={(val) => formatEur(Number(val))} />
           <Legend />
           {available.map((p) => (
             <Line

@@ -1,3 +1,16 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/*
+ * Tailwind v4 compatibility: v3 defaulted a colorless `border` / `divide`
+ * utility to gray-200, v4 defaults it to currentColor. The app uses the bare
+ * `border` utility in ~77 places, so this keeps them looking as they did.
+ */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+}

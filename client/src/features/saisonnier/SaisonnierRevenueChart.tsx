@@ -22,7 +22,7 @@ export function SaisonnierRevenueChart({ saisonnier }: { saisonnier: SaisonnierP
           <CartesianGrid strokeDasharray="3 3" horizontal={false} />
           <XAxis type="number" tickFormatter={(v: number) => formatEur(v)} />
           <YAxis type="category" dataKey="saison" width={70} />
-          <Tooltip formatter={(val: number) => formatEur(val)} />
+          <Tooltip formatter={(val) => formatEur(Number(val))} />
           <Bar dataKey="ca" radius={[0, 4, 4, 0]}>
             {data.map((_, i) => (
               <Cell key={i} fill={SEASON_COLORS[i]} />

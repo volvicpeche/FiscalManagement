@@ -29,7 +29,7 @@ export function SaisonnierCashFlowChart({ result }: { result: SimulationResult }
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="annee" label={{ value: 'Annee', position: 'insideBottom', offset: -5 }} />
           <YAxis tickFormatter={(v: number) => formatEur(v)} width={100} />
-          <Tooltip formatter={(val: number) => formatEur(val)} />
+          <Tooltip formatter={(val) => formatEur(Number(val))} />
           <Legend />
           <ReferenceLine y={0} stroke="#9ca3af" />
           <Line type="monotone" dataKey="Cash flow net" stroke="#ea580c" strokeWidth={2} dot={false} />

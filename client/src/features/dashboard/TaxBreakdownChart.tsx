@@ -51,7 +51,7 @@ export function TaxBreakdownChart({ results }: ResultsProps) {
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="annee" />
           <YAxis tickFormatter={(v: number) => formatEur(v)} width={100} />
-          <Tooltip formatter={(val: number) => formatEur(val)} />
+          <Tooltip formatter={(val) => formatEur(Number(val))} />
           <Legend />
           {available.map((p) => (
             <Bar key={p} dataKey={PROFILE_META[p].short} fill={PROFILE_META[p].stroke} />

@@ -216,9 +216,9 @@ export const StructureSchema = z.object({
   taxRegime: TaxRegime.default('IS'),
   ownershipShare: z.number().min(0).max(1).default(1.0),
   associes: z.array(AssocieSchema).default([]),
-  costs: EntityCostsSchema.default({}),
+  costs: EntityCostsSchema.prefault({}),
   assets: z.array(AssetSchema).default([]),
-  subsidiaries: z.lazy((): z.ZodType => z.array(StructureSchema)).default([]),
+  subsidiaries: z.lazy((): z.ZodType<any[]> => z.array(StructureSchema)).default([]),
   /**
    * LMP only — indicative flat rate for TNS (SSI) social contributions on the
    * BIC result, distinct from the CSG/PS rate applied to passive foncier
@@ -273,7 +273,7 @@ export const SimulationRequestSchema = z
   .object({
     userProfile: UserProfileSchema,
     structures: z.array(StructureSchema).min(1),
-    params: SimulationParamsSchema.default({}),
+    params: SimulationParamsSchema.prefault({}),
   })
   .superRefine((req, ctx) => {
     // Parts validation is done here rather than on StructureSchema itself:
