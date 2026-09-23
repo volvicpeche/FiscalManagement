@@ -21,5 +21,8 @@ RUN npm run build --workspace=client
 # ---------- runtime ----------
 FROM nginx:1.31-alpine AS runtime
 COPY client/nginx.conf /etc/nginx/conf.d/default.conf
+COPY client/proxy-api.inc client/security-headers.inc /etc/nginx/conf.d/
+# Lancé par l'entrypoint officiel de l'image nginx avant le démarrage.
+COPY --chmod=755 client/docker-entrypoint.d/40-verifier-mot-de-passe.sh /docker-entrypoint.d/
 COPY --from=builder /app/client/dist /usr/share/nginx/html
 EXPOSE 80

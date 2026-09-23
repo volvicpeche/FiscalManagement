@@ -1,6 +1,7 @@
 import type { ListingExtraction } from '@shared/listing.js';
 import { extractListingViaLlm } from './llm/index.js';
 import { fetchListingTextViaBrowser, browserFallbackEnabled } from './browserFetch.js';
+import { AdresseRefuseeError, assertUrlPublique, fetchPublic } from './netGuard.js';
 
 const MAX_TEXT_CHARS = 20000;
 const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
@@ -73,7 +74,8 @@ function fetchFailureMessage(status: number, host: string): string {
 async function fetchListingText(url: URL): Promise<string> {
   let response: Response;
   try {
-    response = await fetch(url, {
+    // Redirects are followed by hand, each hop checked against private ranges.
+    response = await fetchPublic(url, {
       headers: {
         // Kept honest on purpose: spoofing a browser User-Agent does not get
         // past SeLoger/LeBonCoin/PAP, which block server-side requests
@@ -83,10 +85,10 @@ async function fetchListingText(url: URL): Promise<string> {
         Accept: 'text/html,application/xhtml+xml',
         'Accept-Language': 'fr-FR,fr;q=0.9',
       },
-      redirect: 'follow',
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
   } catch (err) {
+    if (err instanceof AdresseRefuseeError) throw err;
     // Without this the request hangs forever on a tarpitting host, the proxy
     // eventually closes the connection with an empty body, and the browser
     // reports a bare "Unexpected end of JSON input".
@@ -136,6 +138,8 @@ async function fetchListingWithFallback(url: URL): Promise<string> {
   try {
     return await fetchListingText(url);
   } catch (directErr) {
+    // A refused address stays refused: Chrome would reach it just the same.
+    if (directErr instanceof AdresseRefuseeError) throw directErr;
     if (!browserFallbackEnabled()) throw directErr;
 
     try {
@@ -155,6 +159,8 @@ async function fetchListingWithFallback(url: URL): Promise<string> {
  */
 export async function analyzeListing(rawUrl: string): Promise<ListingExtraction> {
   const url = assertPublicHttpUrl(rawUrl);
+  // The string check above is cheap but blind to DNS: resolve and check too.
+  await assertUrlPublique(url);
   const text = await fetchListingWithFallback(url);
   return extractListingViaLlm(text);
 }

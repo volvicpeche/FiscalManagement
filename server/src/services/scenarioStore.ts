@@ -27,6 +27,21 @@ const DATA_DIR = process.env.SCENARIO_DIR ?? path.join(process.cwd(), 'data', 's
 /** Ids come from the URL, so they must never be able to escape the directory. */
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * Ceiling on stored scenarios. Each is capped at the 1 MB request body limit,
+ * so without it a loop of POSTs could fill the disk. Far above personal use.
+ */
+export const MAX_SCENARIOS = Number(process.env.MAX_SCENARIOS ?? 200);
+
+export class TropDeScenariosError extends Error {
+  constructor() {
+    super(
+      `Limite de ${MAX_SCENARIOS} scenarios enregistres atteinte. Supprimez-en avant d'en ajouter.`,
+    );
+    this.name = 'TropDeScenariosError';
+  }
+}
+
 export function isValidId(id: string): boolean {
   return ID_PATTERN.test(id);
 }
@@ -49,6 +64,9 @@ async function writeAtomic(file: string, contents: string): Promise<void> {
 
 export async function saveScenario(input: SaveScenarioRequest): Promise<SavedScenario> {
   await ensureDir();
+  const existants = (await readdir(DATA_DIR)).filter((f) => f.endsWith('.json'));
+  if (existants.length >= MAX_SCENARIOS) throw new TropDeScenariosError();
+
   const now = new Date().toISOString();
 
   const scenario: SavedScenario = {

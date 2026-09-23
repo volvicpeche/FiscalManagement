@@ -31,6 +31,10 @@ services:
       - server
     ports:
       - "80:80"
+    # Mot de passe du site, jamais commite (voir DEPLOY.md, etape 3c). Sans
+    # lui, le conteneur web refuse de demarrer.
+    volumes:
+      - ./web/htpasswd:/etc/nginx/auth/htpasswd:ro
 
 volumes:
   scenarios:
