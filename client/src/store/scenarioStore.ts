@@ -14,9 +14,9 @@ import { redistributeParts } from '@shared/parts.js';
 import { PROFILE_ORDER } from '@/lib/profiles';
 
 /**
- * The three scenarios are DERIVED from one set of shared inputs rather than
- * kept as three copies to be synced. Editing the property, the loan or the
- * associes therefore applies to all three comparisons by construction.
+ * The scenarios are DERIVED from one set of shared inputs rather than kept as
+ * copies to be synced. Editing the property, the loan or the associes
+ * therefore applies to every comparison by construction.
  */
 
 // ─── Defaults ────────────────────────────────────────────────────────────────
@@ -118,12 +118,16 @@ const EMPTY_RESULTS: Record<ScenarioProfile, SimulationResult | null> = {
   SCI_IR: null,
   SCI_IS_SEULE: null,
   SCI_IS_HOLDING: null,
+  LMNP_REEL: null,
+  LMNP_MICRO: null,
 };
 
 const EMPTY_OVERRIDES: Record<ScenarioProfile, Record<string, EntityCostsInput>> = {
   SCI_IR: {},
   SCI_IS_SEULE: {},
   SCI_IS_HOLDING: {},
+  LMNP_REEL: {},
+  LMNP_MICRO: {},
 };
 
 // ─── Scenario construction ───────────────────────────────────────────────────
@@ -171,6 +175,37 @@ export function buildScenario(profile: ScenarioProfile, shared: SharedInputs): S
       // An SCI at IR distributes nothing: the associes are taxed on the
       // result whether they take the cash out or not.
       params: { ...params, dividendDistributionRate: 0 },
+    };
+  }
+
+  if (profile === 'LMNP_REEL' || profile === 'LMNP_MICRO') {
+    // Long-term furnished letting, owned directly — in indivision when there
+    // are several associes, each taxed on their share of the BIC.
+    const name = profile === 'LMNP_REEL' ? 'LMNP (reel)' : 'LMNP (micro-BIC)';
+    return {
+      userProfile,
+      structures: [
+        {
+          name,
+          type: 'LMNP',
+          taxRegime: 'IR',
+          ownershipShare: 1,
+          tauxCotisationsSocialesLMP: 0.35,
+          cotisationsMinimalesLMP: '1200.00',
+          regimeLMNP: profile === 'LMNP_REEL' ? 'REEL' : 'MICRO_BIC',
+          associes,
+          costs: costsFor(shared, profile, name),
+          assets: [asset],
+          subsidiaries: [],
+        },
+      ],
+      params: {
+        ...params,
+        // No company, so nothing to distribute...
+        dividendDistributionRate: 0,
+        // ...and the heirs receive the walls themselves, not unlisted shares.
+        illiquidityDiscount: 0,
+      },
     };
   }
 
@@ -232,6 +267,8 @@ export function buildAllScenarios(shared: SharedInputs): Record<ScenarioProfile,
     SCI_IR: buildScenario('SCI_IR', shared),
     SCI_IS_SEULE: buildScenario('SCI_IS_SEULE', shared),
     SCI_IS_HOLDING: buildScenario('SCI_IS_HOLDING', shared),
+    LMNP_REEL: buildScenario('LMNP_REEL', shared),
+    LMNP_MICRO: buildScenario('LMNP_MICRO', shared),
   };
 }
 
@@ -324,7 +361,10 @@ export const useScenarioStore = create<ScenarioStore>((set) => ({
       associes: data.associes ?? s.associes,
       params: data.params ?? s.params,
       managementMode: data.managementMode ?? s.managementMode,
-      costOverrides: data.costOverrides ?? s.costOverrides,
+      // Saves made before the LMNP columns existed carry no entry for them.
+      costOverrides: data.costOverrides
+        ? { ...EMPTY_OVERRIDES, ...data.costOverrides }
+        : s.costOverrides,
       // A loaded scenario has not been run yet.
       results: EMPTY_RESULTS,
     })),

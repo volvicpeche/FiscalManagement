@@ -22,7 +22,7 @@ import {
  * is made on the whole cycle rather than on the comfortable part of it.
  */
 
-export type ExitRegime = 'IS' | 'IR' | 'LMP';
+export type ExitRegime = 'IS' | 'IR' | 'LMP' | 'LMNP';
 
 export interface ExitResult {
   regime: ExitRegime;
@@ -235,5 +235,37 @@ export function computeExitLMP(
     impot,
     detteResiduelle: p.detteResiduelle,
     produitNet: p.prixVente.minus(impot).minus(p.detteResiduelle),
+  };
+}
+
+/**
+ * LMNP: a private capital gain, taxed like an SCI at IR — 19 % plus social
+ * charges, with the holding-period abatements — but since the loi de finances
+ * pour 2025 (art. 150 VB II CGI) the acquisition price is reduced by every
+ * euro of depreciation actually deducted during the letting. Depreciation
+ * still deferred at the sale was never deducted, so it is not added back.
+ *
+ * The holding-period abatements soften the add-back: past 22 years the
+ * income-tax part is exempt whatever the depreciation, past 30 the social
+ * charges too.
+ *
+ * Simplification: the exception for student, senior and EHPAD residences
+ * (which keep the old rule) is not modelled.
+ *
+ * @param amortissementsDeduits - What the reel actually deducted. Zero under
+ *   the micro-BIC, which knows no depreciation.
+ */
+export function computeExitLMNP(p: ExitParams, amortissementsDeduits: Decimal): ExitResult {
+  const ir = computeExitIR({
+    ...p,
+    prixAcquisition: p.prixAcquisition.minus(amortissementsDeduits),
+    cumulAmortissements: amortissementsDeduits,
+  });
+
+  return {
+    ...ir,
+    regime: 'LMNP',
+    valeurNetteComptable: p.baseAmortissable.minus(amortissementsDeduits),
+    amortissementsRepris: Decimal.min(ir.plusValueBrute, amortissementsDeduits),
   };
 }

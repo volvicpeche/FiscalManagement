@@ -1,7 +1,13 @@
 import type { ScenarioProfile, StructureType } from '@shared/schemas.js';
 
-/** Display order of the three structural setups being compared. */
-export const PROFILE_ORDER: ScenarioProfile[] = ['SCI_IR', 'SCI_IS_SEULE', 'SCI_IS_HOLDING'];
+/** Display order of the structural setups being compared. */
+export const PROFILE_ORDER: ScenarioProfile[] = [
+  'SCI_IR',
+  'SCI_IS_SEULE',
+  'SCI_IS_HOLDING',
+  'LMNP_REEL',
+  'LMNP_MICRO',
+];
 
 export interface ProfileMeta {
   label: string;
@@ -49,16 +55,50 @@ export const PROFILE_META: Record<ScenarioProfile, ProfileMeta> = {
     bg: 'bg-violet-50',
     border: 'border-violet-200',
   },
+  LMNP_REEL: {
+    label: 'LMNP au reel',
+    short: 'LMNP reel',
+    description:
+      'Location meublee longue duree, bien detenu en direct (en indivision s’il y a plusieurs associes). L’amortissement efface le loyer sans jamais creer de deficit ; l’excedent est differe. Aucune societe, mais une liasse BIC chaque annee et les amortissements reintegres dans la plus-value a la revente.',
+    stroke: '#10b981',
+    fill: '#a7f3d0',
+    text: 'text-emerald-700',
+    bg: 'bg-emerald-50',
+    border: 'border-emerald-200',
+  },
+  LMNP_MICRO: {
+    label: 'LMNP micro-BIC',
+    short: 'LMNP micro',
+    description:
+      'Location meublee longue duree en direct, au forfait : 50 % du loyer brut est impose, sans charges, interets ni amortissements. Aucune comptabilite, plus-value des particuliers sans reprise. Au-dela de 77 700 EUR de loyers, le reel s’applique.',
+    stroke: '#0891b2',
+    fill: '#a5f3fc',
+    text: 'text-cyan-700',
+    bg: 'bg-cyan-50',
+    border: 'border-cyan-200',
+  },
 };
 
+export interface EntitySpec {
+  name: string;
+  type: StructureType;
+  /** Cost preset to read when it is not the structure type's own. */
+  presetKey?: CostPresetKey;
+}
+
+/** Keys of the cost presets served by the engine. */
+export type CostPresetKey = StructureType | 'LMNP_MICRO_BIC';
+
 /** Entities produced by `buildScenario`, per profile — name and legal type. */
-export const ENTITY_SPECS: Record<ScenarioProfile, { name: string; type: StructureType }[]> = {
+export const ENTITY_SPECS: Record<ScenarioProfile, EntitySpec[]> = {
   SCI_IR: [{ name: 'SCI (IR)', type: 'SCI_IR' }],
   SCI_IS_SEULE: [{ name: 'SCI (IS)', type: 'SCI_IS' }],
   SCI_IS_HOLDING: [
     { name: 'Holding', type: 'HOLDING' },
     { name: 'SCI (IS)', type: 'SCI_IS' },
   ],
+  LMNP_REEL: [{ name: 'LMNP (reel)', type: 'LMNP' }],
+  LMNP_MICRO: [{ name: 'LMNP (micro-BIC)', type: 'LMNP', presetKey: 'LMNP_MICRO_BIC' }],
 };
 
 export const MODE_LABELS: Record<string, string> = {

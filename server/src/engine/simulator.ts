@@ -36,7 +36,14 @@ import { QUOTE_PART_TERRAIN_DEFAUT } from './baremes.js';
 import { computeSuccessionForAssocies } from './succession.js';
 import { computeIRR } from './irr.js';
 import { computeFinancement, type FinancementResult } from './financement.js';
-import { computeExitIS, computeExitIR, computeExitLMP, type ExitResult } from './exit.js';
+import {
+  computeExitIS,
+  computeExitIR,
+  computeExitLMP,
+  computeExitLMNP,
+  type ExitResult,
+} from './exit.js';
+import { applyLMNPReel, computeAssocieLMNP, computeMicroBIC } from './lmnp.js';
 
 // ─── Internal types for simulation state ─────────────────────────────────────
 
@@ -109,6 +116,22 @@ interface EntityState {
   isBic: boolean;
   tauxCotisationsSocialesLMP: Decimal;
   cotisationsMinimalesLMP: Decimal;
+  /** LMNP only: the carry-forwards the art. 39 C cap and the BIC deficit rules create. */
+  lmnp?: LMNPState;
+}
+
+interface LMNPState {
+  regime: 'REEL' | 'MICRO_BIC';
+  /** Seasonal letting without a classement: the tighter micro-BIC threshold. */
+  tourismeNonClasse: boolean;
+  /** Real-charge deficits, offsetting LMNP profits only, for ten years. */
+  deficits: DeficitVintage[];
+  /** Depreciation the cap did not let through yet — carried with no time limit. */
+  amortissementsDifferes: Decimal;
+  /** Depreciation actually deducted — what the LF 2025 adds back at the sale. */
+  amortissementsDeduitsCumul: Decimal;
+  /** Receipts of the previous year: they decide whether the micro-BIC applies. */
+  recettesPrecedentes: Decimal;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -137,6 +160,7 @@ function zeroEntityYear(overrides: Partial<Record<keyof EntityYear, Decimal>> = 
     ccaRembourse: get('ccaRembourse'),
     ccaSolde: get('ccaSolde'),
     dividendeVerse: get('dividendeVerse'),
+    lmnp: undefined,
     // Year 0 is incorporation: nothing has been earned or spent on the asset yet.
     detail: {
       loyerNu: '0.00', caHauteSaison: '0.00', caMoyenneSaison: '0.00', caBasseSaison: '0.00',
@@ -184,7 +208,8 @@ function buildAssetState(asset: AssetInput, structureType: StructureInput['type'
     loanPrincipalInitial: asset.loan ? d(asset.loan.principal) : d(0),
     cumulAmortissements: d(0),
     yearlyDepreciation:
-      (structureType === 'SCI_IS' || structureType === 'HOLDING' || structureType === 'LMP')
+      (structureType === 'SCI_IS' || structureType === 'HOLDING' || structureType === 'LMP' ||
+        structureType === 'LMNP')
         ? dep.total
         : d(0),
     buildingDepreciationYearsLeft: 25,
@@ -300,9 +325,19 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
   const entityStates: Map<string, EntityState> = new Map();
   for (const { entity } of flatEntities) {
     const taxRegime: 'IS' | 'IR' =
-      entity.type === 'SCI_IR' || entity.type === 'INDIVIDUAL' || entity.type === 'LMP' ? 'IR' : 'IS';
+      entity.type === 'SCI_IR' ||
+      entity.type === 'INDIVIDUAL' ||
+      entity.type === 'LMP' ||
+      entity.type === 'LMNP'
+        ? 'IR'
+        : 'IS';
     const assets = entity.assets.map(a => buildAssetState(a, entity.type));
-    const costs = resolveCosts(entity.costs?.mode ?? 'EN_LIGNE', entity.type, entity.costs);
+    const costs = resolveCosts(
+      entity.costs?.mode ?? 'EN_LIGNE',
+      entity.type,
+      entity.costs,
+      entity.regimeLMNP,
+    );
 
     entityStates.set(entity.name, {
       name: entity.name,
@@ -324,6 +359,25 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       isBic: entity.type === 'LMP',
       tauxCotisationsSocialesLMP: d(entity.tauxCotisationsSocialesLMP ?? 0.35),
       cotisationsMinimalesLMP: d(entity.cotisationsMinimalesLMP ?? '1200.00'),
+      lmnp:
+        entity.type === 'LMNP'
+          ? {
+              regime: entity.regimeLMNP ?? 'REEL',
+              tourismeNonClasse:
+                !(entity.meubleTourismeClasse ?? false) && entity.assets.some((a) => !!a.saisonnier),
+              deficits: [],
+              amortissementsDifferes: d(0),
+              amortissementsDeduitsCumul: d(0),
+              // Year 1 has no past: its own receipts decide.
+              recettesPrecedentes: entity.assets.reduce(
+                (acc, a) =>
+                  acc.plus(
+                    a.saisonnier ? computeSaisonnierRevenue(a.saisonnier).caAnnuelBrut : d(a.annualRent),
+                  ),
+                d(0),
+              ),
+            }
+          : undefined,
     });
   }
 
@@ -451,6 +505,13 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
     // ── Step 1-6: Process each entity ──────────────────────────────────────
 
     for (const [name, state] of entityStates) {
+      // An LMNP stays at the micro-BIC only while the previous year's receipts
+      // sit under the threshold; past it the reel applies, depreciation included.
+      const lmnpMicro =
+        state.lmnp?.regime === 'MICRO_BIC' &&
+        computeMicroBIC(state.lmnp.recettesPrecedentes, state.lmnp.tourismeNonClasse).eligible;
+      const amortit = state.taxRegime === 'IS' || state.isBic || (!!state.lmnp && !lmnpMicro);
+
       let entityGrossRevenue = d(0);
       let entityLoanPayment = d(0);
       let entityDepreciation = d(0);
@@ -529,9 +590,10 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
           entityRemainingDebt = entityRemainingDebt.plus(d(0));
         }
 
-        // 3. Depreciation (IS and LMP/BIC reel — not SCI_IR/INDIVIDUAL foncier)
+        // 3. Depreciation (IS and LMP/LMNP at the reel — not SCI_IR/INDIVIDUAL
+        // foncier, nor an LMNP at the micro-BIC)
         let yearDep = d(0);
-        if (state.taxRegime === 'IS' || state.isBic) {
+        if (amortit) {
           if (asset.buildingDepreciationYearsLeft > 0) {
             yearDep = yearDep.plus(asset.buildingDepreciationPerYear);
             asset.buildingDepreciationYearsLeft--;
@@ -564,8 +626,49 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       const netRents = entityGrossRevenue.minus(entityCharges).minus(entityPropertyTax);
       const chargesStructurelles = operatingCosts.plus(ccaInterestTotal);
       let taxableProfit: Decimal;
+      let lmnpYear: EntityYear['lmnp'];
 
-      if (state.taxRegime === 'IS' || state.isBic) {
+      if (state.lmnp) {
+        const lmnp = state.lmnp;
+        if (lmnpMicro) {
+          // A flat allowance on gross receipts replaces every charge, interest
+          // and depreciation alike — they are still paid, just not deducted.
+          const micro = computeMicroBIC(entityGrossRevenue, lmnp.tourismeNonClasse);
+          taxableProfit = micro.resultatImposable;
+          lmnpYear = {
+            regime: 'MICRO_BIC',
+            abattementMicro: micro.abattement.toFixed(2),
+            amortissementsDifferes: lmnp.amortissementsDifferes.toFixed(2),
+            deficitReportable: lmnp.deficits.reduce((acc, v) => acc.plus(v.montant), d(0)).toFixed(2),
+          };
+        } else {
+          const reel = applyLMNPReel({
+            resultatAvantAmortissements: netRents
+              .minus(entityInterest)
+              .minus(entityInsurance)
+              .minus(chargesStructurelles),
+            amortissementsExercice: entityDepreciation,
+            deficits: lmnp.deficits,
+            amortissementsDifferes: lmnp.amortissementsDifferes,
+            year,
+          });
+          lmnp.deficits = reel.deficits;
+          lmnp.amortissementsDifferes = reel.amortissementsDifferes;
+          lmnp.amortissementsDeduitsCumul = lmnp.amortissementsDeduitsCumul.plus(
+            reel.amortissementsDeduits,
+          );
+          taxableProfit = reel.resultatImposable;
+          // Report what was deducted, not what was computed: the rest is deferred.
+          entityDepreciation = reel.amortissementsDeduits;
+          lmnpYear = {
+            regime: 'REEL',
+            abattementMicro: '0.00',
+            amortissementsDifferes: reel.amortissementsDifferes.toFixed(2),
+            deficitReportable: reel.deficits.reduce((acc, v) => acc.plus(v.montant), d(0)).toFixed(2),
+          };
+        }
+        lmnp.recettesPrecedentes = entityGrossRevenue;
+      } else if (state.taxRegime === 'IS' || state.isBic) {
         taxableProfit = netRents
           .minus(entityInterest)
           .minus(entityInsurance)
@@ -590,6 +693,24 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         state.lastTaxableAfterOffset = adjustedProfit;
 
         entityTax = computeIS(adjustedProfit);
+      } else if (state.lmnp) {
+        // 5d. LMNP: translucent, taxed at each associe's bareme plus the
+        // prelevements sociaux. The result is never negative here — a deficit
+        // stays inside the activity instead of reaching the global income.
+        for (const a of state.associes) {
+          const quotePart = taxableProfit.mul(a.input.partsPercent);
+          const { ir, ps, total } = computeAssocieLMNP(a.input, quotePart);
+          yearAssocieTax = yearAssocieTax.plus(total);
+          totalTaxPaid = totalTaxPaid.plus(total);
+          personalWealth = personalWealth.minus(total);
+
+          addAssocieYear(associesBucket, a.input.nom, {
+            quotePart,
+            irTax: ir,
+            psTax: ps,
+            netCashFlow: total.neg(),
+          });
+        }
       } else if (state.isBic) {
         // 5c. LMP: translucent like an SCI at IR, but the result is BIC — the
         // deficit imputes fully against global income (no foncier cap) and the
@@ -719,6 +840,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         ccaRembourse: totalRemboursement.toFixed(2),
         ccaSolde: state.associes.reduce((acc, a) => acc.plus(a.ccaBalance), d(0)).toFixed(2),
         dividendeVerse: '0.00',
+        lmnp: lmnpYear,
         detail: Object.fromEntries(
           Object.entries(detail).map(([k, v]) => [k, v.toFixed(2)]),
         ) as EntityYear['detail'],
@@ -1032,6 +1154,8 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       impotSociete: d(0), impotAssocies: d(0), boniLiquidation: d(0), impot: d(0),
       detteResiduelle: sortieParams.detteResiduelle, produitNet: d(0),
     };
+  } else if (holderPrincipal?.lmnp) {
+    sortie = computeExitLMNP(sortieParams, holderPrincipal.lmnp.amortissementsDeduitsCumul);
   } else if (holderPrincipal?.isBic && vendeur) {
     sortie = computeExitLMP(sortieParams, vendeur, holderPrincipal.tauxCotisationsSocialesLMP);
   } else if (holderPrincipal?.taxRegime === 'IS') {

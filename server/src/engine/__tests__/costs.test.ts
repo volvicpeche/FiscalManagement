@@ -140,3 +140,17 @@ describe('indexedAnnualCost', () => {
     expect(indexedAnnualCost(new Decimal('1000'), 0, new Decimal('0.02')).toNumber()).toBe(0);
   });
 });
+
+describe('resolveCosts — LMNP', () => {
+  it('should charge no registration fee', () => {
+    expect(resolveCosts('EN_LIGNE', 'LMNP').constitution.toNumber()).toBe(0);
+  });
+
+  it('should drop the bookkeeping line at the micro-BIC', () => {
+    const reel = resolveCosts('EXPERT_COMPTABLE', 'LMNP', undefined, 'REEL');
+    const micro = resolveCosts('EXPERT_COMPTABLE', 'LMNP', undefined, 'MICRO_BIC');
+    expect(reel.lignesAnnuel.some((l) => l.label.startsWith('Comptabilite'))).toBe(true);
+    expect(micro.lignesAnnuel.some((l) => l.label.startsWith('Comptabilite'))).toBe(false);
+    expect(micro.annuel.lt(reel.annuel)).toBe(true);
+  });
+});

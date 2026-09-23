@@ -1,5 +1,5 @@
 import Decimal from 'decimal.js';
-import type { ManagementMode, StructureType, CostLine } from '@shared/schemas.js';
+import type { ManagementMode, StructureType, CostLine, RegimeLMNP } from '@shared/schemas.js';
 
 /**
  * Setup and running costs of a legal structure.
@@ -149,6 +149,23 @@ const COMPTA_BIC: PresetLine = {
 
 const ANNUEL_LMP: PresetLine[] = [COMPTA_BIC, CFE_IS, ASSURANCE_PNO, BANQUE];
 
+/**
+ * LMNP: no registration fee — the start of activity is declared for free on
+ * the guichet unique. A reel still needs a liasse 2031 and a depreciation
+ * table, but lighter than an LMP's; the micro-BIC needs no bookkeeping at all.
+ */
+const COMPTA_LMNP: PresetLine = {
+  label: 'Comptabilite LMNP au reel (liasse 2031)',
+  parMode: {
+    SOI_MEME: '0.00',
+    EN_LIGNE: '500.00',
+    EXPERT_COMPTABLE: '1000.00',
+    NOTAIRE_AVOCAT: '1000.00',
+  },
+};
+const ANNUEL_LMNP_REEL: PresetLine[] = [COMPTA_LMNP, CFE_IS, ASSURANCE_PNO, BANQUE];
+const ANNUEL_LMNP_MICRO: PresetLine[] = [CFE_IS, ASSURANCE_PNO, BANQUE];
+
 /** A holding owns shares, not walls — no PNO, but consolidation work instead. */
 const ANNUEL_HOLDING: PresetLine[] = [
   COMPTA_IS,
@@ -168,7 +185,7 @@ const ANNUEL_HOLDING: PresetLine[] = [
 
 // ─── Preset lookup ───────────────────────────────────────────────────────────
 
-function presetFor(structureType: StructureType): {
+function presetFor(structureType: StructureType, regimeLMNP: RegimeLMNP = 'REEL'): {
   constitution: PresetLine[];
   annuel: PresetLine[];
 } {
@@ -184,6 +201,11 @@ function presetFor(structureType: StructureType): {
       return { constitution: [], annuel: [] };
     case 'LMP':
       return { constitution: CONSTITUTION_LMP, annuel: ANNUEL_LMP };
+    case 'LMNP':
+      return {
+        constitution: [],
+        annuel: regimeLMNP === 'MICRO_BIC' ? ANNUEL_LMNP_MICRO : ANNUEL_LMNP_REEL,
+      };
   }
 }
 
@@ -203,8 +225,9 @@ function sum(lines: ResolvedCostLine[]): Decimal {
 export function getPresetCostLines(
   mode: ManagementMode,
   structureType: StructureType,
+  regimeLMNP?: RegimeLMNP,
 ): { constitution: ResolvedCostLine[]; annuel: ResolvedCostLine[] } {
-  const preset = presetFor(structureType);
+  const preset = presetFor(structureType, regimeLMNP);
   return {
     constitution: materialize(preset.constitution, mode),
     annuel: materialize(preset.annuel, mode),
@@ -221,8 +244,9 @@ export function resolveCosts(
   mode: ManagementMode,
   structureType: StructureType,
   overrides?: { constitution?: CostLine[]; annuel?: CostLine[] },
+  regimeLMNP?: RegimeLMNP,
 ): ResolvedCosts {
-  const preset = presetFor(structureType);
+  const preset = presetFor(structureType, regimeLMNP);
 
   const lignesConstitution =
     overrides?.constitution && overrides.constitution.length > 0

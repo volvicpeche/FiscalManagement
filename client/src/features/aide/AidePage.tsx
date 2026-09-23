@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { PROFILE_META } from '@/lib/profiles';
+import { PROFILE_META, PROFILE_ORDER } from '@/lib/profiles';
 
 /**
  * Plain-language guide to what the simulator compares.
@@ -182,7 +182,7 @@ const SECTIONS: Section[] = [
   },
   {
     id: 'lmp',
-    titre: 'Location saisonniere et LMP',
+    titre: 'Location saisonniere : LMNP et LMP',
     contenu: (
       <div className="space-y-3">
         <p className="text-sm text-gray-700 leading-relaxed">
@@ -201,6 +201,22 @@ const SECTIONS: Section[] = [
             non professionnel en dessous de 23 000 EUR de recettes annuelles (ou si ces recettes
             restent minoritaires dans vos revenus), professionnel au-dela. Le passage en LMP
             declenche les cotisations sociales TNS.
+          </Terme>
+          <Terme mot="LMNP au reel">
+            l’amortissement ne peut ni creer ni aggraver un deficit : ce que le resultat n’absorbe
+            pas est differe sans limite de duree. Un deficit de charges ne s’impute que sur les
+            benefices de location meublee des dix annees suivantes — jamais sur vos salaires,
+            contrairement au LMP.
+          </Terme>
+          <Terme mot="Micro-BIC">
+            un abattement forfaitaire remplace toutes les charges : 50 % jusqu’a 77 700 EUR de
+            recettes (meuble classique ou meuble de tourisme classe), 30 % jusqu’a 15 000 EUR pour
+            un meuble de tourisme non classe. Ni interets, ni amortissements.
+          </Terme>
+          <Terme mot="Revente en LMNP">
+            plus-value des particuliers (19 % + prelevements sociaux, exoneree apres 22 et 30 ans),
+            mais depuis la loi de finances 2025 les amortissements deduits sont retires du prix
+            d’acquisition : ils reviennent dans la plus-value.
           </Terme>
           <Terme mot="Cotisations sociales TNS">
             environ 35 % du resultat, la ou le foncier subit 17,2 % de prelevements sociaux. Plus
@@ -357,9 +373,9 @@ export function AidePage() {
         </p>
       </div>
 
-      {/* What the three columns of the comparison actually are */}
-      <div className="grid gap-2 sm:grid-cols-3">
-        {(['SCI_IR', 'SCI_IS_SEULE', 'SCI_IS_HOLDING'] as const).map((p) => {
+      {/* What the columns of the comparison actually are */}
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {PROFILE_ORDER.map((p) => {
           const meta = PROFILE_META[p];
           return (
             <div key={p} className={`rounded-md border p-3 ${meta.bg} ${meta.border}`}>

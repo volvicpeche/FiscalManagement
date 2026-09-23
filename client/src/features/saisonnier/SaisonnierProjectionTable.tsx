@@ -22,7 +22,28 @@ const LMP_OVERRIDES: ColumnOverrides = {
   },
 };
 
-export function SaisonnierProjectionTable({ result }: { result: SimulationResult }) {
+/**
+ * An LMNP pays the ordinary prelevements sociaux, so that column keeps its
+ * default wording. What differs is the depreciation, which is capped, and the
+ * deficit, which never reaches the global income.
+ */
+const LMNP_OVERRIDES: ColumnOverrides = {
+  irAssocies: {
+    label: 'IR',
+    quoi: "Impot du par le loueur, calcule en differentiel sur son propre foyer. Un deficit LMNP ne s'impute jamais sur le revenu global : il se reporte dix ans sur les seuls benefices de location meublee — d'ou un IR nul, jamais negatif.",
+  },
+  amortissement: {
+    quoi: "Au reel, l'amortissement deduit ne peut pas creer de deficit (art. 39 C) : seul ce que le resultat absorbe figure ici, le reste est differe sans limite de duree. Au micro-BIC, aucun amortissement : l'abattement forfaitaire en tient lieu. Depuis 2025, les amortissements deduits sont reintegres dans la plus-value a la revente.",
+  },
+};
+
+export function SaisonnierProjectionTable({
+  result,
+  statut,
+}: {
+  result: SimulationResult;
+  statut: 'LMNP' | 'LMP';
+}) {
   const rows = toRows(result);
 
   return (
@@ -30,7 +51,7 @@ export function SaisonnierProjectionTable({ result }: { result: SimulationResult
       <FluxTable
         rows={rows}
         columns={visibleColumns(rows)}
-        overrides={LMP_OVERRIDES}
+        overrides={statut === 'LMNP' ? LMNP_OVERRIDES : LMP_OVERRIDES}
         footerClass="bg-orange-50 text-orange-900"
       />
     </div>

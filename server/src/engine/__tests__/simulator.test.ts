@@ -563,6 +563,147 @@ describe('runSimulation — LMP saisonnier', () => {
   });
 });
 
+describe('runSimulation — LMNP', () => {
+  const saisonnier: SaisonnierParams = {
+    hauteSaison: { tauxOccupation: 0.9, caPeriode: '18000.00' },
+    moyenneSaison: { tauxOccupation: 0.6, caPeriode: '9000.00' },
+    basseSaison: { tauxOccupation: 0.3, caPeriode: '3000.00' },
+    gestion: 'SOI_MEME',
+    commissionPlateforme: 0.15,
+    fraisMenageLingeAnnuel: '2000.00',
+    fraisConciergeriePercent: 0.25,
+  };
+
+  const lmnpRequest = (
+    over: Partial<SimulationRequest['structures'][number]> = {},
+    horizonYears = 10,
+  ): SimulationRequest => ({
+    ...baseRequest,
+    structures: [
+      {
+        ...baseRequest.structures[0],
+        name: 'LMNP',
+        type: 'LMNP',
+        taxRegime: 'IR',
+        associes: [associe({ nom: 'Florian', partsPercent: 1, autresRevenus: '40000.00', socialChargeRegime: 'STANDARD' })],
+        assets: [{ ...baseRequest.structures[0].assets[0], annualRent: '0.00', saisonnier }],
+        ...over,
+      },
+    ],
+    params: { ...baseRequest.params, horizonYears },
+  });
+
+  it('should never report a negative taxable result — depreciation is capped', () => {
+    const result = runSimulation(lmnpRequest());
+    for (const y of result.yearlyData.slice(1)) {
+      expect(parseFloat(y.entities['LMNP'].taxableProfit)).toBeGreaterThanOrEqual(0);
+      expect(parseFloat(y.associes['Florian'].irTax)).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('should defer the depreciation the result could not absorb', () => {
+    // A 450 000 EUR property: about 18 000 EUR of depreciation a year, well
+    // above what 30 000 EUR of receipts leave once charges and interest are paid.
+    const cher = lmnpRequest({
+      assets: [
+        { ...baseRequest.structures[0].assets[0], purchasePrice: '450000.00', annualRent: '0.00', saisonnier },
+      ],
+    });
+    const y1 = yearOf(runSimulation(cher), 1).entities['LMNP'];
+    expect(y1.lmnp?.regime).toBe('REEL');
+    expect(parseFloat(y1.taxableProfit)).toBe(0);
+    expect(parseFloat(y1.lmnp!.amortissementsDifferes)).toBeGreaterThan(0);
+  });
+
+  it('should pay the prelevements sociaux, not TNS contributions, once profitable', () => {
+    // No loan: the result turns positive once the depreciation runs out.
+    const request = lmnpRequest(
+      { assets: [{ ...baseRequest.structures[0].assets[0], annualRent: '0.00', saisonnier, loan: undefined }] },
+      30,
+    );
+    const result = runSimulation(request);
+    const y30 = yearOf(result, 30);
+    const quotePart = parseFloat(y30.associes['Florian'].quotePart);
+    expect(quotePart).toBeGreaterThan(0);
+    expect(parseFloat(y30.associes['Florian'].psTax)).toBeCloseTo(quotePart * 0.172, 0);
+  });
+
+  it('should tax the micro-BIC on 30 % off gross receipts for an unclassified tourist letting', () => {
+    // 30 000 of receipts is above 15 000: unclassified, the reel applies.
+    const nonClasse = yearOf(runSimulation(lmnpRequest({ regimeLMNP: 'MICRO_BIC' })), 1);
+    expect(nonClasse.entities['LMNP'].lmnp?.regime).toBe('REEL');
+
+    // Classified: 50 % off, no depreciation.
+    const classe = yearOf(
+      runSimulation(lmnpRequest({ regimeLMNP: 'MICRO_BIC', meubleTourismeClasse: true })),
+      1,
+    );
+    expect(classe.entities['LMNP'].lmnp?.regime).toBe('MICRO_BIC');
+    expect(parseFloat(classe.entities['LMNP'].taxableProfit)).toBeCloseTo(15000, 2);
+    expect(parseFloat(classe.entities['LMNP'].depreciation)).toBe(0);
+  });
+
+  it('should price the exit as a private gain with the deducted depreciation added back', () => {
+    const request = lmnpRequest(
+      { assets: [{ ...baseRequest.structures[0].assets[0], annualRent: '0.00', saisonnier, loan: undefined }] },
+      15,
+    );
+    const { sortie } = runSimulation(request).summary;
+    expect(sortie.regime).toBe('LMNP');
+    expect(parseFloat(sortie.impotSociete)).toBe(0);
+    expect(parseFloat(sortie.amortissementsRepris)).toBeGreaterThan(0);
+  });
+
+  it('should not reach the global income with a deficit, unlike an LMP', () => {
+    const deficitaire = lmnpRequest({
+      assets: [
+        {
+          ...baseRequest.structures[0].assets[0],
+          annualRent: '0.00',
+          saisonnier: {
+            ...saisonnier,
+            hauteSaison: { tauxOccupation: 0.2, caPeriode: '2000.00' },
+            moyenneSaison: { tauxOccupation: 0.1, caPeriode: '1000.00' },
+          },
+        },
+      ],
+    });
+    const y1 = yearOf(runSimulation(deficitaire), 1);
+    expect(parseFloat(y1.associes['Florian'].irTax)).toBe(0);
+    expect(parseFloat(y1.entities['LMNP'].lmnp!.deficitReportable)).toBeGreaterThan(0);
+  });
+});
+
+describe('runSimulation — LMNP longue duree', () => {
+  const longueDuree = (regimeLMNP: 'REEL' | 'MICRO_BIC'): SimulationRequest => ({
+    ...baseRequest,
+    structures: [
+      {
+        ...baseRequest.structures[0],
+        name: 'LMNP',
+        type: 'LMNP',
+        taxRegime: 'IR',
+        regimeLMNP,
+        associes: [associe({ nom: 'Florian', partsPercent: 1, autresRevenus: '40000.00' })],
+      },
+    ],
+    params: { ...baseRequest.params, horizonYears: 5 },
+  });
+
+  it('should apply the 50 % allowance to a plain furnished rent, even without a classement', () => {
+    const y1 = yearOf(runSimulation(longueDuree('MICRO_BIC')), 1).entities['LMNP'];
+    expect(y1.lmnp?.regime).toBe('MICRO_BIC');
+    expect(parseFloat(y1.taxableProfit)).toBeCloseTo(6000, 2);
+  });
+
+  it('should shelter the same rent entirely at the reel', () => {
+    const result = runSimulation(longueDuree('REEL'));
+    for (const y of result.yearlyData.slice(1)) {
+      expect(parseFloat(y.entities['LMNP'].taxableProfit)).toBe(0);
+    }
+  });
+});
+
 describe('runSimulation — comptes courants d\'associes', () => {
   const withCCA = (repaymentRate: number, taux = 0): SimulationRequest => ({
     ...baseRequest,

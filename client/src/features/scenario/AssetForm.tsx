@@ -177,7 +177,7 @@ export function AssetForm() {
 
         <p className="text-xs text-gray-400 pt-1 border-t border-gray-200">
           Avant financement et avant impot. Ce qu’il reste apres l’IS ou l’IR depend du montage :
-          voir la comparaison des trois scenarios.
+          voir la comparaison des montages.
         </p>
       </div>
     </div>
