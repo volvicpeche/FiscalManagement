@@ -9,7 +9,7 @@ import { closeBrowser } from './services/browserFetch.js';
 const server = Fastify({ logger: true });
 
 await server.register(cors, {
-  origin: 'http://localhost:5173',
+  origin: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
 });
 
 await server.register(simulationRoutes);
