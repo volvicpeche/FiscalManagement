@@ -10,6 +10,7 @@ import { SaisonnierRevenueChart } from './SaisonnierRevenueChart';
 import { SaisonnierCashFlowChart } from './SaisonnierCashFlowChart';
 import { SaisonnierProjectionTable } from './SaisonnierProjectionTable';
 import { SaisonnierSuccession } from './SaisonnierSuccession';
+import { SaisonnierLMNPReports } from './SaisonnierLMNPReports';
 import { SidebarLayout } from '@/components/SidebarLayout';
 import { ScenarioManager } from '@/features/scenarios';
 
@@ -43,6 +44,9 @@ export function SaisonnierPage() {
                 proprietaire: store.proprietaire,
                 params: store.params,
                 tauxCotisationsSocialesLMP: store.tauxCotisationsSocialesLMP,
+                statut: store.statut,
+                regimeLMNP: store.regimeLMNP,
+                meubleTourismeClasse: store.meubleTourismeClasse,
               })}
               onLoad={(data) => store.hydrate(data as Parameters<typeof store.hydrate>[0])}
             />
@@ -74,10 +78,11 @@ export function SaisonnierPage() {
         {result ? (
           <>
             <SaisonnierKpis result={result} />
+            {store.statut === 'LMNP' && <SaisonnierLMNPReports result={result} />}
             <SaisonnierCashFlowChart result={result} />
             {asset.saisonnier && <SaisonnierRevenueChart saisonnier={asset.saisonnier} />}
             <SaisonnierSuccession result={result} />
-            <SaisonnierProjectionTable result={result} />
+            <SaisonnierProjectionTable result={result} statut={store.statut} />
           </>
         ) : (
           <>
@@ -87,7 +92,12 @@ export function SaisonnierPage() {
                 Cliquez sur « Simuler la location saisonniere » pour lancer le calcul
               </p>
               <p className="text-sm mt-2">
-                LMP (BIC reel) — CA saisonnier, conciergerie ou gestion directe, amortissement, sur{' '}
+                {store.statut === 'LMNP'
+                  ? store.regimeLMNP === 'MICRO_BIC'
+                    ? 'LMNP (micro-BIC)'
+                    : 'LMNP (BIC reel)'
+                  : 'LMP (BIC reel)'}{' '}
+                — CA saisonnier, conciergerie ou gestion directe, amortissement, sur{' '}
                 {store.params.horizonYears} ans
               </p>
             </div>

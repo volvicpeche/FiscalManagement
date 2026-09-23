@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
-export const StructureType = z.enum(['HOLDING', 'SCI_IS', 'SCI_IR', 'INDIVIDUAL', 'LMP']);
+export const StructureType = z.enum(['HOLDING', 'SCI_IS', 'SCI_IR', 'INDIVIDUAL', 'LMP', 'LMNP']);
 export type StructureType = z.infer<typeof StructureType>;
 
 export const TaxRegime = z.enum(['IS', 'IR']);
@@ -20,8 +20,26 @@ export type MaritalStatus = z.infer<typeof MaritalStatus>;
 export const SocialChargeRegime = z.enum(['STANDARD', 'SWISS_EXEMPT']);
 export type SocialChargeRegime = z.infer<typeof SocialChargeRegime>;
 
-/** The three structural setups the UI compares side by side. */
-export const ScenarioProfile = z.enum(['SCI_IS_SEULE', 'SCI_IS_HOLDING', 'SCI_IR']);
+/**
+ * How an LMNP declares its BIC.
+ * REEL: real charges plus depreciation, capped so it never creates a deficit.
+ * MICRO_BIC: a flat allowance on gross receipts, nothing else deducted. Falls
+ *   back to the reel for any year following one above the threshold.
+ */
+export const RegimeLMNP = z.enum(['REEL', 'MICRO_BIC']);
+export type RegimeLMNP = z.infer<typeof RegimeLMNP>;
+
+/**
+ * The structural setups the UI compares side by side: three SCI setups, and
+ * direct ownership as a long-term LMNP under each of its two regimes.
+ */
+export const ScenarioProfile = z.enum([
+  'SCI_IS_SEULE',
+  'SCI_IS_HOLDING',
+  'SCI_IR',
+  'LMNP_REEL',
+  'LMNP_MICRO',
+]);
 export type ScenarioProfile = z.infer<typeof ScenarioProfile>;
 
 /** Who handles the paperwork — drives the cost presets. */
@@ -192,6 +210,12 @@ export const AssetSchema = z.object({
   purchasePrice: decimalString,
   notaryFees: decimalString,
   renovationCosts: decimalString,
+  /**
+   * Furniture and equipment of a furnished letting, bought with the property.
+   * Depreciated over 7 years at IS, LMP and LMNP at the reel; outside the real
+   * estate capital gain at the sale. Zero when absent.
+   */
+  mobilier: decimalString.optional(),
   acquisitionDate: z.string().datetime(),
   /** Ignored when `saisonnier` is set — the two revenue models are exclusive. */
   annualRent: decimalString.default('0.00'),
@@ -230,6 +254,14 @@ export const StructureSchema = z.object({
    * a loss-making year. Ignored for every other structure type.
    */
   cotisationsMinimalesLMP: decimalString.default('1200.00'),
+  /** LMNP only — reel or micro-BIC, REEL when absent. Ignored for every other type. */
+  regimeLMNP: RegimeLMNP.optional(),
+  /**
+   * LMNP only — the seasonal letting holds a meuble de tourisme classement.
+   * Without it the micro-BIC threshold drops to 15 000 EUR and the allowance
+   * to 30 %. Irrelevant for a long-term furnished letting.
+   */
+  meubleTourismeClasse: z.boolean().optional(),
 });
 export type StructureInput = z.infer<typeof StructureSchema>;
 
@@ -367,6 +399,24 @@ export const EntityYearSchema = z.object({
   /** Gross dividend taken out of the company — to a parent, or to the associes. */
   dividendeVerse: z.string(),
 
+  /** LMNP only — the carry-forwards behind a taxable result stuck at zero. */
+  lmnp: z
+    .object({
+      regime: RegimeLMNP,
+      /** Micro-BIC allowance applied this year. Zero at the reel. */
+      abattementMicro: z.string(),
+      /** Depreciation still waiting for a profit to absorb it, no time limit. */
+      amortissementsDifferes: z.string(),
+      /** Real-charge deficits still reportable on the next ten years. */
+      deficitReportable: z.string(),
+      /**
+       * Seasonal letting above 23 000 EUR of receipts: SSI contributions
+       * replace the prelevements sociaux for at least one associe this year.
+       */
+      affiliationSSI: z.boolean(),
+    })
+    .optional(),
+
   detail: EntityYearDetailSchema,
 });
 export type EntityYear = z.infer<typeof EntityYearSchema>;
@@ -461,14 +511,14 @@ export const SimulationResultSchema = z.object({
      * a comparison that stops before the sale flatters it.
      */
     sortie: z.object({
-      regime: z.enum(['IS', 'IR', 'LMP']),
+      regime: z.enum(['IS', 'IR', 'LMP', 'LMNP']),
       prixVente: z.string(),
       valeurNetteComptable: z.string(),
       prixAcquisition: z.string(),
       plusValueBrute: z.string(),
       /** Gain that exists only because depreciation lowered the book value. */
       amortissementsRepris: z.string(),
-      /** Tax borne by the company. Zero at IR and for an LMP. */
+      /** Tax borne by the company. Zero at IR and for an LMP or LMNP. */
       impotSociete: z.string(),
       /** Tax borne by the associes to take the money home. */
       impotAssocies: z.string(),

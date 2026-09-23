@@ -14,7 +14,8 @@ function Kpi({ label, value, tone = 'neutral' }: { label: string; value: string;
 
 export function SaisonnierKpis({ result }: { result: SimulationResult }) {
   const year1 = result.yearlyData.find((y) => y.year === 1);
-  const lmp = year1?.entities['LMP'];
+  // A single structure, named after its status (LMNP or LMP).
+  const lmp = year1 ? Object.values(year1.entities)[0] : undefined;
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

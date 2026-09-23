@@ -110,5 +110,47 @@ export const SUCCESSION_ABATTEMENTS = {
 
 export const DUREE_AMORTISSEMENT_IMMEUBLE = 25;
 export const DUREE_AMORTISSEMENT_TRAVAUX = 15;
+/**
+ * Mobilier et equipements d'un meuble : usage courant de 5 a 10 ans selon les
+ * postes. Une duree unique, mediane, faute de ventilation par poste.
+ */
+export const DUREE_AMORTISSEMENT_MOBILIER = 7;
 /** Quote-part de terrain par defaut, non amortissable. Surchargeable par bien. */
 export const QUOTE_PART_TERRAIN_DEFAUT = new Decimal('0.15');
+
+// ─── LMNP ────────────────────────────────────────────────────────────────────
+
+/**
+ * Micro-BIC (art. 50-0 CGI), dans sa version issue de la loi du 19 novembre
+ * 2024 (loi Le Meur), applicable aux revenus 2025.
+ *
+ * Location meublee de longue duree et meuble de tourisme classe : seuil de
+ * 77 700 EUR, abattement de 50 %. Meuble de tourisme non classe : seuil
+ * ramene a 15 000 EUR, abattement a 30 %.
+ *
+ * @aVerifier Seuils et taux, a rapprocher du BOFiP a chaque millesime.
+ */
+export const MICRO_BIC_SEUIL_MEUBLE = new Decimal('77700');
+export const MICRO_BIC_ABATTEMENT_MEUBLE = new Decimal('0.50');
+export const MICRO_BIC_SEUIL_TOURISME_NON_CLASSE = new Decimal('15000');
+export const MICRO_BIC_ABATTEMENT_TOURISME_NON_CLASSE = new Decimal('0.30');
+/** Abattement minimal du micro-BIC, quel que soit le taux. */
+export const MICRO_BIC_ABATTEMENT_MINIMUM = new Decimal('305');
+
+/** Un deficit BIC non professionnel se reporte sur les dix annees suivantes. */
+export const LMNP_DUREE_REPORT_DEFICIT = 10;
+
+/**
+ * Seuil de recettes au-dela duquel la location meublee devient
+ * professionnelle, a condition qu'elles excedent aussi les autres revenus
+ * d'activite du foyer (art. 155 IV CGI).
+ */
+export const LMP_SEUIL_RECETTES = new Decimal('23000');
+
+/**
+ * Au-dela de ce montant de recettes annuelles, la location de meubles de
+ * tourisme releve des cotisations sociales des independants (SSI), meme en
+ * LMNP (art. L613-1 CSS). Le statut fiscal ne change pas ; ce sont les
+ * prelevements sociaux qui sont remplaces par des cotisations.
+ */
+export const SSI_SEUIL_MEUBLE_TOURISME = new Decimal('23000');

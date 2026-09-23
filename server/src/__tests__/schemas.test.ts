@@ -182,6 +182,24 @@ describe('SimulationRequestSchema — LMP saisonnier', () => {
     expect(result.structures[0].tauxCotisationsSocialesLMP).toBe(0.35);
   });
 
+  it('should accept an LMNP at the micro-BIC', () => {
+    const payload = saisonnierPayload();
+    payload.structures[0] = {
+      ...payload.structures[0],
+      type: 'LMNP',
+      ...{ regimeLMNP: 'MICRO_BIC', meubleTourismeClasse: true },
+    };
+    const result = SimulationRequestSchema.parse(payload);
+    expect(result.structures[0].type).toBe('LMNP');
+    expect(result.structures[0].regimeLMNP).toBe('MICRO_BIC');
+  });
+
+  it('should reject an unknown LMNP regime', () => {
+    const payload = saisonnierPayload();
+    payload.structures[0] = { ...payload.structures[0], type: 'LMNP', ...{ regimeLMNP: 'FORFAIT' } };
+    expect(SimulationRequestSchema.safeParse(payload).success).toBe(false);
+  });
+
   it('should reject an out-of-range occupation rate', () => {
     const result = SimulationRequestSchema.safeParse(
       saisonnierPayload({ saisonnier: { hauteSaison: { tauxOccupation: 1.2, caPeriode: '18000.00' } } }),

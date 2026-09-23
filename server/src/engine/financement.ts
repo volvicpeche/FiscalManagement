@@ -12,7 +12,8 @@ import type { AssetInput, AssocieInput } from '@shared/schemas.js';
  * Two figures matter, and they are not the same thing:
  *
  *   apportRequis   what the operation genuinely needs, from the purchase price,
- *                  the fees, the works and the incorporation costs, minus the
+ *                  the fees, the works, the furniture and the incorporation
+ *                  costs, minus the
  *                  loan. This is what leaves the family's pocket.
  *   apportDeclare  what the associes said they were putting in, as share
  *                  capital and comptes courants.
@@ -42,7 +43,8 @@ export function computeApportRequis(
     coutAcquisition = coutAcquisition
       .plus(asset.purchasePrice)
       .plus(asset.notaryFees)
-      .plus(asset.renovationCosts);
+      .plus(asset.renovationCosts)
+      .plus(asset.mobilier ?? '0');
     if (asset.loan) emprunt = emprunt.plus(asset.loan.principal);
   }
 

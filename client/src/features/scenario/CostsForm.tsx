@@ -1,7 +1,14 @@
 import type { CostLine, EntityCostsInput, ManagementMode, ScenarioProfile } from '@shared/schemas.js';
 import { useScenarioStore } from '@/store/scenarioStore';
 import { useCostPresets, type CostPresets } from '@/hooks/useCostPresets';
-import { ENTITY_SPECS, MODE_LABELS, PROFILE_META, PROFILE_ORDER, formatEur } from '@/lib/profiles';
+import {
+  ENTITY_SPECS,
+  MODE_LABELS,
+  PROFILE_META,
+  PROFILE_ORDER,
+  formatEur,
+  type EntitySpec,
+} from '@/lib/profiles';
 
 const MODES: ManagementMode[] = ['SOI_MEME', 'EN_LIGNE', 'EXPERT_COMPTABLE', 'NOTAIRE_AVOCAT'];
 
@@ -14,10 +21,10 @@ function linesFor(
   presets: CostPresets,
   mode: ManagementMode,
   profile: ScenarioProfile,
-  entity: { name: string; type: keyof CostPresets[ManagementMode] },
+  entity: EntitySpec,
   overrides: Record<string, EntityCostsInput>,
 ): { constitution: CostLine[]; annuel: CostLine[] } {
-  const preset = presets[mode][entity.type];
+  const preset = presets[mode][entity.presetKey ?? entity.type];
   const override = overrides[entity.name];
   return {
     constitution: override?.constitution.length ? override.constitution : preset.constitution,

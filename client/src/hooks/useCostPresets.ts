@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import type { CostLine, ManagementMode, StructureType } from '@shared/schemas.js';
+import type { CostLine, ManagementMode } from '@shared/schemas.js';
+import type { CostPresetKey } from '@/lib/profiles';
 
 export type CostPresets = Record<
   ManagementMode,
-  Record<StructureType, { constitution: CostLine[]; annuel: CostLine[] }>
+  Record<CostPresetKey, { constitution: CostLine[]; annuel: CostLine[] }>
 >;
 
 async function fetchCostPresets(): Promise<CostPresets> {
