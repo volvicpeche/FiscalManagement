@@ -102,17 +102,19 @@ Pourquoi chacun :
 
 ## Étape 3 — Créer le dossier de l'application (VPS)
 
-Tout se passe dans `~/patrimonia`, qui contiendra deux fichiers :
+Tout se passe dans `~/patrimonia`, qui contiendra trois fichiers :
 
 ```
 ~/patrimonia/
 ├── docker-compose.yml   ← quels conteneurs lancer
-└── server/
-    └── .env             ← vos réglages et clés secrètes
+├── server/
+│   └── .env             ← vos réglages et clés secrètes
+└── web/
+    └── htpasswd         ← le mot de passe du site
 ```
 
 ```bash
-mkdir -p ~/patrimonia/server
+mkdir -p ~/patrimonia/server ~/patrimonia/web
 cd ~/patrimonia
 ```
 
@@ -140,6 +142,8 @@ services:
       - server
     ports:
       - "80:80"
+    volumes:
+      - ./web/htpasswd:/etc/nginx/auth/htpasswd:ro
 
 volumes:
   scenarios:
@@ -177,6 +181,30 @@ chmod 600 ~/patrimonia/server/.env
   OpenAI), les variables sont décrites dans `server/.env.example`.
 - `chmod 600` : vous seul pouvez lire ce fichier.
 - Ce fichier ne doit **jamais** être commité : il n'existe que sur le VPS.
+
+### 3c. `web/htpasswd` : le mot de passe du site
+
+Tout le site est protégé par un identifiant et un mot de passe, demandés par
+le navigateur à la première visite. Sans ce fichier, le conteneur `web`
+**refuse de démarrer** : c'est voulu, pour que le site ne se retrouve jamais
+ouvert à tous par erreur.
+
+```bash
+# Remplacez « florian » par l'identifiant de votre choix ; le mot de passe
+# est demandé deux fois, sans s'afficher.
+printf 'florian:%s\n' "$(openssl passwd -apr1)" > ~/patrimonia/web/htpasswd
+chmod 644 ~/patrimonia/web/htpasswd
+```
+
+- Le fichier ne contient qu'une **empreinte** du mot de passe, jamais le mot de
+  passe lui-même.
+- `chmod 644` et non `600` : le serveur nginx du conteneur tourne sous son
+  propre utilisateur et doit pouvoir le lire.
+- Choisissez un mot de passe long (4 mots au hasard, par exemple) : il est
+  la seule barrière entre Internet et vos scénarios.
+- Tant que le site est en HTTP, ce mot de passe circule **en clair** à chaque
+  requête. Passez en HTTPS dès que possible, et ne réutilisez pas un mot de
+  passe qui sert ailleurs.
 
 ## Étape 4 — Créer une clé SSH de déploiement (votre PC)
 
@@ -308,6 +336,7 @@ Toutes ces commandes se lancent **sur le VPS**, dans `~/patrimonia`.
 | Prendre en compte un `.env` modifié | `docker compose up -d --force-recreate server` |
 | Redémarrer | `docker compose restart` |
 | Revenir à une version précédente | `IMAGE_TAG=<12 caractères du commit> docker compose pull`, puis `IMAGE_TAG=<même valeur> docker compose up -d` |
+| Changer le mot de passe du site | refaire la commande de l'étape 3c, puis `docker compose restart web` |
 
 Un `docker compose restart` seul ne relit pas `server/.env` : il faut
 recréer le conteneur, d'où le `--force-recreate`. Pour un retour en arrière,
@@ -347,6 +376,59 @@ Rapatriez ensuite l'archive sur votre PC :
 | `unauthorized` au `pull` en le lançant à la main | vous n'êtes pas connecté à GHCR sur le VPS. Le workflow le fait tout seul ; à la main : `podman login ghcr.io` avec votre nom GitHub et un jeton `read:packages` |
 | L'étape **deploy** échoue en `ssh: handshake failed` | secret `VPS_SSH_KEY` incomplet (il faut les lignes BEGIN/END), ou la clé publique n'est pas dans `~/.ssh/authorized_keys` |
 | Le VPS rame pendant l'analyse d'une annonce | Chrome consomme de la mémoire : vérifiez que le swap est actif (`swapon --show`), ou mettez `LISTING_BROWSER_FALLBACK=false` |
+| Le conteneur `web` s'arrête aussitôt, journaux : `htpasswd absent ou vide` | le fichier de l'étape 3c manque, ou `docker-compose.yml` n'a pas la ligne `volumes` du service `web` |
+| Erreur 500 sur toutes les pages, journaux de `web` : `Permission denied` sur `htpasswd` | `chmod 644 ~/patrimonia/web/htpasswd`, puis `docker compose restart web` |
+| Erreur 429 (« Too Many Requests ») | une limite de débit a été atteinte (voir « Sécurité ») : attendez une minute |
+
+---
+
+## Sécurité
+
+Ce que l'application met en place, et ce qu'il vous reste à faire.
+
+**Côté application** (dans les images, rien à configurer) :
+
+- **Mot de passe sur tout le site** (étape 3c). Seule la sonde `/api/health`
+  reste publique : elle ne répond que `{"status":"ok"}`.
+- **Limites de débit par adresse IP**, appliquées avant même la vérification
+  du mot de passe, donc aussi aux tentatives pour le deviner :
+  20 requêtes/s pour le site, 5 analyses d'annonce par minute (chacune peut
+  lancer Chrome et consommer votre clé LLM), 30 enregistrements ou
+  suppressions de scénarios par minute.
+- **Un seul Chrome à la fois**, avec au plus une annonce en attente : au-delà,
+  la demande est refusée tout de suite au lieu de saturer la mémoire.
+- **Pas d'accès au réseau interne via l'analyse d'annonce** : le serveur vérifie
+  les adresses IP réellement obtenues (pas seulement le nom saisi), à chaque
+  redirection et pour chaque ressource que charge Chrome.
+- **200 scénarios au plus** (variable `MAX_SCENARIOS` dans `server/.env`) et
+  requêtes limitées à 1 Mo : impossible de remplir le disque.
+- **En-têtes de sécurité** : politique de contenu stricte (CSP), affichage dans
+  une iframe interdit, version de nginx masquée.
+
+**Côté VPS** (à faire une fois) :
+
+```bash
+# SSH par clé uniquement. Vérifiez D'ABORD, depuis un second terminal, que
+# vous vous connectez sans mot de passe ; sinon vous vous enfermeriez dehors.
+echo -e 'PasswordAuthentication no\nKbdInteractiveAuthentication no' | sudo tee /etc/ssh/sshd_config.d/99-hardening.conf
+sudo systemctl reload ssh
+
+# Bannir les adresses qui insistent sur SSH
+sudo apt install -y fail2ban
+
+# Mises à jour de sécurité automatiques d'Ubuntu (souvent déjà actif)
+sudo apt install -y unattended-upgrades
+```
+
+Pour aller plus loin, vous pouvez n'ouvrir le port 80 qu'à votre propre IP :
+`sudo ufw delete allow 80/tcp`, puis
+`sudo ufw allow from <VOTRE_IP> to any port 80 proto tcp`. `ufw` filtre bien
+ce port, car Podman sans root l'ouvre comme un programme ordinaire du VPS.
+En contrepartie, un changement d'IP (box, 4G) vous coupe l'accès.
+
+**Reste le HTTP** : tant que le site n'est pas en HTTPS, le mot de passe et vos
+données circulent en clair. C'est le prochain chantier (section « Passer en
+HTTPS »).
 
 ---
 
