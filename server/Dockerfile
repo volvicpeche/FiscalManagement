@@ -18,6 +18,11 @@ COPY server server
 
 RUN npm run build --workspace=server
 RUN npm prune --omit=dev
+# npm workspaces hoist every dependency to the root node_modules, so
+# server/node_modules only exists when a version conflict forces a nested
+# copy. The runtime stage copies it unconditionally: make sure it is there,
+# empty or not, or the COPY below fails the whole build.
+RUN mkdir -p server/node_modules
 
 # ---------- runtime ----------
 FROM node:24-bookworm-slim AS runtime
