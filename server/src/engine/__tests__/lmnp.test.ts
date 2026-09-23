@@ -165,3 +165,23 @@ describe('computeExitLMNP — reintegration LF 2025', () => {
     expect(r.impot.toNumber()).toBe(0);
   });
 });
+
+describe('computeAssocieLMNP — SSI', () => {
+  const ssi = (deductibles: boolean) => ({ taux: d('0.35'), minimum: d(1200), deductibles });
+
+  it('should replace the prelevements sociaux with the contributions', () => {
+    const r = computeAssocieLMNP(associe(), d(10000), ssi(true));
+    expect(r.ps.toNumber()).toBe(0);
+    expect(r.cotisationsSociales.toNumber()).toBeCloseTo(3500, 2);
+  });
+
+  it('should charge the floor on a result sheltered by depreciation', () => {
+    expect(computeAssocieLMNP(associe(), d(0), ssi(true)).cotisationsSociales.toNumber()).toBe(1200);
+  });
+
+  it('should deduct the contributions from the IR base at the reel only', () => {
+    const reel = computeAssocieLMNP(associe(), d(20000), ssi(true));
+    const micro = computeAssocieLMNP(associe(), d(20000), ssi(false));
+    expect(reel.ir.lt(micro.ir)).toBe(true);
+  });
+});

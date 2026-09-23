@@ -18,7 +18,7 @@ const LMP_OVERRIDES: ColumnOverrides = {
     quoi: "Impot du par l'exploitant, calcule en differentiel sur son propre foyer. Un deficit BIC professionnel s'impute en totalite sur le revenu global, sans le plafond de 10 700 EUR du foncier — d'ou des montants negatifs les premieres annees.",
   },
   amortissement: {
-    quoi: "Le coeur du LMP au reel : l'amortissement du bien et du mobilier efface le resultat imposable pendant des annees sans qu'un euro ne sorte. Terrain non amortissable (15 %), bati sur 25 ans, travaux sur 15 ans.",
+    quoi: "Le coeur du LMP au reel : l'amortissement du bien et du mobilier efface le resultat imposable pendant des annees sans qu'un euro ne sorte. Terrain non amortissable (15 %), bati sur 25 ans, travaux sur 15 ans, mobilier sur 7 ans.",
   },
 };
 
@@ -28,12 +28,16 @@ const LMP_OVERRIDES: ColumnOverrides = {
  * deficit, which never reaches the global income.
  */
 const LMNP_OVERRIDES: ColumnOverrides = {
+  psAssocies: {
+    label: 'PS / cotisations SSI',
+    quoi: "Prelevements sociaux du patrimoine sur le resultat LMNP. Pour un meuble de tourisme au-dela de 23 000 EUR de recettes, ils sont remplaces par les cotisations SSI des independants, dues au minimum meme quand l'amortissement efface le resultat.",
+  },
   irAssocies: {
     label: 'IR',
     quoi: "Impot du par le loueur, calcule en differentiel sur son propre foyer. Un deficit LMNP ne s'impute jamais sur le revenu global : il se reporte dix ans sur les seuls benefices de location meublee — d'ou un IR nul, jamais negatif.",
   },
   amortissement: {
-    quoi: "Au reel, l'amortissement deduit ne peut pas creer de deficit (art. 39 C) : seul ce que le resultat absorbe figure ici, le reste est differe sans limite de duree. Au micro-BIC, aucun amortissement : l'abattement forfaitaire en tient lieu. Depuis 2025, les amortissements deduits sont reintegres dans la plus-value a la revente.",
+    quoi: "Au reel, l'amortissement deduit ne peut pas creer de deficit (art. 39 C) : seul ce que le resultat absorbe figure ici, le reste est differe sans limite de duree. Bati sur 25 ans, travaux sur 15, mobilier sur 7. Au micro-BIC, aucun amortissement : l'abattement forfaitaire en tient lieu. Depuis 2025, les amortissements du bien deduits sont reintegres dans la plus-value a la revente — pas ceux du mobilier.",
   },
 };
 

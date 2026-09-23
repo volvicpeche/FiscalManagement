@@ -208,6 +208,17 @@ const SECTIONS: Section[] = [
             benefices de location meublee des dix annees suivantes — jamais sur vos salaires,
             contrairement au LMP.
           </Terme>
+          <Terme mot="Meuble de tourisme et SSI">
+            au-dela de 23 000 EUR de recettes annuelles, un meuble de tourisme releve des
+            cotisations sociales des independants, meme en LMNP. Le statut fiscal ne change pas,
+            mais ces cotisations (avec un minimum annuel) remplacent les prelevements sociaux. Un
+            affilie a la securite sociale suisse reste rattache a son regime.
+          </Terme>
+          <Terme mot="Mobilier">
+            amorti sur 7 ans au reel, a cote du bati (25 ans) et des travaux (15 ans). Il ne fait
+            pas partie du bien vendu : ses amortissements ne sont pas reintegres dans la
+            plus-value.
+          </Terme>
           <Terme mot="Micro-BIC">
             un abattement forfaitaire remplace toutes les charges : 50 % jusqu’a 77 700 EUR de
             recettes (meuble classique ou meuble de tourisme classe), 30 % jusqu’a 15 000 EUR pour

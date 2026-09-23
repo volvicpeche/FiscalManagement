@@ -253,7 +253,7 @@ export const COLUMNS: Column[] = [
     label: 'Amortissement',
     flux: 'FISCAL',
     cumulable: true,
-    quoi: "Charge purement comptable : elle efface le resultat imposable sans qu'un euro ne sorte. Terrain non amortissable (15 %), bati sur 25 ans, travaux sur 15 ans. A l'IS et en LMP au reel uniquement.",
+    quoi: "Charge purement comptable : elle efface le resultat imposable sans qu'un euro ne sorte. Terrain non amortissable (15 %), bati sur 25 ans, travaux sur 15 ans, mobilier sur 7 ans. A l'IS, en LMP et en LMNP au reel uniquement.",
   },
   {
     key: 'resultatImposable',

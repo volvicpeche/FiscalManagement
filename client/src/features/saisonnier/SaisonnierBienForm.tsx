@@ -251,6 +251,19 @@ export function SaisonnierBienForm() {
         </div>
 
         <div>
+          <label className={labelClass} title="Amorti sur 7 ans au reel (LMNP et LMP). Exclu de la plus-value immobiliere a la revente.">
+            Mobilier et equipements (EUR)
+          </label>
+          <input
+            type="number"
+            step={1000}
+            className={inputClass}
+            value={parseFloat(asset.mobilier ?? '0')}
+            onChange={(e) => updateAsset({ mobilier: toDecimalStr(e.target.value) })}
+          />
+        </div>
+
+        <div>
           <label className={labelClass}>Charges de copropriete (EUR/an)</label>
           <input
             type="number"

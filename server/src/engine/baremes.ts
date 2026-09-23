@@ -110,6 +110,11 @@ export const SUCCESSION_ABATTEMENTS = {
 
 export const DUREE_AMORTISSEMENT_IMMEUBLE = 25;
 export const DUREE_AMORTISSEMENT_TRAVAUX = 15;
+/**
+ * Mobilier et equipements d'un meuble : usage courant de 5 a 10 ans selon les
+ * postes. Une duree unique, mediane, faute de ventilation par poste.
+ */
+export const DUREE_AMORTISSEMENT_MOBILIER = 7;
 /** Quote-part de terrain par defaut, non amortissable. Surchargeable par bien. */
 export const QUOTE_PART_TERRAIN_DEFAUT = new Decimal('0.15');
 
@@ -141,3 +146,11 @@ export const LMNP_DUREE_REPORT_DEFICIT = 10;
  * d'activite du foyer (art. 155 IV CGI).
  */
 export const LMP_SEUIL_RECETTES = new Decimal('23000');
+
+/**
+ * Au-dela de ce montant de recettes annuelles, la location de meubles de
+ * tourisme releve des cotisations sociales des independants (SSI), meme en
+ * LMNP (art. L613-1 CSS). Le statut fiscal ne change pas ; ce sont les
+ * prelevements sociaux qui sont remplaces par des cotisations.
+ */
+export const SSI_SEUIL_MEUBLE_TOURISME = new Decimal('23000');

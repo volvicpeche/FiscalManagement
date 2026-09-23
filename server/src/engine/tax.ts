@@ -21,6 +21,7 @@ import {
   IFI_BRACKETS,
   DUREE_AMORTISSEMENT_IMMEUBLE,
   DUREE_AMORTISSEMENT_TRAVAUX,
+  DUREE_AMORTISSEMENT_MOBILIER,
 } from './baremes.js';
 
 // ─── Social Charges ──────────────────────────────────────────────────────────
@@ -278,11 +279,14 @@ export interface DepreciationParams {
   notaryFees: Decimal;
   renovationCosts: Decimal;
   landRatio: Decimal; // e.g., 0.15 to 0.20
+  /** Furniture and equipment of a furnished letting. */
+  mobilier?: Decimal;
 }
 
 export interface YearlyDepreciation {
   building: Decimal;
   renovation: Decimal;
+  mobilier: Decimal;
   total: Decimal;
 }
 
@@ -297,10 +301,14 @@ export function computeYearlyDepreciation(params: DepreciationParams): YearlyDep
   // Renovation: linear over 15 years
   const renovationDepreciation = params.renovationCosts.div(DUREE_AMORTISSEMENT_TRAVAUX);
 
+  // Furniture: linear over 7 years
+  const mobilierDepreciation = (params.mobilier ?? new Decimal(0)).div(DUREE_AMORTISSEMENT_MOBILIER);
+
   return {
     building: buildingDepreciation,
     renovation: renovationDepreciation,
-    total: buildingDepreciation.plus(renovationDepreciation),
+    mobilier: mobilierDepreciation,
+    total: buildingDepreciation.plus(renovationDepreciation).plus(mobilierDepreciation),
   };
 }
 

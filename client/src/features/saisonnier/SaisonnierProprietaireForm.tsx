@@ -35,6 +35,10 @@ export function SaisonnierProprietaireForm() {
   // what the law compares the receipts against.
   const conditionsLMP = recettes > SEUIL_LMP && recettes > parseFloat(proprietaire.autresRevenus);
   const seuilMicro = s && !meubleTourismeClasse ? 15000 : 77700;
+  // Art. L613-1 CSS: a meuble de tourisme above 23 000 EUR pays SSI
+  // contributions even as an LMNP — unless the owner is covered abroad.
+  const ssiLMNP =
+    statut === 'LMNP' && !!s && recettes > SEUIL_LMP && proprietaire.socialChargeRegime !== 'SWISS_EXEMPT';
 
   return (
     <div className="space-y-4">
@@ -57,6 +61,13 @@ export function SaisonnierProprietaireForm() {
             <option value="LMNP">LMNP — loueur en meuble non professionnel</option>
             <option value="LMP">LMP — loueur en meuble professionnel</option>
           </select>
+          {ssiLMNP && (
+            <p className="text-xs text-amber-700 mt-1">
+              Meuble de tourisme au-dela de 23 000 EUR de recettes : vous restez LMNP pour l’impot,
+              mais relevez des cotisations sociales des independants (SSI) a la place des
+              prelevements sociaux.
+            </p>
+          )}
           {statut === 'LMNP' && conditionsLMP && (
             <p className="text-xs text-amber-700 mt-1">
               Recettes superieures a 23 000 EUR et a vos autres revenus : vous seriez LMP de plein
@@ -156,7 +167,7 @@ export function SaisonnierProprietaireForm() {
           </select>
         </div>
 
-        {statut === 'LMP' && (
+        {(statut === 'LMP' || ssiLMNP) && (
           <div className="col-span-2">
             <label className={labelClass}>Cotisations sociales TNS sur le resultat BIC (%)</label>
             <input
@@ -172,8 +183,9 @@ export function SaisonnierProprietaireForm() {
               }}
             />
             <p className="text-xs text-gray-400 mt-1">
-              Taux SSI indicatif pour un loueur meuble professionnel — distinct des prelevements
-              sociaux ci-dessus, qui ne portent que sur vos revenus hors LMP.
+              {statut === 'LMP'
+                ? 'Taux SSI indicatif pour un loueur meuble professionnel — distinct des prelevements sociaux ci-dessus, qui ne portent que sur vos revenus hors LMP.'
+                : 'Taux SSI indicatif, avec un minimum d’environ 1 200 EUR par an une fois affilie. Il remplace les prelevements sociaux sur le resultat LMNP ; au reel, les cotisations sont deduites de la base de l’IR.'}
             </p>
           </div>
         )}
