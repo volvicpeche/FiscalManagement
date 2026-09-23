@@ -158,6 +158,8 @@ enum StructureType {
   SCI_IS
   SCI_IR
   INDIVIDUAL
+  LMP
+  LMNP
 }
 
 enum TaxRegime {

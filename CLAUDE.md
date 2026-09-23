@@ -72,6 +72,11 @@ The engine is the heart of the app — pure TypeScript functions, fully tested, 
   - `computeAssocieIR` is a DIFFERENTIAL: `IR(autresRevenus + quotePart) − IR(autresRevenus)`. Never tax a quote-part in isolation — it lands in the wrong bracket.
   - Deficit foncier: €10,700/yr against global income, excess carried 10 years with vintage expiry.
   - Comptes courants d'associes: interest deductible for the SCI and taxed as RCM, capital repayment tax-free.
+- **lmnp.ts** — Loueur en Meuble Non Professionnel (`StructureType` `LMNP`), translucent like an LMP but taxed differently:
+  - Reel: depreciation capped by art. 39 C — it never creates a deficit, the excess is deferred with no time limit. Order: the year's depreciation, then carried deficits (10 years, oldest first), then the deferred stock.
+  - A real-charge deficit offsets LMNP profits only — never the global income, unlike an LMP.
+  - PS on capital income (`getSocialChargeRate`), no TNS contribution.
+  - Micro-BIC (`regimeLMNP: 'MICRO_BIC'`): 50 % up to €77,700, 30 % up to €15,000 for an unclassified tourist letting (`meubleTourismeClasse`). Judged on the previous year's receipts; above the threshold the reel applies.
 - **succession.ts** — Succession cost estimator:
   - Abatements by relationship (€100K/child, spouse exempt).
   - Progressive rates (5%→45% direct line).
@@ -79,7 +84,7 @@ The engine is the heart of the app — pure TypeScript functions, fully tested, 
   - Usufruit/nue-propriete split (Art. 669 CGI bareme by age).
   - Rate tables are per relationship: ligne directe for children and grandchildren, 35%/45% for siblings, a flat 55% for nephews and nieces, a flat 60% for anyone else.
   - `computeSuccessionForAssocies`: the `SELF` associe dies at the horizon; only their remaining parts (plus their CCA at face value) are transmitted, to the co-associes or, failing that, to the declared children.
-- **exit.ts** — what selling at the horizon costs, reported separately from the yearly figures. At IS it has **two floors**: the corporate tax on the gain measured against the depreciated book value, then the flat tax the associes pay on the boni de liquidation to get the money out. Reporting only the first made the IS look cheaper to leave than the IR, which settles once and for all. LMP applies the art. 151 septies B abatement, so the long-term share is exempt at 15 years.
+- **exit.ts** — what selling at the horizon costs, reported separately from the yearly figures. At IS it has **two floors**: the corporate tax on the gain measured against the depreciated book value, then the flat tax the associes pay on the boni de liquidation to get the money out. Reporting only the first made the IS look cheaper to leave than the IR, which settles once and for all. LMP applies the art. 151 septies B abatement, so the long-term share is exempt at 15 years. LMNP is a private gain (the IR rules) with the depreciation actually deducted added back, per the LF 2025 — deferred depreciation was never deducted, so it is not.
 - **simulator.ts** — 30-year projection loop: revenue (with configurable per-field growth rates) → loan payments → depreciation (IS and LMP only) → structure costs → tax → net cash flow → CCA repayment → intra-group dividends → asset revaluation → IFI → succession at the horizon.
   - `yearlyData` opens on a **year 0** carrying the incorporation costs — index 0 is not year 1.
   - `summary.totalNetWealth` is FAMILY wealth: companies plus what the associes hold personally, net of the tax they paid out of pocket. Without this the regimes are not comparable — at IR the SCI keeps its cash while the associes are taxed personally. It is a wealth-CREATED figure: the apport is debited from it, so it reads relative to the family's savings before the operation.
@@ -103,7 +108,7 @@ The entire UI must be in **French** — all labels, buttons, tooltips, error mes
 
 ## Critical Domain Rules
 
-- **Depreciation (SCI IS and LMP):** Land is non-depreciable; its share is the per-asset `landRatio` input, defaulting to 15%. Building: 4%/year over 25 years. Renovation: over 15 years.
+- **Depreciation (SCI IS, LMP and LMNP at the reel):** Land is non-depreciable; its share is the per-asset `landRatio` input, defaulting to 15%. Building: 4%/year over 25 years. Renovation: over 15 years.
 - **Capital Gains exit:** SCI IS = Sale Price - Net Book Value (VNC), taxed at IS rate. SCI IR = Sale Price - Purchase Price with duration abatements (IR exempt after 22yr, PS after 30yr). Social charges on IS gains apply only when distributed as dividends.
 - **Inflation is configurable per field:** separate growth rates for rent, charges, and property tax (all default 2%). Property value growth is separate (default 1.5%).
 - **Associes:** an SCI is held by N associes, each with a full tax household (marital status, children, other income, social charge regime) plus their capital and compte courant contributions. Parts must total exactly 100% — validated in `SimulationRequestSchema.superRefine`, not on `StructureSchema` (a `.refine()` there would turn it into a `ZodEffects` and break the `z.lazy()` self-reference for subsidiaries).

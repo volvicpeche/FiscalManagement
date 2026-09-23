@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type {
   AssetInput,
   AssocieInput,
+  RegimeLMNP,
   SaisonnierParams,
   SaisonnierSaisonInput,
   SimulationParams,
@@ -10,10 +11,10 @@ import type {
 } from '@shared/schemas.js';
 
 /**
- * LMP is a standalone product, not a fourth entry in the SCI/Holding
- * comparator: an SCI cannot legally run a meublé saisonnier activity (see
- * CLAUDE.md), so this scenario lives in its own store rather than being
- * squeezed into `scenarioStore`'s three-way `ScenarioProfile` shape.
+ * Furnished letting (LMNP or LMP) is a standalone product, not a fourth entry
+ * in the SCI/Holding comparator: an SCI cannot legally run a meublé saisonnier
+ * activity (see CLAUDE.md), so this scenario lives in its own store rather
+ * than being squeezed into `scenarioStore`'s three-way `ScenarioProfile` shape.
  *
  * v1 supports a single owner (the common case for an LMP), not a full
  * multi-associe indivision like the SCI forms — the engine already supports
@@ -21,6 +22,9 @@ import type {
  */
 
 type Saison = 'hauteSaison' | 'moyenneSaison' | 'basseSaison';
+
+/** Non-professional by default: it is what most owners of a single gite are. */
+export type StatutMeuble = 'LMNP' | 'LMP';
 
 const DEFAULT_SAISONNIER: SaisonnierParams = {
   hauteSaison: { tauxOccupation: 0.85, caPeriode: '15000.00' },
@@ -84,6 +88,9 @@ const DEFAULT_PARAMS: SimulationParams = {
 interface SaisonnierStore {
   asset: AssetInput;
   proprietaire: AssocieInput;
+  statut: StatutMeuble;
+  regimeLMNP: RegimeLMNP;
+  meubleTourismeClasse: boolean;
   tauxCotisationsSocialesLMP: number;
   params: SimulationParams;
   result: SimulationResult | null;
@@ -97,14 +104,33 @@ interface SaisonnierStore {
   updateProprietaire: (a: Partial<AssocieInput>) => void;
   updateParams: (p: Partial<SimulationParams>) => void;
   setTauxCotisationsSocialesLMP: (v: number) => void;
+  setStatut: (v: StatutMeuble) => void;
+  setRegimeLMNP: (v: RegimeLMNP) => void;
+  setMeubleTourismeClasse: (v: boolean) => void;
   setResult: (r: SimulationResult | null) => void;
   /** Replaces every input from a saved scenario. Missing keys keep their default. */
-  hydrate: (data: Partial<Pick<SaisonnierStore, 'asset' | 'proprietaire' | 'params' | 'tauxCotisationsSocialesLMP'>>) => void;
+  hydrate: (
+    data: Partial<
+      Pick<
+        SaisonnierStore,
+        | 'asset'
+        | 'proprietaire'
+        | 'params'
+        | 'tauxCotisationsSocialesLMP'
+        | 'statut'
+        | 'regimeLMNP'
+        | 'meubleTourismeClasse'
+      >
+    >,
+  ) => void;
 }
 
 export const useSaisonnierStore = create<SaisonnierStore>((set) => ({
   asset: DEFAULT_ASSET,
   proprietaire: DEFAULT_PROPRIETAIRE,
+  statut: 'LMNP',
+  regimeLMNP: 'REEL',
+  meubleTourismeClasse: false,
   tauxCotisationsSocialesLMP: 0.35,
   params: DEFAULT_PARAMS,
   result: null,
@@ -133,6 +159,9 @@ export const useSaisonnierStore = create<SaisonnierStore>((set) => ({
   updateProprietaire: (a) => set((s) => ({ proprietaire: { ...s.proprietaire, ...a } })),
   updateParams: (p) => set((s) => ({ params: { ...s.params, ...p } })),
   setTauxCotisationsSocialesLMP: (v) => set({ tauxCotisationsSocialesLMP: v }),
+  setStatut: (statut) => set({ statut, result: null }),
+  setRegimeLMNP: (regimeLMNP) => set({ regimeLMNP }),
+  setMeubleTourismeClasse: (meubleTourismeClasse) => set({ meubleTourismeClasse }),
   setResult: (result) => set({ result }),
 
   hydrate: (data) =>
@@ -142,15 +171,22 @@ export const useSaisonnierStore = create<SaisonnierStore>((set) => ({
       params: data.params ?? s.params,
       tauxCotisationsSocialesLMP:
         data.tauxCotisationsSocialesLMP ?? s.tauxCotisationsSocialesLMP,
+      // Scenarios saved before LMNP existed were all LMP.
+      statut: data.statut ?? 'LMP',
+      regimeLMNP: data.regimeLMNP ?? s.regimeLMNP,
+      meubleTourismeClasse: data.meubleTourismeClasse ?? s.meubleTourismeClasse,
       // A loaded scenario has not been run yet.
       result: null,
     })),
 }));
 
-/** Builds the single-structure LMP request the engine expects. */
+/** Builds the single-structure LMNP or LMP request the engine expects. */
 export function buildSaisonnierRequest(state: {
   asset: AssetInput;
   proprietaire: AssocieInput;
+  statut: StatutMeuble;
+  regimeLMNP: RegimeLMNP;
+  meubleTourismeClasse: boolean;
   tauxCotisationsSocialesLMP: number;
   params: SimulationParams;
 }): SimulationRequest {
@@ -163,8 +199,8 @@ export function buildSaisonnierRequest(state: {
     },
     structures: [
       {
-        name: 'LMP',
-        type: 'LMP',
+        name: state.statut,
+        type: state.statut,
         taxRegime: 'IR',
         ownershipShare: 1,
         associes: [state.proprietaire],
@@ -173,6 +209,8 @@ export function buildSaisonnierRequest(state: {
         subsidiaries: [],
         tauxCotisationsSocialesLMP: state.tauxCotisationsSocialesLMP,
         cotisationsMinimalesLMP: '1200.00',
+        regimeLMNP: state.regimeLMNP,
+        meubleTourismeClasse: state.meubleTourismeClasse,
       },
     ],
     params: state.params,
