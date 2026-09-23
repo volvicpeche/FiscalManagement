@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { PROFILE_META } from '@/lib/profiles';
+import { PROFILE_META, PROFILE_ORDER } from '@/lib/profiles';
 
 /**
  * Plain-language guide to what the simulator compares.
@@ -373,9 +373,9 @@ export function AidePage() {
         </p>
       </div>
 
-      {/* What the three columns of the comparison actually are */}
-      <div className="grid gap-2 sm:grid-cols-3">
-        {(['SCI_IR', 'SCI_IS_SEULE', 'SCI_IS_HOLDING'] as const).map((p) => {
+      {/* What the columns of the comparison actually are */}
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {PROFILE_ORDER.map((p) => {
           const meta = PROFILE_META[p];
           return (
             <div key={p} className={`rounded-md border p-3 ${meta.bg} ${meta.border}`}>

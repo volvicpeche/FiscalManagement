@@ -29,8 +29,17 @@ export type SocialChargeRegime = z.infer<typeof SocialChargeRegime>;
 export const RegimeLMNP = z.enum(['REEL', 'MICRO_BIC']);
 export type RegimeLMNP = z.infer<typeof RegimeLMNP>;
 
-/** The three structural setups the UI compares side by side. */
-export const ScenarioProfile = z.enum(['SCI_IS_SEULE', 'SCI_IS_HOLDING', 'SCI_IR']);
+/**
+ * The structural setups the UI compares side by side: three SCI setups, and
+ * direct ownership as a long-term LMNP under each of its two regimes.
+ */
+export const ScenarioProfile = z.enum([
+  'SCI_IS_SEULE',
+  'SCI_IS_HOLDING',
+  'SCI_IR',
+  'LMNP_REEL',
+  'LMNP_MICRO',
+]);
 export type ScenarioProfile = z.infer<typeof ScenarioProfile>;
 
 /** Who handles the paperwork — drives the cost presets. */

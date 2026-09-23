@@ -225,8 +225,9 @@ function sum(lines: ResolvedCostLine[]): Decimal {
 export function getPresetCostLines(
   mode: ManagementMode,
   structureType: StructureType,
+  regimeLMNP?: RegimeLMNP,
 ): { constitution: ResolvedCostLine[]; annuel: ResolvedCostLine[] } {
-  const preset = presetFor(structureType);
+  const preset = presetFor(structureType, regimeLMNP);
   return {
     constitution: materialize(preset.constitution, mode),
     annuel: materialize(preset.annuel, mode),

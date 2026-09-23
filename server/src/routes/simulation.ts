@@ -34,6 +34,13 @@ export async function simulationRoutes(server: FastifyInstance) {
           annuel: lines.annuel.map((l) => ({ label: l.label, montant: l.montant.toFixed(2) })),
         };
       }
+      // An LMNP at the micro-BIC keeps no books: its own preset, under a key
+      // of its own since it is not a structure type.
+      const micro = getPresetCostLines(mode, 'LMNP', 'MICRO_BIC');
+      presets[mode].LMNP_MICRO_BIC = {
+        constitution: micro.constitution.map((l) => ({ label: l.label, montant: l.montant.toFixed(2) })),
+        annuel: micro.annuel.map((l) => ({ label: l.label, montant: l.montant.toFixed(2) })),
+      };
     }
 
     return presets;

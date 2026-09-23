@@ -674,6 +674,36 @@ describe('runSimulation — LMNP', () => {
   });
 });
 
+describe('runSimulation — LMNP longue duree', () => {
+  const longueDuree = (regimeLMNP: 'REEL' | 'MICRO_BIC'): SimulationRequest => ({
+    ...baseRequest,
+    structures: [
+      {
+        ...baseRequest.structures[0],
+        name: 'LMNP',
+        type: 'LMNP',
+        taxRegime: 'IR',
+        regimeLMNP,
+        associes: [associe({ nom: 'Florian', partsPercent: 1, autresRevenus: '40000.00' })],
+      },
+    ],
+    params: { ...baseRequest.params, horizonYears: 5 },
+  });
+
+  it('should apply the 50 % allowance to a plain furnished rent, even without a classement', () => {
+    const y1 = yearOf(runSimulation(longueDuree('MICRO_BIC')), 1).entities['LMNP'];
+    expect(y1.lmnp?.regime).toBe('MICRO_BIC');
+    expect(parseFloat(y1.taxableProfit)).toBeCloseTo(6000, 2);
+  });
+
+  it('should shelter the same rent entirely at the reel', () => {
+    const result = runSimulation(longueDuree('REEL'));
+    for (const y of result.yearlyData.slice(1)) {
+      expect(parseFloat(y.entities['LMNP'].taxableProfit)).toBe(0);
+    }
+  });
+});
+
 describe('runSimulation — comptes courants d\'associes', () => {
   const withCCA = (repaymentRate: number, taux = 0): SimulationRequest => ({
     ...baseRequest,
