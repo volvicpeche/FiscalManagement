@@ -68,7 +68,7 @@ sudo apt install -y podman podman-docker podman-compose
 docker compose version
 ```
 
-Trois réglages, à faire **une seule fois** :
+Quatre réglages, à faire **une seule fois** :
 
 ```bash
 # 1. Autoriser Podman sans root à écouter sur le port 80
@@ -80,6 +80,10 @@ sudo loginctl enable-linger ubuntu
 
 # 3. Relancer les conteneurs au redémarrage du VPS
 systemctl --user enable --now podman-restart.service
+
+# 4. Ouvrir le socket Podman, par lequel passe `docker compose`
+systemctl --user enable --now podman.socket
+curl -s --unix-socket /run/user/1000/podman/podman.sock http://d/_ping; echo   # → OK
 ```
 
 Pourquoi chacun :
@@ -92,6 +96,9 @@ Pourquoi chacun :
    votre session SSH.
 3. `restart: unless-stopped` ne suffit pas avec Podman sans root : c'est ce
    service qui relance les conteneurs au démarrage.
+4. `docker compose` délègue au programme `docker-compose`, qui ne parle pas
+   directement à Podman : il passe par ce socket, inactif par défaut. Sans
+   lui, le déploiement échoue sur « Cannot connect to the Docker daemon ».
 
 ## Étape 3 — Créer le dossier de l'application (VPS)
 
@@ -332,6 +339,7 @@ Rapatriez ensuite l'archive sur votre PC :
 
 | Symptôme | Cause probable et solution |
 |---|---|
+| `Cannot connect to the Docker daemon at unix:///run/user/1000/podman/podman.sock` | le socket Podman n'est pas actif : `systemctl --user enable --now podman.socket`, puis relancer le job **deploy** |
 | `docker compose` : commande inconnue | `podman-compose` n'est pas installé : `sudo apt install -y podman-compose` |
 | `permission denied` en écoutant sur le port 80 | le réglage `sysctl` de l'étape 2 manque, ou vous êtes passé en HTTPS sans modifier `ports` en `127.0.0.1:8080:80` |
 | Les conteneurs disparaissent quand vous quittez SSH | `sudo loginctl enable-linger ubuntu` n'a pas été fait |
