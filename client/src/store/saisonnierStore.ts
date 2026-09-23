@@ -42,6 +42,8 @@ const DEFAULT_ASSET: AssetInput = {
   purchasePrice: '450000.00',
   notaryFees: '36000.00',
   renovationCosts: '20000.00',
+  // A gite is let furnished and equipped: beds, kitchen, linen, garden.
+  mobilier: '15000.00',
   acquisitionDate: '2026-01-01T00:00:00.000Z',
   annualRent: '0.00',
   chargesYearly: '4000.00',

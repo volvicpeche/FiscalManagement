@@ -19,6 +19,7 @@ export function SaisonnierLMNPReports({ result }: { result: SimulationResult }) 
 
   const sortie = result.summary.sortie;
   const afficherSortie = result.summary.objectif === 'TRANSMISSION' && sortie.regime === 'LMNP';
+  const ssi = lignes.some((l) => l.lmnp!.affiliationSSI);
   const microPuisReel =
     lignes.some((l) => l.lmnp!.regime === 'MICRO_BIC') && lignes.some((l) => l.lmnp!.regime === 'REEL');
 
@@ -31,6 +32,13 @@ export function SaisonnierLMNPReports({ result }: { result: SimulationResult }) 
           limite de duree. Un deficit de charges ne s’impute que sur les benefices LMNP des dix
           annees suivantes, jamais sur vos autres revenus.
         </p>
+        {ssi && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2 mb-3">
+            Meuble de tourisme au-dela de 23 000 EUR de recettes : les annees marquees « SSI »
+            paient des cotisations sociales d’independant (minimum inclus, meme a resultat nul) a la
+            place des prelevements sociaux.
+          </p>
+        )}
         {microPuisReel && (
           <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2 mb-3">
             Les recettes depassent le seuil du micro-BIC certaines annees : le reel s’applique
@@ -58,6 +66,7 @@ export function SaisonnierLMNPReports({ result }: { result: SimulationResult }) 
                 <td className="px-4 py-1.5 text-gray-700">{year}</td>
                 <td className="px-4 py-1.5 text-gray-600">
                   {lmnp!.regime === 'MICRO_BIC' ? 'Micro-BIC' : 'Reel'}
+                  {lmnp!.affiliationSSI && <span className="ml-1 text-amber-700 font-medium">· SSI</span>}
                 </td>
                 <td className="px-4 py-1.5 text-right font-mono text-gray-600">
                   {formatEur(lmnp!.abattementMicro)}

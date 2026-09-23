@@ -108,6 +108,22 @@ export function AssetForm() {
         </div>
 
         <div>
+          <label
+            className="block text-sm font-medium text-gray-700 mb-1"
+            title="Pour une location meublee. Amorti sur 7 ans a l'IS et en LMNP au reel ; sans effet fiscal a l'IR ou au micro-BIC. Exclu de la plus-value immobiliere."
+          >
+            Mobilier (EUR)
+          </label>
+          <input
+            type="number"
+            step={1000}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            value={parseFloat(asset.mobilier ?? '0')}
+            onChange={(e) => handleChange('mobilier', e.target.value)}
+          />
+        </div>
+
+        <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Loyer annuel (EUR)
           </label>

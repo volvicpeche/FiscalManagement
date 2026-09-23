@@ -144,9 +144,29 @@ export function computeMicroBIC(recettes: Decimal, tourismeNonClasse: boolean): 
 
 export interface AssocieLMNPResult {
   ir: Decimal;
-  /** Prelevements sociaux on capital income — an LMNP pays no TNS contribution. */
+  /** Prelevements sociaux on capital income. Zero once the associe is affiliated to the SSI. */
   ps: Decimal;
+  /** SSI contributions of a seasonal letting above 23 000 EUR. Zero otherwise. */
+  cotisationsSociales: Decimal;
   total: Decimal;
+}
+
+/**
+ * SSI contributions an LMNP owes on a meuble de tourisme above 23 000 EUR of
+ * receipts (art. L613-1 CSS). The tax status stays LMNP; only the social levy
+ * changes.
+ */
+export interface CotisationsSSI {
+  /** Indicative flat rate on the BIC result. */
+  taux: Decimal;
+  /** Floor due once affiliated, whatever the result. */
+  minimum: Decimal;
+  /**
+   * At the reel the contributions are a charge of the activity and lower the
+   * income tax base. At the micro-BIC the flat allowance already stands for
+   * every charge, so they are not deducted a second time.
+   */
+  deductibles: boolean;
 }
 
 /**
@@ -155,15 +175,32 @@ export interface AssocieLMNPResult {
  * A DIFFERENTIAL, like every translucent regime in the engine. The quote-part
  * is never negative here: an LMNP deficit stays inside the activity and never
  * reaches the global income, which is exactly what sets it apart from an LMP.
+ *
+ * Simplification: at the reel, contributions beyond the result (the SSI floor
+ * in a year sheltered by depreciation) do not create a deficit — the income
+ * tax base just stops at zero.
  */
-export function computeAssocieLMNP(associe: AssocieInput, quotePart: Decimal): AssocieLMNPResult {
+export function computeAssocieLMNP(
+  associe: AssocieInput,
+  quotePart: Decimal,
+  ssi?: CotisationsSSI,
+): AssocieLMNPResult {
   const base = Decimal.max(new Decimal(0), quotePart);
   const autresRevenus = new Decimal(associe.autresRevenus);
 
-  const ir = computeIR(autresRevenus.plus(base), associe.maritalStatus, associe.childrenCount).minus(
+  // Affiliated: contributions replace the prelevements sociaux entirely —
+  // CSG and CRDS are already part of them.
+  const cotisationsSociales = ssi
+    ? Decimal.max(base.mul(ssi.taux), ssi.minimum)
+    : new Decimal(0);
+  const ps = ssi ? new Decimal(0) : base.mul(getSocialChargeRate(associe.socialChargeRegime));
+
+  const baseIR = ssi?.deductibles
+    ? Decimal.max(new Decimal(0), base.minus(cotisationsSociales))
+    : base;
+  const ir = computeIR(autresRevenus.plus(baseIR), associe.maritalStatus, associe.childrenCount).minus(
     computeIR(autresRevenus, associe.maritalStatus, associe.childrenCount),
   );
-  const ps = base.mul(getSocialChargeRate(associe.socialChargeRegime));
 
-  return { ir, ps, total: ir.plus(ps) };
+  return { ir, ps, cotisationsSociales, total: ir.plus(ps).plus(cotisationsSociales) };
 }

@@ -76,6 +76,7 @@ The engine is the heart of the app — pure TypeScript functions, fully tested, 
   - Reel: depreciation capped by art. 39 C — it never creates a deficit, the excess is deferred with no time limit. Order: the year's depreciation, then carried deficits (10 years, oldest first), then the deferred stock.
   - A real-charge deficit offsets LMNP profits only — never the global income, unlike an LMP.
   - PS on capital income (`getSocialChargeRate`), no TNS contribution.
+  - SSI: a meuble de tourisme (seasonal asset) above €23,000 of receipts, judged on each associe's share, pays SSI contributions instead of the PS (`tauxCotisationsSocialesLMP`, floor `cotisationsMinimalesLMP`), deductible from the IR base at the reel only. A `SWISS_EXEMPT` associe stays out. Flagged per year in `lmnp.affiliationSSI`.
   - Micro-BIC (`regimeLMNP: 'MICRO_BIC'`): 50 % up to €77,700, 30 % up to €15,000 for an unclassified tourist letting (`meubleTourismeClasse`). Judged on the previous year's receipts; above the threshold the reel applies.
 - **succession.ts** — Succession cost estimator:
   - Abatements by relationship (€100K/child, spouse exempt).
@@ -108,7 +109,7 @@ The entire UI must be in **French** — all labels, buttons, tooltips, error mes
 
 ## Critical Domain Rules
 
-- **Depreciation (SCI IS, LMP and LMNP at the reel):** Land is non-depreciable; its share is the per-asset `landRatio` input, defaulting to 15%. Building: 4%/year over 25 years. Renovation: over 15 years.
+- **Depreciation (SCI IS, LMP and LMNP at the reel):** Land is non-depreciable; its share is the per-asset `landRatio` input, defaulting to 15%. Building: 4%/year over 25 years. Renovation: over 15 years. Furniture (`mobilier`, optional per asset): over 7 years, paid out of the apport, kept out of the real estate book value and of the LMNP add-back at the sale.
 - **Capital Gains exit:** SCI IS = Sale Price - Net Book Value (VNC), taxed at IS rate. SCI IR = Sale Price - Purchase Price with duration abatements (IR exempt after 22yr, PS after 30yr). Social charges on IS gains apply only when distributed as dividends.
 - **Inflation is configurable per field:** separate growth rates for rent, charges, and property tax (all default 2%). Property value growth is separate (default 1.5%).
 - **Associes:** an SCI is held by N associes, each with a full tax household (marital status, children, other income, social charge regime) plus their capital and compte courant contributions. Parts must total exactly 100% — validated in `SimulationRequestSchema.superRefine`, not on `StructureSchema` (a `.refine()` there would turn it into a `ZodEffects` and break the `z.lazy()` self-reference for subsidiaries).

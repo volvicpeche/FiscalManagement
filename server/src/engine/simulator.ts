@@ -32,7 +32,11 @@ import {
   type DeficitVintage,
 } from './associes.js';
 import { computeSaisonnierRevenue } from './saisonnier.js';
-import { QUOTE_PART_TERRAIN_DEFAUT } from './baremes.js';
+import {
+  DUREE_AMORTISSEMENT_MOBILIER,
+  QUOTE_PART_TERRAIN_DEFAUT,
+  SSI_SEUIL_MEUBLE_TOURISME,
+} from './baremes.js';
 import { computeSuccessionForAssocies } from './succession.js';
 import { computeIRR } from './irr.js';
 import { computeFinancement, type FinancementResult } from './financement.js';
@@ -60,8 +64,13 @@ interface AssetState {
   marketValue: Decimal;
   /** Amount borrowed, before any repayment — the debt at incorporation. */
   loanPrincipalInitial: Decimal;
-  /** Everything written off so far — drives the book value at the exit. */
+  /**
+   * Building and works written off so far — drives the book value at the
+   * exit. Furniture is kept out: it is not part of the real estate sold.
+   */
   cumulAmortissements: Decimal;
+  mobilierDepreciationYearsLeft: number;
+  mobilierDepreciationPerYear: Decimal;
   yearlyDepreciation: Decimal;
   buildingDepreciationYearsLeft: number;
   renovationDepreciationYearsLeft: number;
@@ -124,6 +133,8 @@ interface LMNPState {
   regime: 'REEL' | 'MICRO_BIC';
   /** Seasonal letting without a classement: the tighter micro-BIC threshold. */
   tourismeNonClasse: boolean;
+  /** Seasonal letting: above 23 000 EUR of receipts the SSI replaces the PS. */
+  meubleTourisme: boolean;
   /** Real-charge deficits, offsetting LMNP profits only, for ten years. */
   deficits: DeficitVintage[];
   /** Depreciation the cap did not let through yet — carried with no time limit. */
@@ -132,6 +143,13 @@ interface LMNPState {
   amortissementsDeduitsCumul: Decimal;
   /** Receipts of the previous year: they decide whether the micro-BIC applies. */
   recettesPrecedentes: Decimal;
+  /**
+   * Depreciation computed so far, in total and on furniture alone. Only the
+   * building's is added back at the sale, and the deferred stock mixes both,
+   * so the deducted total is split pro-rata.
+   */
+  amortissementsCalculesTotal: Decimal;
+  amortissementsCalculesMobilier: Decimal;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -180,7 +198,8 @@ function buildAssetState(asset: AssetInput, structureType: StructureInput['type'
   // 15 % understated the depreciation of a country house and overstated that
   // of a Paris flat, where the land is worth far more than that.
   const landRatio = d(asset.landRatio ?? QUOTE_PART_TERRAIN_DEFAUT.toNumber());
-  const depParams = { purchasePrice, notaryFees, renovationCosts, landRatio };
+  const mobilier = d(asset.mobilier ?? '0.00');
+  const depParams = { purchasePrice, notaryFees, renovationCosts, landRatio, mobilier };
   const dep = computeYearlyDepreciation(depParams);
 
   let loanYearlySummary: AssetState['loanYearlySummary'] = [];
@@ -216,6 +235,8 @@ function buildAssetState(asset: AssetInput, structureType: StructureInput['type'
     renovationDepreciationYearsLeft: 15,
     buildingDepreciationPerYear: dep.building,
     renovationDepreciationPerYear: dep.renovation,
+    mobilierDepreciationYearsLeft: DUREE_AMORTISSEMENT_MOBILIER,
+    mobilierDepreciationPerYear: dep.mobilier,
     loanYearlySummary,
   };
 }
@@ -365,6 +386,9 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
               regime: entity.regimeLMNP ?? 'REEL',
               tourismeNonClasse:
                 !(entity.meubleTourismeClasse ?? false) && entity.assets.some((a) => !!a.saisonnier),
+              meubleTourisme: entity.assets.some((a) => !!a.saisonnier),
+              amortissementsCalculesTotal: d(0),
+              amortissementsCalculesMobilier: d(0),
               deficits: [],
               amortissementsDifferes: d(0),
               amortissementsDeduitsCumul: d(0),
@@ -513,6 +537,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       const amortit = state.taxRegime === 'IS' || state.isBic || (!!state.lmnp && !lmnpMicro);
 
       let entityGrossRevenue = d(0);
+      let entityMobilierDep = d(0);
       let entityLoanPayment = d(0);
       let entityDepreciation = d(0);
       let entityInterest = d(0);
@@ -603,8 +628,17 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
             asset.renovationDepreciationYearsLeft--;
           }
         }
-        entityDepreciation = entityDepreciation.plus(yearDep);
         asset.cumulAmortissements = asset.cumulAmortissements.plus(yearDep);
+
+        // Furniture depreciates on its own, shorter term, and stays out of the
+        // real estate book value.
+        let mobilierDep = d(0);
+        if (amortit && asset.mobilierDepreciationYearsLeft > 0) {
+          mobilierDep = asset.mobilierDepreciationPerYear;
+          asset.mobilierDepreciationYearsLeft--;
+        }
+        entityMobilierDep = entityMobilierDep.plus(mobilierDep);
+        entityDepreciation = entityDepreciation.plus(yearDep).plus(mobilierDep);
 
         // 8. Update market value
         asset.marketValue = asset.marketValue.mul(propertyGrowth.plus(1));
@@ -640,6 +674,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
             abattementMicro: micro.abattement.toFixed(2),
             amortissementsDifferes: lmnp.amortissementsDifferes.toFixed(2),
             deficitReportable: lmnp.deficits.reduce((acc, v) => acc.plus(v.montant), d(0)).toFixed(2),
+            affiliationSSI: false,
           };
         } else {
           const reel = applyLMNPReel({
@@ -657,6 +692,10 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
           lmnp.amortissementsDeduitsCumul = lmnp.amortissementsDeduitsCumul.plus(
             reel.amortissementsDeduits,
           );
+          lmnp.amortissementsCalculesTotal = lmnp.amortissementsCalculesTotal.plus(entityDepreciation);
+          lmnp.amortissementsCalculesMobilier = lmnp.amortissementsCalculesMobilier.plus(
+            entityMobilierDep,
+          );
           taxableProfit = reel.resultatImposable;
           // Report what was deducted, not what was computed: the rest is deferred.
           entityDepreciation = reel.amortissementsDeduits;
@@ -665,6 +704,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
             abattementMicro: '0.00',
             amortissementsDifferes: reel.amortissementsDifferes.toFixed(2),
             deficitReportable: reel.deficits.reduce((acc, v) => acc.plus(v.montant), d(0)).toFixed(2),
+            affiliationSSI: false,
           };
         }
         lmnp.recettesPrecedentes = entityGrossRevenue;
@@ -697,9 +737,30 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         // 5d. LMNP: translucent, taxed at each associe's bareme plus the
         // prelevements sociaux. The result is never negative here — a deficit
         // stays inside the activity instead of reaching the global income.
+        const lmnp = state.lmnp;
         for (const a of state.associes) {
           const quotePart = taxableProfit.mul(a.input.partsPercent);
-          const { ir, ps, total } = computeAssocieLMNP(a.input, quotePart);
+          // A meuble de tourisme above 23 000 EUR of receipts, counted on the
+          // associe's own share, brings in the SSI. Someone affiliated to a
+          // foreign scheme (Switzerland) stays there and keeps the PS.
+          const affilie =
+            lmnp.meubleTourisme &&
+            entityGrossRevenue.mul(a.input.partsPercent).gt(SSI_SEUIL_MEUBLE_TOURISME) &&
+            a.input.socialChargeRegime !== 'SWISS_EXEMPT';
+          const { ir, ps, cotisationsSociales, total } = computeAssocieLMNP(
+            a.input,
+            quotePart,
+            affilie
+              ? {
+                  taux: state.tauxCotisationsSocialesLMP,
+                  minimum: state.cotisationsMinimalesLMP,
+                  deductibles: !lmnpMicro,
+                }
+              : undefined,
+          );
+          if (affilie && lmnpYear) lmnpYear.affiliationSSI = true;
+          // Same slot as the LMP: PS or SSI contributions, never both.
+          const psOuCotisations = ps.plus(cotisationsSociales);
           yearAssocieTax = yearAssocieTax.plus(total);
           totalTaxPaid = totalTaxPaid.plus(total);
           personalWealth = personalWealth.minus(total);
@@ -707,7 +768,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
           addAssocieYear(associesBucket, a.input.nom, {
             quotePart,
             irTax: ir,
-            psTax: ps,
+            psTax: psOuCotisations,
             netCashFlow: total.neg(),
           });
         }
@@ -1155,7 +1216,13 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       detteResiduelle: sortieParams.detteResiduelle, produitNet: d(0),
     };
   } else if (holderPrincipal?.lmnp) {
-    sortie = computeExitLMNP(sortieParams, holderPrincipal.lmnp.amortissementsDeduitsCumul);
+    // Only the building's depreciation is added back: the furniture is not
+    // part of the real estate sold.
+    const lmnp = holderPrincipal.lmnp;
+    const partImmobiliere = lmnp.amortissementsCalculesTotal.gt(0)
+      ? d(1).minus(lmnp.amortissementsCalculesMobilier.div(lmnp.amortissementsCalculesTotal))
+      : d(1);
+    sortie = computeExitLMNP(sortieParams, lmnp.amortissementsDeduitsCumul.mul(partImmobiliere));
   } else if (holderPrincipal?.isBic && vendeur) {
     sortie = computeExitLMP(sortieParams, vendeur, holderPrincipal.tauxCotisationsSocialesLMP);
   } else if (holderPrincipal?.taxRegime === 'IS') {

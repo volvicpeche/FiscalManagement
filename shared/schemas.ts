@@ -210,6 +210,12 @@ export const AssetSchema = z.object({
   purchasePrice: decimalString,
   notaryFees: decimalString,
   renovationCosts: decimalString,
+  /**
+   * Furniture and equipment of a furnished letting, bought with the property.
+   * Depreciated over 7 years at IS, LMP and LMNP at the reel; outside the real
+   * estate capital gain at the sale. Zero when absent.
+   */
+  mobilier: decimalString.optional(),
   acquisitionDate: z.string().datetime(),
   /** Ignored when `saisonnier` is set — the two revenue models are exclusive. */
   annualRent: decimalString.default('0.00'),
@@ -403,6 +409,11 @@ export const EntityYearSchema = z.object({
       amortissementsDifferes: z.string(),
       /** Real-charge deficits still reportable on the next ten years. */
       deficitReportable: z.string(),
+      /**
+       * Seasonal letting above 23 000 EUR of receipts: SSI contributions
+       * replace the prelevements sociaux for at least one associe this year.
+       */
+      affiliationSSI: z.boolean(),
     })
     .optional(),
 

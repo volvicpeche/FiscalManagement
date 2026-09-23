@@ -16,7 +16,7 @@ import type { AssetInput } from './schemas.js';
  */
 
 export interface AssetYields {
-  /** Purchase price + notary fees + renovation. */
+  /** Purchase price + notary fees + renovation + furniture. */
   coutTotal: Decimal;
   loyerAnnuel: Decimal;
   /** Recurring charges borne by the owner: charges + taxe fonciere. */
@@ -39,12 +39,14 @@ export function computeAssetYields(
   asset: Pick<
     AssetInput,
     'purchasePrice' | 'notaryFees' | 'renovationCosts' | 'annualRent' | 'chargesYearly' | 'propertyTax'
-  >,
+  > &
+    Partial<Pick<AssetInput, 'mobilier'>>,
 ): AssetYields {
   const purchasePrice = new Decimal(asset.purchasePrice);
   const coutTotal = purchasePrice
     .plus(asset.notaryFees)
-    .plus(asset.renovationCosts);
+    .plus(asset.renovationCosts)
+    .plus(asset.mobilier ?? '0');
 
   const loyerAnnuel = new Decimal(asset.annualRent);
   const chargesTotales = new Decimal(asset.chargesYearly).plus(asset.propertyTax);

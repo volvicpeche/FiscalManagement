@@ -615,17 +615,65 @@ describe('runSimulation — LMNP', () => {
     expect(parseFloat(y1.lmnp!.amortissementsDifferes)).toBeGreaterThan(0);
   });
 
-  it('should pay the prelevements sociaux, not TNS contributions, once profitable', () => {
-    // No loan: the result turns positive once the depreciation runs out.
+  // Under 23 000 EUR of receipts: a plain LMNP, no SSI.
+  const petitSaisonnier: SaisonnierParams = {
+    ...saisonnier,
+    hauteSaison: { tauxOccupation: 0.9, caPeriode: '12000.00' },
+    moyenneSaison: { tauxOccupation: 0.6, caPeriode: '5000.00' },
+    basseSaison: { tauxOccupation: 0.3, caPeriode: '1000.00' },
+  };
+
+  it('should pay the prelevements sociaux, not TNS contributions, under 23 000 EUR', () => {
+    // No loan, no rent growth: the result turns positive once the depreciation runs out.
+    const request = lmnpRequest(
+      {
+        assets: [
+          { ...baseRequest.structures[0].assets[0], annualRent: '0.00', saisonnier: petitSaisonnier, loan: undefined },
+        ],
+      },
+      30,
+    );
+    request.params = { ...request.params, rentGrowthRate: 0 };
+    const y30 = yearOf(runSimulation(request), 30);
+    const quotePart = parseFloat(y30.associes['Florian'].quotePart);
+    expect(quotePart).toBeGreaterThan(0);
+    expect(y30.entities['LMNP'].lmnp?.affiliationSSI).toBe(false);
+    expect(parseFloat(y30.associes['Florian'].psTax)).toBeCloseTo(quotePart * 0.172, 0);
+  });
+
+  it('should switch to SSI contributions above 23 000 EUR for a meuble de tourisme', () => {
     const request = lmnpRequest(
       { assets: [{ ...baseRequest.structures[0].assets[0], annualRent: '0.00', saisonnier, loan: undefined }] },
       30,
     );
     const result = runSimulation(request);
+    const y1 = yearOf(result, 1);
+    expect(y1.entities['LMNP'].lmnp?.affiliationSSI).toBe(true);
+    const qp1 = parseFloat(y1.associes['Florian'].quotePart);
+    expect(parseFloat(y1.associes['Florian'].psTax)).toBeCloseTo(Math.max(qp1 * 0.35, 1200), 0);
+
     const y30 = yearOf(result, 30);
     const quotePart = parseFloat(y30.associes['Florian'].quotePart);
-    expect(quotePart).toBeGreaterThan(0);
-    expect(parseFloat(y30.associes['Florian'].psTax)).toBeCloseTo(quotePart * 0.172, 0);
+    expect(parseFloat(y30.associes['Florian'].psTax)).toBeCloseTo(Math.max(quotePart * 0.35, 1200), 0);
+  });
+
+  it('should keep a Swiss-affiliated owner on the prelevement de solidarite, out of the SSI', () => {
+    const request = lmnpRequest({
+      associes: [associe({ nom: 'Florian', partsPercent: 1, socialChargeRegime: 'SWISS_EXEMPT' })],
+    });
+    const y1 = yearOf(runSimulation(request), 1);
+    expect(y1.entities['LMNP'].lmnp?.affiliationSSI).toBe(false);
+  });
+
+  it('should judge the 23 000 EUR threshold on each associe share of the receipts', () => {
+    // 30 000 EUR split in two: 15 000 each, under the threshold.
+    const request = lmnpRequest({
+      associes: [
+        associe({ nom: 'Florian', partsPercent: 0.5, socialChargeRegime: 'STANDARD' }),
+        associe({ nom: 'Conjoint', partsPercent: 0.5, socialChargeRegime: 'STANDARD' }),
+      ],
+    });
+    expect(yearOf(runSimulation(request), 1).entities['LMNP'].lmnp?.affiliationSSI).toBe(false);
   });
 
   it('should tax the micro-BIC on 30 % off gross receipts for an unclassified tourist letting', () => {
@@ -701,6 +749,57 @@ describe('runSimulation — LMNP longue duree', () => {
     for (const y of result.yearlyData.slice(1)) {
       expect(parseFloat(y.entities['LMNP'].taxableProfit)).toBe(0);
     }
+  });
+});
+
+describe('runSimulation — mobilier', () => {
+  const avecMobilier = (type: 'LMNP' | 'SCI_IS' | 'SCI_IR', mobilier: string): SimulationRequest => ({
+    ...baseRequest,
+    structures: [
+      {
+        ...baseRequest.structures[0],
+        name: 'E',
+        type,
+        taxRegime: type === 'SCI_IS' ? 'IS' : 'IR',
+        associes: [associe({ nom: 'Florian', partsPercent: 1 })],
+        assets: [{ ...baseRequest.structures[0].assets[0], mobilier }],
+      },
+    ],
+    params: { ...baseRequest.params, horizonYears: 30 },
+  });
+
+  it('should depreciate the furniture over 7 years at IS, then stop', () => {
+    const sans = runSimulation(avecMobilier('SCI_IS', '0.00'));
+    const avec = runSimulation(avecMobilier('SCI_IS', '14000.00'));
+    const dep = (r: SimulationResult, y: number) => parseFloat(yearOf(r, y).entities['E'].depreciation);
+    expect(dep(avec, 1) - dep(sans, 1)).toBeCloseTo(2000, 2);
+    expect(dep(avec, 7) - dep(sans, 7)).toBeCloseTo(2000, 2);
+    expect(dep(avec, 8) - dep(sans, 8)).toBeCloseTo(0, 2);
+  });
+
+  it('should not depreciate furniture in an SCI at IR', () => {
+    const r = runSimulation(avecMobilier('SCI_IR', '14000.00'));
+    expect(parseFloat(yearOf(r, 1).entities['E'].depreciation)).toBe(0);
+  });
+
+  it('should be paid for out of the apport', () => {
+    const sans = runSimulation(avecMobilier('LMNP', '0.00')).summary.financement;
+    const avec = runSimulation(avecMobilier('LMNP', '14000.00')).summary.financement;
+    expect(parseFloat(avec.apportRequis) - parseFloat(sans.apportRequis)).toBeCloseTo(14000, 2);
+  });
+
+  it('should stay out of the real estate gain at IS and in the LMNP add-back', () => {
+    const isSans = runSimulation(avecMobilier('SCI_IS', '0.00')).summary.sortie;
+    const isAvec = runSimulation(avecMobilier('SCI_IS', '14000.00')).summary.sortie;
+    expect(parseFloat(isAvec.plusValueBrute)).toBeCloseTo(parseFloat(isSans.plusValueBrute), 2);
+
+    const lmnp = runSimulation({
+      ...avecMobilier('LMNP', '14000.00'),
+      params: { ...baseRequest.params, horizonYears: 10 },
+    });
+    const deduit = lmnp.yearlyData.reduce((acc, y) => acc + parseFloat(y.entities['E']?.depreciation ?? '0'), 0);
+    // The furniture share of what was deducted is not added back to the gain.
+    expect(parseFloat(lmnp.summary.sortie.amortissementsRepris)).toBeLessThan(deduit);
   });
 });
 
