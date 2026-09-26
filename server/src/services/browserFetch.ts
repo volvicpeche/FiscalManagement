@@ -1,6 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import { chromium, type BrowserContext } from 'patchright';
+import { creerVerificateur } from './netGuard.js';
 
 /**
  * Reads a listing page through a real Chrome, for portals that refuse plain
@@ -52,6 +53,9 @@ async function getContext(): Promise<BrowserContext> {
         timezoneId: 'Europe/Paris',
         viewport: { width: 1440, height: 900 },
         args: OFFSCREEN_ARGS,
+        // A service worker's requests escape page.route(): the address check
+        // below would not see them.
+        serviceWorkers: 'block',
       })
       .catch((err) => {
         contextPromise = null;
@@ -97,8 +101,33 @@ function describeLaunchFailure(err: unknown): string {
   }
   return "Chrome n'a pas pu etre pilote pour lire cette annonce. Collez le texte de l'annonce a la place.";
 }
+ * One page at a time, and a short queue behind it.
+ *
+ * Each page costs a few hundred MB of RAM on a small VPS. Without a limit, a
+ * handful of concurrent calls to /api/listings/analyze was enough to exhaust
+ * the machine; with it, the excess is refused straight away instead.
+ */
+const MAX_EN_ATTENTE = 2;
+let file: Promise<unknown> = Promise.resolve();
+let enAttente = 0;
 
 export async function fetchListingTextViaBrowser(url: URL): Promise<string> {
+  if (enAttente >= MAX_EN_ATTENTE) {
+    throw new Error(
+      "Trop d'annonces en cours d'analyse. Reessayez dans une minute, ou collez le texte de l'annonce.",
+    );
+  }
+  enAttente++;
+  const tour = file.then(() => lireAvecChrome(url));
+  file = tour.catch(() => undefined);
+  try {
+    return await tour;
+  } finally {
+    enAttente--;
+  }
+}
+
+async function lireAvecChrome(url: URL): Promise<string> {
   let context: BrowserContext;
   try {
     context = await getContext();
@@ -110,6 +139,19 @@ export async function fetchListingTextViaBrowser(url: URL): Promise<string> {
   }
 
   const page = await context.newPage();
+  // Every request the page makes — the document, its redirects, each image and
+  // script — is checked against private ranges before it leaves. The page is
+  // attacker-chosen: without this it could make Chrome reach inside the network.
+  const estPublique = creerVerificateur();
+  await page.route('**/*', async (route) => {
+    let autorisee = false;
+    try {
+      autorisee = await estPublique(new URL(route.request().url()));
+    } catch {
+      autorisee = false;
+    }
+    await (autorisee ? route.continue() : route.abort('blockedbyclient'));
+  });
   try {
     const response = await page.goto(url.toString(), {
       waitUntil: 'domcontentloaded',

@@ -6,9 +6,11 @@ import path from 'node:path';
 // The store reads its directory at import time, so it must be set first.
 const dir = await mkdtemp(path.join(tmpdir(), 'patrimonia-scenarios-'));
 process.env.SCENARIO_DIR = dir;
+process.env.MAX_SCENARIOS = '5';
 
 const {
   saveScenario, getScenario, updateScenario, deleteScenario, listScenarios, isValidId,
+  TropDeScenariosError,
 } = await import('../scenarioStore.js');
 
 const payload = (over: Record<string, unknown> = {}) => ({
@@ -127,5 +129,19 @@ describe('listScenarios', () => {
     await updateScenario(a.id, { ...payload(), nom: 'Premier, modifie' });
 
     expect((await listScenarios()).map((s) => s.nom)).toEqual(['Premier, modifie', 'Second']);
+  });
+});
+
+describe('saveScenario — plafond', () => {
+  it('should refuse a new scenario once the ceiling is reached', async () => {
+    for (let i = 0; i < 5; i++) await saveScenario(payload());
+    await expect(saveScenario(payload())).rejects.toBeInstanceOf(TropDeScenariosError);
+  });
+
+  it('should accept one again after a deletion', async () => {
+    const ids = [];
+    for (let i = 0; i < 5; i++) ids.push((await saveScenario(payload())).id);
+    await deleteScenario(ids[0]);
+    await expect(saveScenario(payload())).resolves.toBeDefined();
   });
 });

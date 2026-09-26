@@ -78,7 +78,7 @@ export function FinancementCard({ results }: ResultsProps) {
       )}
 
       <p className="mt-3 text-xs text-gray-400">
-        Identique pour les trois montages : seuls les frais de constitution different, a la marge.
+        Identique pour tous les montages : seuls les frais de constitution different, a la marge.
       </p>
     </div>
   );

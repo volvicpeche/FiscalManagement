@@ -66,7 +66,7 @@ export function CostsChart({ results }: ResultsProps) {
         </LineChart>
       </ResponsiveContainer>
 
-      <div className="grid grid-cols-3 gap-2 mt-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mt-4">
         {available.map((p) => {
           const r = results[p]!;
           const meta = PROFILE_META[p];

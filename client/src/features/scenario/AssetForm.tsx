@@ -108,6 +108,22 @@ export function AssetForm() {
         </div>
 
         <div>
+          <label
+            className="block text-sm font-medium text-gray-700 mb-1"
+            title="Pour une location meublee. Amorti sur 7 ans a l'IS et en LMNP au reel ; sans effet fiscal a l'IR ou au micro-BIC. Exclu de la plus-value immobiliere."
+          >
+            Mobilier (EUR)
+          </label>
+          <input
+            type="number"
+            step={1000}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            value={parseFloat(asset.mobilier ?? '0')}
+            onChange={(e) => handleChange('mobilier', e.target.value)}
+          />
+        </div>
+
+        <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Loyer annuel (EUR)
           </label>
@@ -177,7 +193,7 @@ export function AssetForm() {
 
         <p className="text-xs text-gray-400 pt-1 border-t border-gray-200">
           Avant financement et avant impot. Ce qu’il reste apres l’IS ou l’IR depend du montage :
-          voir la comparaison des trois scenarios.
+          voir la comparaison des montages.
         </p>
       </div>
     </div>

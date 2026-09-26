@@ -67,6 +67,8 @@ function App() {
     SCI_IR: useSimulation(),
     SCI_IS_SEULE: useSimulation(),
     SCI_IS_HOLDING: useSimulation(),
+    LMNP_REEL: useSimulation(),
+    LMNP_MICRO: useSimulation(),
   };
 
   const isPending = PROFILE_ORDER.some((p) => simulations[p].isPending);
@@ -126,7 +128,7 @@ function App() {
                   disabled={isPending || !validParts}
                   className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  {isPending ? 'Calcul en cours...' : 'Comparer les 3 montages'}
+                  {isPending ? 'Calcul en cours...' : 'Comparer les montages'}
                 </button>
                 {!validParts && (
                   <span className="text-xs text-red-600">
@@ -221,7 +223,7 @@ function App() {
               ) : (
                 <div className="bg-white rounded-lg border p-12 text-center text-gray-400">
                   <p className="text-lg">
-                    Cliquez sur « Comparer les 3 montages » pour lancer la simulation
+                    Cliquez sur « Comparer les montages » pour lancer la simulation
                   </p>
                   <p className="text-sm mt-2">
                     SCI a l’IR · SCI a l’IS · Holding + SCI a l’IS, sur {store.params.horizonYears} ans

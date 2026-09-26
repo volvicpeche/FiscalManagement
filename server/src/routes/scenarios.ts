@@ -6,6 +6,7 @@ import {
   isValidId,
   listScenarios,
   saveScenario,
+  TropDeScenariosError,
   updateScenario,
 } from '../services/scenarioStore.js';
 
@@ -35,7 +36,14 @@ export async function scenarioRoutes(server: FastifyInstance) {
       });
     }
 
-    return reply.status(201).send(await saveScenario(parsed.data));
+    try {
+      return reply.status(201).send(await saveScenario(parsed.data));
+    } catch (err) {
+      if (err instanceof TropDeScenariosError) {
+        return reply.status(409).send({ error: err.message });
+      }
+      throw err;
+    }
   });
 
   server.put<{ Params: { id: string } }>('/api/simulations/:id', async (request, reply) => {

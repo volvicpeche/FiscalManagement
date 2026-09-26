@@ -72,6 +72,12 @@ The engine is the heart of the app — pure TypeScript functions, fully tested, 
   - `computeAssocieIR` is a DIFFERENTIAL: `IR(autresRevenus + quotePart) − IR(autresRevenus)`. Never tax a quote-part in isolation — it lands in the wrong bracket.
   - Deficit foncier: €10,700/yr against global income, excess carried 10 years with vintage expiry.
   - Comptes courants d'associes: interest deductible for the SCI and taxed as RCM, capital repayment tax-free.
+- **lmnp.ts** — Loueur en Meuble Non Professionnel (`StructureType` `LMNP`), translucent like an LMP but taxed differently:
+  - Reel: depreciation capped by art. 39 C — it never creates a deficit, the excess is deferred with no time limit. Order: the year's depreciation, then carried deficits (10 years, oldest first), then the deferred stock.
+  - A real-charge deficit offsets LMNP profits only — never the global income, unlike an LMP.
+  - PS on capital income (`getSocialChargeRate`), no TNS contribution.
+  - SSI: a meuble de tourisme (seasonal asset) above €23,000 of receipts, judged on each associe's share, pays SSI contributions instead of the PS (`tauxCotisationsSocialesLMP`, floor `cotisationsMinimalesLMP`), deductible from the IR base at the reel only. A `SWISS_EXEMPT` associe stays out. Flagged per year in `lmnp.affiliationSSI`.
+  - Micro-BIC (`regimeLMNP: 'MICRO_BIC'`): 50 % up to €77,700, 30 % up to €15,000 for an unclassified tourist letting (`meubleTourismeClasse`). Judged on the previous year's receipts; above the threshold the reel applies.
 - **succession.ts** — Succession cost estimator:
   - Abatements by relationship (€100K/child, spouse exempt).
   - Progressive rates (5%→45% direct line).
@@ -111,11 +117,11 @@ The entire UI must be in **French** — all labels, buttons, tooltips, error mes
 
 ## Critical Domain Rules
 
-- **Depreciation (SCI IS and LMP):** Land is non-depreciable; its share is the per-asset `landRatio` input, defaulting to 15%. Building: 4%/year over 25 years. Renovation: over 15 years.
+- **Depreciation (SCI IS, LMP and LMNP at the reel):** Land is non-depreciable; its share is the per-asset `landRatio` input, defaulting to 15%. Building: 4%/year over 25 years. Renovation: over 15 years. Furniture (`mobilier`, optional per asset): over 7 years, paid out of the apport, kept out of the real estate book value and of the LMNP add-back at the sale.
 - **Capital Gains exit:** SCI IS = Sale Price - Net Book Value (VNC), taxed at IS rate. SCI IR = Sale Price - Purchase Price with duration abatements (IR exempt after 22yr, PS after 30yr). Social charges on IS gains apply only when distributed as dividends.
 - **Inflation is configurable per field:** separate growth rates for rent, charges, and property tax (all default 2%). Property value growth is separate (default 1.5%).
 - **Associes:** an SCI is held by N associes, each with a full tax household (marital status, children, other income, social charge regime) plus their capital and compte courant contributions. Parts must total exactly 100% — validated in `SimulationRequestSchema.superRefine`, not on `StructureSchema` (a `.refine()` there would turn it into a `ZodEffects` and break the `z.lazy()` self-reference for subsidiaries).
-- **Three-way comparison:** the frontend derives three scenarios — `SCI_IR`, `SCI_IS_SEULE`, `SCI_IS_HOLDING` — from one set of shared inputs (`buildScenario` in the store) and makes three separate `/run` calls. No dedicated comparison endpoint.
+- **Comparison of setups:** the frontend derives five scenarios — `SCI_IR`, `SCI_IS_SEULE`, `SCI_IS_HOLDING`, and a long-term furnished letting owned directly, `LMNP_REEL` and `LMNP_MICRO` — from one set of shared inputs (`buildScenario` in the store) and makes one `/run` call each. No dedicated comparison endpoint. The LMNP columns hold the walls directly (in indivision between the same associes), so they distribute nothing and carry no illiquidity discount at succession. `GET /api/costs/presets` serves an extra `LMNP_MICRO_BIC` key per mode for the micro-BIC preset.
 - **Swiss social charge exemption:** User is affiliated to Swiss social security — exempt from CSG/CRDS, only pays prelevement de solidarite (7.5% instead of 17.2%/18.2%). This is a configurable `SocialChargeRegime` flag (`STANDARD` or `SWISS_EXEMPT`) that affects all PS calculations (IR foncier, PFU, dividends, capital gains).
 - **Indexation is deliberately asymmetric:** rents, charges and running costs are indexed on `(1 + rate)^(year - 1)`, so year 1 is quoted at the figures the user typed. The property value compounds from year 1 and is therefore an end-of-year valuation. The two sit a year apart on purpose.
 - **Currencies:** the whole app is in EUR except the frontalier module, which is in CHF; its French inputs carry an `Eur` suffix and are converted by the ENGINE with `tauxChangeEurChf`, never by the client.
