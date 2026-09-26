@@ -80,6 +80,12 @@ The engine is the heart of the app — pure TypeScript functions, fully tested, 
   - Rate tables are per relationship: ligne directe for children and grandchildren, 35%/45% for siblings, a flat 55% for nephews and nieces, a flat 60% for anyone else.
   - `computeSuccessionForAssocies`: the `SELF` associe dies at the horizon; only their remaining parts (plus their CCA at face value) are transmitted, to the co-associes or, failing that, to the declared children.
 - **exit.ts** — what selling at the horizon costs, reported separately from the yearly figures. At IS it has **two floors**: the corporate tax on the gain measured against the depreciated book value, then the flat tax the associes pay on the boni de liquidation to get the money out. Reporting only the first made the IS look cheaper to leave than the IR, which settles once and for all. LMP applies the art. 151 septies B abatement, so the long-term share is exempt at 15 years.
+- **frontalierGe.ts** — Geneva frontalier: taxation ordinaire ulterieure (TOU) as a quasi-resident, compared with the impot a la source (IS). One fiscal year (2026), no projection.
+  - Quasi-resident test: at least 90 % of the household's GROSS worldwide income, the spouse's included, taxable in Switzerland. French rents count gross.
+  - ICC (bareme art. 41 LIPP, splitting for couples and single parents, 48.5 cantonal centimes, 12 % LDIRPP reduction, communal centimes of the commune of WORK) + IFD (published AFC table, bareme parental). Both rates are set on worldwide income and applied to the Swiss taxable income only (reserve de progression) — French property charges lower the rate.
+  - The IS is recomputed from the official AFC tariff file (`tarifSource.ts`, monthly salary lookup) and compared with the amount actually withheld; `impacts` measures each deduction by removing it alone.
+- **baremesGeneve.ts** — every Swiss figure for that module, vintage `ANNEE_BAREME_GE = 2026`, kept apart from `baremes.ts` on purpose (other jurisdiction, other vintage). Figures not read in an official text carry `@aVerifier`.
+- **tarifSource.ts** — reads `tarifs/tarifSourceGe2026.ts`, GENERATED from the AFC file `tarifs/tar26ge.txt` by `server/scripts/generate-tarif-source.mjs`. Never edit the generated file; regenerate it for a new year. (The folder is not called `data/`: `server/.gitignore` ignores that name for saved scenarios.)
 - **simulator.ts** — 30-year projection loop: revenue (with configurable per-field growth rates) → loan payments → depreciation (IS and LMP only) → structure costs → tax → net cash flow → CCA repayment → intra-group dividends → asset revaluation → IFI → succession at the horizon.
   - `yearlyData` opens on a **year 0** carrying the incorporation costs — index 0 is not year 1.
   - `summary.totalNetWealth` is FAMILY wealth: companies plus what the associes hold personally, net of the tax they paid out of pocket. Without this the regimes are not comparable — at IR the SCI keeps its cash while the associes are taxed personally. It is a wealth-CREATED figure: the apport is debited from it, so it reads relative to the family's savings before the operation.
@@ -92,6 +98,8 @@ The engine is the heart of the app — pure TypeScript functions, fully tested, 
 
 - `POST /api/simulations/run` — Accepts full scenario JSON, returns 30-year projection array
 - `GET /api/costs/presets` — Cost presets for every management mode × structure type, so the client pre-fills its form from the engine instead of duplicating the table
+- `POST /api/frontalier/run` — Geneva TOU vs impot a la source for one year (`FrontalierRequestSchema` in `shared/frontalier.ts`)
+- `POST /api/frontalier/documents` — multipart upload (PDF/JPEG/PNG/WebP, 10 × 10 MB); Claude reads each file into amounts tagged with their form field (`services/llm/documentExtractor.ts`, Anthropic only). Files stay in memory, never on disk; the client applies nothing until the user validates each field.
 - `GET /api/simulations/:id` — Retrieve saved scenario *(not implemented yet)*
 - `POST /api/simulations` — Save scenario state *(not implemented yet)*
 
@@ -110,6 +118,7 @@ The entire UI must be in **French** — all labels, buttons, tooltips, error mes
 - **Three-way comparison:** the frontend derives three scenarios — `SCI_IR`, `SCI_IS_SEULE`, `SCI_IS_HOLDING` — from one set of shared inputs (`buildScenario` in the store) and makes three separate `/run` calls. No dedicated comparison endpoint.
 - **Swiss social charge exemption:** User is affiliated to Swiss social security — exempt from CSG/CRDS, only pays prelevement de solidarite (7.5% instead of 17.2%/18.2%). This is a configurable `SocialChargeRegime` flag (`STANDARD` or `SWISS_EXEMPT`) that affects all PS calculations (IR foncier, PFU, dividends, capital gains).
 - **Indexation is deliberately asymmetric:** rents, charges and running costs are indexed on `(1 + rate)^(year - 1)`, so year 1 is quoted at the figures the user typed. The property value compounds from year 1 and is therefore an end-of-year valuation. The two sit a year apart on purpose.
+- **Currencies:** the whole app is in EUR except the frontalier module, which is in CHF; its French inputs carry an `Eur` suffix and are converted by the ENGINE with `tauxChangeEurChf`, never by the client.
 - All monetary fields in Prisma use `Decimal(20,2)`.
 - Structures support parent-child hierarchy (Holding → SCI) with ownership shares.
 - All API inputs must be validated with Zod schemas.

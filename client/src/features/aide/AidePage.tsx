@@ -217,6 +217,43 @@ const SECTIONS: Section[] = [
     ),
   },
   {
+    id: 'frontalier',
+    titre: 'Frontalier Geneve : TOU ou impot a la source ?',
+    contenu: (
+      <div className="space-y-3">
+        <p className="text-sm text-gray-700 leading-relaxed">
+          Un frontalier qui travaille a Geneve est <strong>impose a la source</strong> : son
+          employeur retient chaque mois un pourcentage du salaire, selon un bareme qui integre deja
+          des deductions forfaitaires. S’il est <strong>quasi-resident</strong>, il peut demander a
+          la place une <strong>taxation ordinaire ulterieure (TOU)</strong>, qui retient ses
+          deductions reelles, comme pour un resident genevois.
+        </p>
+        <div className="rounded-md bg-gray-50 border border-gray-200 p-3 space-y-2">
+          <Terme mot="Quasi-resident">
+            au moins 90 % des revenus bruts mondiaux du foyer, conjoint compris, sont imposables en
+            Suisse. Un conjoint qui travaille en France ou des loyers francais peuvent suffire a
+            faire echouer le test.
+          </Terme>
+          <Terme mot="Reserve de progression">
+            les revenus francais ne sont pas imposes a Geneve, mais ils servent a fixer le taux
+            applique au salaire suisse. Les charges d’un bien en France (copro, travaux, interets)
+            abaissent donc ce taux.
+          </Terme>
+          <Terme mot="ICC et IFD">
+            l’impot cantonal et communal (bareme genevois, commune du lieu de travail) et l’impot
+            federal direct. La TOU additionne les deux.
+          </Terme>
+        </div>
+        <p className="text-sm text-gray-700 leading-relaxed">
+          La TOU n’est pas toujours plus avantageuse : sans rachat LPP, 3e pilier, frais de garde
+          ou primes elevees, elle coute souvent plus cher que l’impot a la source. La demande doit
+          parvenir a l’AFC-GE avant le <strong>31 mars</strong> de l’annee suivante et ne peut plus
+          etre retiree une fois la taxation notifiee — d’ou l’interet de la simuler avant.
+        </p>
+      </div>
+    ),
+  },
+  {
     id: 'concepts',
     titre: 'Les notions qui reviennent partout',
     contenu: (
