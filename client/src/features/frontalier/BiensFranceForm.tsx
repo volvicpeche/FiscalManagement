@@ -5,9 +5,26 @@ import { Montant, Titre, inputClass, labelClass } from './ui';
 const CHARGES: { cle: keyof BienFrance; label: string }[] = [
   { cle: 'chargesCoproEur', label: 'Charges de copro' },
   { cle: 'taxeFonciereEur', label: 'Taxe fonciere' },
-  { cle: 'travauxEur', label: 'Travaux d’entretien' },
   { cle: 'assuranceEur', label: 'Assurance' },
   { cle: 'interetsEmpruntEur', label: 'Interets d’emprunt' },
+];
+
+const TRAVAUX: { cle: keyof BienFrance; label: string; aide: string }[] = [
+  {
+    cle: 'travauxEntretienEur',
+    label: 'Entretien et remise en etat',
+    aide: 'Remplacer l’existant par un equivalent : electricite vetuste, WC, salle de bain, toiture, peinture.',
+  },
+  {
+    cle: 'travauxEnergieEur',
+    label: 'Economies d’energie',
+    aide: 'Isolation, fenetres, pompe a chaleur, solaire. L’excedent se reporte sur deux ans.',
+  },
+  {
+    cle: 'travauxPlusValueEur',
+    label: 'Part plus-value',
+    aide: 'Ajout ou montee en gamme : pour memoire, jamais deductible.',
+  },
 ];
 
 /**
@@ -77,6 +94,18 @@ export function BiensFranceForm() {
                 className="col-span-2"
               />
             )}
+            <div>
+              <label className={labelClass}>Age du batiment</label>
+              <input
+                type="number"
+                min={0}
+                max={1000}
+                className={inputClass}
+                value={b.ageBatiment}
+                onChange={(e) => updateBien(i, { ageBatiment: parseInt(e.target.value) || 0 })}
+              />
+              <p className="text-xs text-gray-400 mt-1">Forfait d’entretien plus eleve au-dela de 10 ans.</p>
+            </div>
             {CHARGES.map(({ cle, label }) => (
               <Montant
                 key={cle}
@@ -88,6 +117,24 @@ export function BiensFranceForm() {
               />
             ))}
           </div>
+          <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Travaux de l’annee</p>
+          <div className="grid grid-cols-2 gap-3">
+            {TRAVAUX.map(({ cle, label, aide }) => (
+              <Montant
+                key={cle}
+                label={label}
+                devise="EUR"
+                value={String(b[cle])}
+                onChange={(v) => updateBien(i, { [cle]: v })}
+                source={sources[`biensFrance.${i}.${cle}`]}
+                aide={aide}
+              />
+            ))}
+          </div>
+          <p className="text-xs text-gray-400">
+            Le moteur retient chaque annee le plus favorable des frais reels et du forfait d’entretien (ICC : 15 ou 25 %
+            de la valeur locative d’un logement que vous occupez ; IFD : 10 ou 20 % du rendement brut).
+          </p>
         </div>
       ))}
 

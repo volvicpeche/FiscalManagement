@@ -165,6 +165,48 @@ export function FrontalierResultats({ result: r }: { result: FrontalierResult })
         </div>
       </div>
 
+      {r.biensFrance.length > 0 && (
+        <div className="rounded-lg border bg-white p-4">
+          <h3 className="text-lg font-semibold text-gray-900">Biens en France</h3>
+          <p className="text-xs text-gray-500 mb-3">
+            Revenu net pris en compte pour le taux, en CHF. Les frais d’entretien retiennent le plus favorable du reel et
+            du forfait, separement pour l’ICC et l’IFD.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-gray-500">
+                  <th className="py-1 font-medium">Bien</th>
+                  <th className="py-1 text-right font-medium">Produits</th>
+                  <th className="py-1 text-right font-medium">Taxe + interets</th>
+                  <th className="py-1 text-right font-medium">Entretien ICC</th>
+                  <th className="py-1 text-right font-medium">Entretien IFD</th>
+                  <th className="py-1 text-right font-medium">Net ICC</th>
+                  <th className="py-1 text-right font-medium">Net IFD</th>
+                </tr>
+              </thead>
+              <tbody>
+                {r.biensFrance.map((b, i) => (
+                  <tr key={i} className="border-t text-gray-700">
+                    <td className="py-1.5 pr-2">{b.label || `Bien ${i + 1}`}</td>
+                    <td className="py-1.5 text-right font-mono">{formatChf(b.produits)}</td>
+                    <td className="py-1.5 text-right font-mono">{formatChf(b.autresCharges)}</td>
+                    {[b.icc, b.ifd].map((m, j) => (
+                      <td key={j} className="py-1.5 text-right font-mono whitespace-nowrap">
+                        {formatChf(m.fraisEntretien)}{' '}
+                        <span className="text-xs text-gray-400">{m.methode === 'FORFAIT' ? 'forfait' : 'reel'}</span>
+                      </td>
+                    ))}
+                    <td className="py-1.5 text-right font-mono">{formatChf(b.icc.net)}</td>
+                    <td className="py-1.5 text-right font-mono">{formatChf(b.ifd.net)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {r.avertissements.length > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
           <h3 className="text-sm font-semibold text-amber-900">A savoir</h3>

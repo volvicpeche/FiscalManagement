@@ -3,8 +3,10 @@ import type {
   CalculICC,
   CalculImpot,
   FrontalierRequest,
+  DetailBienFrance,
   FrontalierResult,
   ImpactDeduction,
+  MesureBien,
   ImpotSourcePersonne,
   LigneDeduction,
   PersonneFrontalier,
@@ -14,6 +16,11 @@ import {
   ANNEE_BAREME_GE,
   CENTIMES_COMMUNAUX,
   DATE_LIMITE_TOU,
+  FORFAIT_ENTRETIEN_AGE_SEUIL,
+  ICC_FORFAIT_ENTRETIEN_ANCIEN,
+  ICC_FORFAIT_ENTRETIEN_RECENT,
+  IFD_FORFAIT_ENTRETIEN_ANCIEN,
+  IFD_FORFAIT_ENTRETIEN_RECENT,
   ICC_ASSURANCE_MALADIE_ADULTE,
   ICC_ASSURANCE_MALADIE_ENFANT,
   ICC_ASSURANCE_MALADIE_JEUNE_ADULTE,
@@ -137,22 +144,95 @@ function plafond3a(p: PersonneFrontalier): Decimal {
 
 // ─── Revenus etrangers ───────────────────────────────────────────────────────
 
-function netBienFrance(b: FrontalierRequest['biensFrance'][number], avecCharges: boolean): Decimal {
+type Regime = 'icc' | 'ifd';
+type BienReq = FrontalierRequest['biensFrance'][number];
+
+interface MesureBienDec {
+  fraisEntretien: Decimal;
+  methode: 'EFFECTIFS' | 'FORFAIT';
+  forfait: Decimal | null;
+  energieReportable: Decimal;
+  net: Decimal;
+}
+
+/**
+ * Net income of a French property under Swiss rules, in EUR.
+ *
+ * Maintenance and restoration are deductible — replacing wiring or a
+ * bathroom like for like included — and so are energy-saving investments;
+ * the plus-value share of works never is. Taxe fonciere and interest come on
+ * top of the maintenance costs, whichever way those are counted.
+ *
+ * The forfait replaces the effective maintenance costs when it is higher:
+ * at the ICC for an owner-occupied home only, at the IFD for any private
+ * building.
+ *
+ * @aVerifier Energy costs beyond the year's income carry over two years
+ * (art. 34 let. e LIPP). The law measures that on total income; for a
+ * property that only sets the rate, it is measured on the property alone.
+ * @aVerifier Taxe fonciere deducted on top of the forfait.
+ */
+export function mesurerBien(b: BienReq, regime: Regime): MesureBienDec {
   const produits = d(b.loyersBrutsEur).plus(b.valeurLocativeEur);
-  if (!avecCharges) return produits;
-  return produits
-    .minus(b.chargesCoproEur)
-    .minus(b.taxeFonciereEur)
-    .minus(b.travauxEur)
-    .minus(b.assuranceEur)
-    .minus(b.interetsEmpruntEur);
+  const autres = d(b.taxeFonciereEur).plus(b.interetsEmpruntEur);
+  const courants = d(b.chargesCoproEur).plus(b.travauxEntretienEur).plus(b.assuranceEur);
+
+  const disponible = positive(produits.minus(autres).minus(courants));
+  const energie = Decimal.min(d(b.travauxEnergieEur), disponible);
+  const effectifs = courants.plus(energie);
+
+  const recent = b.ageBatiment <= FORFAIT_ENTRETIEN_AGE_SEUIL;
+  let forfait: Decimal | null = null;
+  if (regime === 'ifd') {
+    forfait = produits.mul(recent ? IFD_FORFAIT_ENTRETIEN_RECENT : IFD_FORFAIT_ENTRETIEN_ANCIEN);
+  } else if (b.usage !== 'LOCATIF') {
+    forfait = d(b.valeurLocativeEur).mul(recent ? ICC_FORFAIT_ENTRETIEN_RECENT : ICC_FORFAIT_ENTRETIEN_ANCIEN);
+  }
+
+  // The forfait replaces every effective maintenance cost of the year,
+  // energy works included: those are then lost, not carried over.
+  if (forfait && forfait.gt(effectifs)) {
+    return { fraisEntretien: forfait, methode: 'FORFAIT', forfait, energieReportable: ZERO, net: produits.minus(autres).minus(forfait) };
+  }
+  return {
+    fraisEntretien: effectifs,
+    methode: 'EFFECTIFS',
+    forfait,
+    energieReportable: d(b.travauxEnergieEur).minus(energie),
+    net: produits.minus(autres).minus(effectifs),
+  };
 }
 
 /** Net foreign income in CHF, which sets the rate but is not taxed in Geneva. */
-function revenusEtrangersNets(f: Foyer, avecChargesBiens = true): Decimal {
+function revenusEtrangersNets(f: Foyer, regime: Regime, avecChargesBiens = true): Decimal {
   const salaires = sum(f.membres.map((m) => d(m.revenuFranceNetEur)));
-  const biens = sum(f.req.biensFrance.map((b) => netBienFrance(b, avecChargesBiens)));
+  const biens = sum(
+    f.req.biensFrance.map((b) =>
+      avecChargesBiens ? mesurerBien(b, regime).net : d(b.loyersBrutsEur).plus(b.valeurLocativeEur),
+    ),
+  );
   return salaires.plus(biens).plus(f.req.autresRevenusEtrangersEur).mul(f.fx);
+}
+
+export function detailBiens(req: FrontalierRequest): DetailBienFrance[] {
+  const fx = d(req.tauxChangeEurChf);
+  const chf = (x: Decimal) => x.mul(fx).toFixed(2);
+  const mesure = (m: MesureBienDec): MesureBien => ({
+    fraisEntretien: chf(m.fraisEntretien),
+    methode: m.methode,
+    forfait: m.forfait ? chf(m.forfait) : null,
+    energieReportable: chf(m.energieReportable),
+    net: chf(m.net),
+  });
+  return req.biensFrance.map((b) => ({
+    label: b.label,
+    usage: b.usage,
+    produits: chf(d(b.loyersBrutsEur).plus(b.valeurLocativeEur)),
+    autresCharges: chf(d(b.taxeFonciereEur).plus(b.interetsEmpruntEur)),
+    plusValueNonDeduite: chf(d(b.travauxPlusValueEur)),
+    icc: mesure(mesurerBien(b, 'icc')),
+    ifd: mesure(mesurerBien(b, 'ifd')),
+  }));
 }
 
 // ─── Test des 90 % ───────────────────────────────────────────────────────────
@@ -419,9 +499,10 @@ export function computeIfd(req: FrontalierRequest, imposable: Decimal, etrangers
 
 function totalTou(req: FrontalierRequest, exclure?: CodeImpact): Decimal {
   const assiettes = computeAssiettes(req, exclure === CHARGES_BIENS_FRANCE ? undefined : exclure);
-  const etrangers = revenusEtrangersNets(foyer(req), exclure !== CHARGES_BIENS_FRANCE);
-  return d(computeIcc(req, assiettes.imposableIcc, etrangers).total).plus(
-    computeIfd(req, assiettes.imposableIfd, etrangers).total,
+  const f = foyer(req);
+  const avecCharges = exclure !== CHARGES_BIENS_FRANCE;
+  return d(computeIcc(req, assiettes.imposableIcc, revenusEtrangersNets(f, 'icc', avecCharges)).total).plus(
+    computeIfd(req, assiettes.imposableIfd, revenusEtrangersNets(f, 'ifd', avecCharges)).total,
   );
 }
 
@@ -459,9 +540,8 @@ export function simulateFrontalier(req: FrontalierRequest): FrontalierResult {
   const f = foyer(req);
   const test90 = computeTest90(req);
   const assiettes = computeAssiettes(req);
-  const etrangers = revenusEtrangersNets(f);
-  const icc = computeIcc(req, assiettes.imposableIcc, etrangers);
-  const ifd = computeIfd(req, assiettes.imposableIfd, etrangers);
+  const icc = computeIcc(req, assiettes.imposableIcc, revenusEtrangersNets(f, 'icc'));
+  const ifd = computeIfd(req, assiettes.imposableIfd, revenusEtrangersNets(f, 'ifd'));
   const tou = d(icc.total).plus(ifd.total);
 
   const impotSource = computeImpotSource(req);
@@ -500,6 +580,7 @@ export function simulateFrontalier(req: FrontalierRequest): FrontalierResult {
     totalIsTheorique: isTheorique.toFixed(2),
     gainTou: reference.minus(tou).toFixed(2),
     impacts,
+    biensFrance: detailBiens(req),
     dateLimite: DATE_LIMITE_TOU,
     avertissements: avertissements(req, f, test90, impotSource),
   };
@@ -508,12 +589,12 @@ export function simulateFrontalier(req: FrontalierRequest): FrontalierResult {
 function chargesBiensImpact(req: FrontalierRequest, tou: Decimal): ImpactDeduction[] {
   if (req.biensFrance.length === 0) return [];
   const f = foyer(req);
-  const charges = revenusEtrangersNets(f, false).minus(revenusEtrangersNets(f, true));
+  const charges = revenusEtrangersNets(f, 'icc', false).minus(revenusEtrangersNets(f, 'icc', true));
   if (charges.lte(0)) return [];
   return [
     {
       code: CHARGES_BIENS_FRANCE,
-      libelle: 'Charges des biens en France (taux)',
+      libelle: 'Charges et travaux des biens en France (taux)',
       montant: charges.toFixed(2),
       economie: totalTou(req, CHARGES_BIENS_FRANCE).minus(tou).toFixed(2),
     },
@@ -567,6 +648,25 @@ function avertissements(
     }
     if (retenu.isZero()) {
       out.push(`Aucun impot retenu saisi pour ${p.prenom || 'le contribuable'} : la comparaison utilise le bareme ${p.codeTarif}.`);
+    }
+  }
+
+  for (const b of detailBiens(req)) {
+    const nom = b.label || 'un bien en France';
+    if (d(b.plusValueNonDeduite).gt(0)) {
+      out.push(
+        `La part plus-value des travaux de ${nom} (${d(b.plusValueNonDeduite).toFixed(0)} CHF) n'est pas deductible : seuls l'entretien, la remise en etat a l'identique et les economies d'energie le sont.`,
+      );
+    }
+    if (d(b.icc.energieReportable).gt(0)) {
+      out.push(
+        `Les travaux d'economie d'energie de ${nom} depassent son revenu de l'annee : ${d(b.icc.energieReportable).toFixed(0)} CHF sont reportables sur les deux annees suivantes.`,
+      );
+    }
+    if (b.icc.methode === 'FORFAIT' || b.ifd.methode === 'FORFAIT') {
+      out.push(
+        `Pour ${nom}, le forfait d'entretien depasse les frais reels${b.icc.methode === 'FORFAIT' ? '' : ' a l\'IFD'} : il est retenu a leur place, et les travaux de l'annee ne comptent plus.`,
+      );
     }
   }
 

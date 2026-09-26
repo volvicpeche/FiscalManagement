@@ -49,9 +49,12 @@ export const bienVide = (): BienFrance => ({
   usage: 'LOCATIF',
   loyersBrutsEur: '0.00',
   valeurLocativeEur: '0.00',
+  ageBatiment: 20,
   chargesCoproEur: '0.00',
   taxeFonciereEur: '0.00',
-  travauxEur: '0.00',
+  travauxEntretienEur: '0.00',
+  travauxEnergieEur: '0.00',
+  travauxPlusValueEur: '0.00',
   assuranceEur: '0.00',
   interetsEmpruntEur: '0.00',
 });
@@ -65,6 +68,15 @@ const DEDUCTIONS_VIDES: DeductionsFoyer = {
   fraisMedicaux: '0.00',
   dons: '0.00',
 };
+
+/**
+ * Saves made before the works were split carry a single `travauxEur`: it was
+ * always meant as maintenance, so that is where it goes.
+ */
+function migrerBien(b: BienFrance & { travauxEur?: string }): BienFrance {
+  const { travauxEur, ...reste } = b;
+  return { ...bienVide(), ...(travauxEur ? { travauxEntretienEur: travauxEur } : {}), ...reste };
+}
 
 export interface FrontalierInputs {
   etatCivil: EtatCivilGe;
@@ -145,7 +157,9 @@ const CIBLES: Record<ChampCible, { zone: 'personne' | 'deductions' | 'bien' | 'g
   BIEN_INTERETS_EMPRUNT: { zone: 'bien', cle: 'interetsEmpruntEur', devise: 'EUR' },
   BIEN_CHARGES_COPRO: { zone: 'bien', cle: 'chargesCoproEur', devise: 'EUR' },
   BIEN_TAXE_FONCIERE: { zone: 'bien', cle: 'taxeFonciereEur', devise: 'EUR' },
-  BIEN_TRAVAUX: { zone: 'bien', cle: 'travauxEur', devise: 'EUR' },
+  BIEN_TRAVAUX_ENTRETIEN: { zone: 'bien', cle: 'travauxEntretienEur', devise: 'EUR' },
+  BIEN_TRAVAUX_ENERGIE: { zone: 'bien', cle: 'travauxEnergieEur', devise: 'EUR' },
+  BIEN_TRAVAUX_PLUS_VALUE: { zone: 'bien', cle: 'travauxPlusValueEur', devise: 'EUR' },
   BIEN_ASSURANCE: { zone: 'bien', cle: 'assuranceEur', devise: 'EUR' },
   BIEN_LOYERS: { zone: 'bien', cle: 'loyersBrutsEur', devise: 'EUR' },
 };
@@ -167,7 +181,9 @@ export const LIBELLES_CIBLES: Record<ChampCible, string> = {
   BIEN_INTERETS_EMPRUNT: 'Bien : interets d’emprunt',
   BIEN_CHARGES_COPRO: 'Bien : charges de copro',
   BIEN_TAXE_FONCIERE: 'Bien : taxe fonciere',
-  BIEN_TRAVAUX: 'Bien : travaux',
+  BIEN_TRAVAUX_ENTRETIEN: 'Bien : travaux d’entretien',
+  BIEN_TRAVAUX_ENERGIE: 'Bien : economies d’energie',
+  BIEN_TRAVAUX_PLUS_VALUE: 'Bien : travaux plus-value (non deductibles)',
   BIEN_ASSURANCE: 'Bien : assurance',
   BIEN_LOYERS: 'Bien : loyers',
 };
@@ -290,7 +306,7 @@ export const useFrontalierStore = create<FrontalierStore>((set, get) => ({
       conjoint: data.conjoint ? { ...personneVide('FRANCE'), ...data.conjoint } : s.conjoint,
       enfants: data.enfants ?? s.enfants,
       deductions: data.deductions ? { ...DEDUCTIONS_VIDES, ...data.deductions } : s.deductions,
-      biensFrance: data.biensFrance ? data.biensFrance.map((b) => ({ ...bienVide(), ...b })) : s.biensFrance,
+      biensFrance: data.biensFrance ? data.biensFrance.map(migrerBien) : s.biensFrance,
       autresRevenusEtrangersEur: data.autresRevenusEtrangersEur ?? s.autresRevenusEtrangersEur,
       sources: data.sources ?? {},
       // A loaded scenario has not been run yet.

@@ -1,11 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import Decimal from 'decimal.js';
-import { FrontalierRequestSchema, type FrontalierRequest, type FrontalierRequestInput } from '@shared/frontalier.js';
+import {
+  BienFranceSchema,
+  FrontalierRequestSchema,
+  type BienFranceInput,
+  type FrontalierRequest,
+  type FrontalierRequestInput,
+} from '@shared/frontalier.js';
 import {
   codeTarifParDefaut,
   computeAssiettes,
   computeTest90,
+  detailBiens,
   impotBaseIcc,
+  mesurerBien,
   impotBaseIccSplitting,
   impotIfdBareme,
   simulateFrontalier,
@@ -176,7 +184,7 @@ describe('simulateFrontalier — reserve de progression', () => {
   it('should let French property charges lower the rate', () => {
     const brut = simulateFrontalier(baseParams({ biensFrance: [{ usage: 'LOCATIF', loyersBrutsEur: '20000.00' }] }));
     const net = simulateFrontalier(
-      baseParams({ biensFrance: [{ usage: 'LOCATIF', loyersBrutsEur: '20000.00', chargesCoproEur: '3000.00', travauxEur: '5000.00' }] }),
+      baseParams({ biensFrance: [{ usage: 'LOCATIF', loyersBrutsEur: '20000.00', chargesCoproEur: '3000.00', travauxEntretienEur: '5000.00' }] }),
     );
     expect(new Decimal(net.totalTou).lt(brut.totalTou)).toBe(true);
     expect(net.impacts.some((i) => i.code === 'CHARGES_BIENS_FRANCE')).toBe(true);
@@ -240,5 +248,94 @@ describe('codeTarifParDefaut', () => {
         baseParams({ etatCivil: 'MARIE', conjoint: { activite: 'FRANCE', revenuFranceBrutEur: '1000.00' }, enfants: [{ age: 1 }, { age: 2 }] }),
       ),
     ).toBe('C2');
+  });
+});
+
+const bien = (b: Partial<BienFranceInput>) => BienFranceSchema.parse({ usage: 'LOCATIF', ...b });
+
+describe('mesurerBien — travaux', () => {
+  it('should deduct maintenance and energy works but never the plus-value share', () => {
+    const m = mesurerBien(
+      bien({ loyersBrutsEur: '20000.00', travauxEntretienEur: '6000.00', travauxEnergieEur: '3000.00', travauxPlusValueEur: '8000.00' }),
+      'icc',
+    );
+    expect(m.methode).toBe('EFFECTIFS');
+    expect(m.fraisEntretien.toNumber()).toBe(9000);
+    expect(m.net.toNumber()).toBe(11000);
+  });
+
+  it('should carry over the energy works the property income cannot absorb', () => {
+    const m = mesurerBien(
+      bien({ loyersBrutsEur: '10000.00', interetsEmpruntEur: '4000.00', travauxEntretienEur: '2000.00', travauxEnergieEur: '9000.00' }),
+      'icc',
+    );
+    // 10 000 − 4 000 − 2 000 = 4 000 d'energie absorbables, 5 000 reportes
+    expect(m.net.toNumber()).toBe(0);
+    expect(m.energieReportable.toNumber()).toBe(5000);
+  });
+
+  it('should let maintenance other than energy push the property into a loss', () => {
+    const m = mesurerBien(bien({ loyersBrutsEur: '5000.00', travauxEntretienEur: '12000.00' }), 'icc');
+    expect(m.net.toNumber()).toBe(-7000);
+  });
+});
+
+describe('mesurerBien — forfait d\'entretien', () => {
+  const residence = (b: Partial<BienFranceInput>) =>
+    bien({ usage: 'RESIDENCE_PRINCIPALE', valeurLocativeEur: '20000.00', ...b });
+
+  it('should apply the ICC forfait of 25 % to an owner-occupied home over 10 years old', () => {
+    const m = mesurerBien(residence({ ageBatiment: 30, chargesCoproEur: '1000.00' }), 'icc');
+    expect(m.methode).toBe('FORFAIT');
+    expect(m.fraisEntretien.toNumber()).toBe(5000);
+  });
+
+  it('should apply the ICC forfait of 15 % to a recent building', () => {
+    const m = mesurerBien(residence({ ageBatiment: 10 }), 'icc');
+    expect(m.fraisEntretien.toNumber()).toBe(3000);
+  });
+
+  it('should keep the effective costs when heavy works exceed the forfait', () => {
+    const m = mesurerBien(residence({ ageBatiment: 30, travauxEntretienEur: '15000.00' }), 'icc');
+    expect(m.methode).toBe('EFFECTIFS');
+    expect(m.fraisEntretien.toNumber()).toBe(15000);
+  });
+
+  it('should deduct taxe fonciere and interest on top of the forfait', () => {
+    const m = mesurerBien(residence({ ageBatiment: 30, taxeFonciereEur: '1500.00', interetsEmpruntEur: '6000.00' }), 'icc');
+    expect(m.net.toNumber()).toBe(20000 - 5000 - 1500 - 6000);
+  });
+
+  it('should grant no ICC forfait to a rented property', () => {
+    const m = mesurerBien(bien({ loyersBrutsEur: '20000.00', ageBatiment: 30 }), 'icc');
+    expect(m.forfait).toBeNull();
+    expect(m.net.toNumber()).toBe(20000);
+  });
+
+  it('should grant the IFD forfait of 10 % / 20 % of gross income to any property', () => {
+    expect(mesurerBien(bien({ loyersBrutsEur: '20000.00', ageBatiment: 30 }), 'ifd').fraisEntretien.toNumber()).toBe(4000);
+    expect(mesurerBien(bien({ loyersBrutsEur: '20000.00', ageBatiment: 5 }), 'ifd').fraisEntretien.toNumber()).toBe(2000);
+  });
+});
+
+describe('detailBiens — restitution en CHF', () => {
+  it('should convert every amount and report both taxes', () => {
+    const [b] = detailBiens(
+      baseParams({ biensFrance: [{ usage: 'RESIDENCE_PRINCIPALE', valeurLocativeEur: '10000.00', ageBatiment: 30, travauxPlusValueEur: '1000.00' }] }),
+    );
+    expect(b.produits).toBe('9300.00');
+    expect(b.plusValueNonDeduite).toBe('930.00');
+    expect(b.icc.fraisEntretien).toBe('2325.00'); // 25 % de la valeur locative
+    expect(b.ifd.fraisEntretien).toBe('1860.00'); // 20 % du rendement brut
+  });
+});
+
+describe('simulateFrontalier — travaux de rehabilitation', () => {
+  it('should lower the TOU when works are entered as maintenance, not as plus-value', () => {
+    const base = { usage: 'LOCATIF' as const, loyersBrutsEur: '24000.00', ageBatiment: 40 };
+    const entretien = simulateFrontalier(baseParams({ biensFrance: [{ ...base, travauxEntretienEur: '15000.00' }] }));
+    const plusValue = simulateFrontalier(baseParams({ biensFrance: [{ ...base, travauxPlusValueEur: '15000.00' }] }));
+    expect(new Decimal(entretien.totalTou).lt(plusValue.totalTou)).toBe(true);
+    expect(plusValue.avertissements.some((a) => /plus-value/.test(a))).toBe(true);
   });
 });

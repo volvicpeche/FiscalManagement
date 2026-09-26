@@ -57,7 +57,11 @@ Identifie le type de document, puis extrais UNIQUEMENT les montants annuels util
 - Interets d'une dette : si elle finance un bien en France -> BIEN_INTERETS_EMPRUNT, sinon -> INTERETS_PASSIFS. Ne compte jamais l'amortissement du capital.
 - Appel de charges ou decompte de copropriete -> BIEN_CHARGES_COPRO (charges de l'exercice, hors fonds de travaux non depenses).
 - Avis de taxe fonciere -> BIEN_TAXE_FONCIERE (hors taxe d'enlevement des ordures si elle est recuperee sur le locataire).
-- Facture de travaux d'entretien ou de renovation -> BIEN_TRAVAUX.
+- Facture de travaux sur un bien : ventile le montant TTC selon le droit fiscal suisse, en un champ par categorie :
+  BIEN_TRAVAUX_ENTRETIEN pour l'entretien et la remise en etat, c'est-a-dire remplacer l'existant par un equivalent (refaire une installation electrique vetuste, remplacer des WC, une cuisine ou une salle de bain de standing comparable, peinture, toiture, canalisations) ;
+  BIEN_TRAVAUX_ENERGIE pour les investissements qui economisent l'energie (isolation, fenetres a meilleure performance, pompe a chaleur, panneaux solaires, remplacement d'une chaudiere fioul) ;
+  BIEN_TRAVAUX_PLUS_VALUE pour ce qui ajoute ou ameliore (piece ou salle d'eau nouvelle, agrandissement, equipement qui n'existait pas, nette montee en gamme).
+  Ventile ligne par ligne quand la facture le permet ; sinon, retiens la categorie dominante et explique la ventilation dans source. Signale toute hesitation dans remarques : l'utilisateur tranchera.
 - Assurance habitation ou PNO d'un bien loue -> BIEN_ASSURANCE.
 - Releve de loyers encaisses -> BIEN_LOYERS.
 - Frais de garde d'enfants (creche, assistante maternelle) -> FRAIS_GARDE.

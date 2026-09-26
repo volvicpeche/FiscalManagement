@@ -118,13 +118,24 @@ export const BienFranceSchema = z.object({
   loyersBrutsEur: zero(),
   /** Valeur locative annuelle d'un bien occupe par son proprietaire. */
   valeurLocativeEur: zero(),
+  /**
+   * Age du batiment au debut de l'annee : fixe le forfait d'entretien d'un
+   * logement occupe par son proprietaire (15 % ou 25 % de la valeur locative).
+   */
+  ageBatiment: z.number().int().min(0).max(1000).default(20),
   chargesCoproEur: zero(),
   taxeFonciereEur: zero(),
-  travauxEur: zero(),
+  /** Entretien et remise en etat : remplacer l'existant par un equivalent. */
+  travauxEntretienEur: zero(),
+  /** Investissements economisant l'energie (isolation, fenetres, pompe a chaleur...). */
+  travauxEnergieEur: zero(),
+  /** Part plus-value (agrandissement, equipement nouveau, montee en gamme) : jamais deductible. */
+  travauxPlusValueEur: zero(),
   assuranceEur: zero(),
   interetsEmpruntEur: zero(),
 });
 export type BienFrance = z.infer<typeof BienFranceSchema>;
+export type BienFranceInput = z.input<typeof BienFranceSchema>;
 
 // ─── Requete ─────────────────────────────────────────────────────────────────
 
@@ -222,6 +233,32 @@ export interface ImpactDeduction {
   economie: string;
 }
 
+/** Net income of one property under one tax, the ICC and the IFD having different forfaits. */
+export interface MesureBien {
+  /** Frais d'entretien retenus (copro, travaux, assurance), en CHF. */
+  fraisEntretien: string;
+  methode: 'EFFECTIFS' | 'FORFAIT';
+  /** Forfait possible, ou null quand cet impot n'en accorde pas pour ce bien. */
+  forfait: string | null;
+  /** Economies d'energie excedant le revenu du bien : reportables sur les deux annees suivantes. */
+  energieReportable: string;
+  net: string;
+}
+
+/** How a French property's net income was measured, for the rate. Amounts in CHF. */
+export interface DetailBienFrance {
+  label: string;
+  usage: UsageBienFrance;
+  /** Loyers ou valeur locative. */
+  produits: string;
+  /** Taxe fonciere et interets, deduits en plus des frais d'entretien. */
+  autresCharges: string;
+  /** Part plus-value des travaux, jamais deduite. */
+  plusValueNonDeduite: string;
+  icc: MesureBien;
+  ifd: MesureBien;
+}
+
 export interface FrontalierResult {
   annee: number;
   test90: Test90Result;
@@ -235,6 +272,7 @@ export interface FrontalierResult {
   /** IS retenu − TOU : positif quand la TOU est plus avantageuse. */
   gainTou: string;
   impacts: ImpactDeduction[];
+  biensFrance: DetailBienFrance[];
   dateLimite: string;
   avertissements: string[];
 }
@@ -278,7 +316,9 @@ export const ChampCible = z.enum([
   'BIEN_INTERETS_EMPRUNT',
   'BIEN_CHARGES_COPRO',
   'BIEN_TAXE_FONCIERE',
-  'BIEN_TRAVAUX',
+  'BIEN_TRAVAUX_ENTRETIEN',
+  'BIEN_TRAVAUX_ENERGIE',
+  'BIEN_TRAVAUX_PLUS_VALUE',
   'BIEN_ASSURANCE',
   'BIEN_LOYERS',
 ]);

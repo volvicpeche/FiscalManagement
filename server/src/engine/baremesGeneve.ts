@@ -244,6 +244,25 @@ export const PILIER_3A_SANS_LPP_TAUX = new Decimal('0.20');
 /** Interets passifs : limites au rendement de la fortune plus 50 000 (art. 33 al. 1 let. a LIFD). */
 export const INTERETS_PASSIFS_FRANCHISE = new Decimal('50000');
 
+// ─── Biens immobiliers (art. 34 let. d et e LIPP, art. 32 LIFD) ─────────────
+
+/**
+ * ICC : forfait d'entretien du seul logement occupe par son proprietaire, en
+ * part de la valeur locative, au choix chaque annee et pour chaque bien
+ * contre les frais effectifs (art. 34 let. d LIPP, art. 21 RIPP).
+ */
+export const ICC_FORFAIT_ENTRETIEN_RECENT = new Decimal('0.15');
+export const ICC_FORFAIT_ENTRETIEN_ANCIEN = new Decimal('0.25');
+/**
+ * A l'IFD, le forfait vaut pour tout immeuble prive, loue ou non, en part du
+ * rendement brut (loyers ou valeur locative) : ordonnance du DFF sur les
+ * frais relatifs aux immeubles prives, art. 5.
+ */
+export const IFD_FORFAIT_ENTRETIEN_RECENT = new Decimal('0.10');
+export const IFD_FORFAIT_ENTRETIEN_ANCIEN = new Decimal('0.20');
+/** Un batiment de 10 ans au plus au debut de la periode est « recent », pour les deux impots. */
+export const FORFAIT_ENTRETIEN_AGE_SEUIL = 10;
+
 // ─── Quasi-resident ──────────────────────────────────────────────────────────
 
 /** Part minimale des revenus bruts mondiaux du foyer imposable en Suisse (art. 14 al. 1 OIS). */
