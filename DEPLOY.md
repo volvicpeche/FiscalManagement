@@ -68,7 +68,7 @@ sudo apt install -y podman podman-docker podman-compose
 docker compose version
 ```
 
-Quatre réglages, à faire **une seule fois** :
+Cinq réglages, à faire **une seule fois** :
 
 ```bash
 # 1. Autoriser Podman sans root à écouter sur le port 80
@@ -84,6 +84,12 @@ systemctl --user enable --now podman-restart.service
 # 4. Ouvrir le socket Podman, par lequel passe `docker compose`
 systemctl --user enable --now podman.socket
 curl -s --unix-socket /run/user/1000/podman/podman.sock http://d/_ping; echo   # → OK
+
+# 5. Laisser Podman arrêter son processus réseau (profil AppArmor de pasta)
+echo 'signal (receive) set=(term, kill) peer=podman,' | sudo tee /etc/apparmor.d/local/usr.bin.pasta
+grep -q 'local/usr.bin.pasta' /etc/apparmor.d/usr.bin.pasta \
+  || sudo sed -i 's/^}$/  include if exists <local\/usr.bin.pasta>\n}/' /etc/apparmor.d/usr.bin.pasta
+sudo apparmor_parser -r /etc/apparmor.d/usr.bin.pasta && echo OK   # → OK
 ```
 
 Pourquoi chacun :
@@ -99,6 +105,17 @@ Pourquoi chacun :
 4. `docker compose` délègue au programme `docker-compose`, qui ne parle pas
    directement à Podman : il passe par ce socket, inactif par défaut. Sans
    lui, le déploiement échoue sur « Cannot connect to the Docker daemon ».
+5. Chaque conteneur sans root sort sur le réseau par un petit processus,
+   `pasta`, qu'Ubuntu confine avec un profil AppArmor. Ce profil ne le laisse
+   pas recevoir de signal de `podman` : dès qu'un conteneur doit être
+   recréé (nouvelle image à chaque déploiement, changement de port…),
+   `docker compose up -d` échoue sur « rootless netns: kill network process:
+   permission denied », et un conteneur reste à moitié supprimé. La règle
+   autorise ce seul signal, de ce seul programme ; le reste du profil reste
+   actif. Elle vit dans `local/`, qui survit aux mises à jour du paquet. Le
+   profil fourni par Ubuntu n'inclut pas toujours ce fichier : la deuxième
+   commande ajoute l'inclusion si elle manque. Lors d'une mise à jour du
+   paquet `passt`, gardez votre version du fichier modifié (choix par défaut).
 
 ## Étape 3 — Créer le dossier de l'application (VPS)
 
@@ -385,8 +402,10 @@ www.$DOMAINE {
 CADDY
 
 sudo cat /etc/caddy/Caddyfile                 # relire : votre domaine doit y figurer 3 fois
-sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile   # → Valid configuration
-sudo systemctl reload caddy
+# Valider EN TANT QUE caddy : lancée par root, la validation crée le fichier de
+# journal au nom de root, et le service ne peut plus l'ouvrir ensuite.
+sudo -u caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile   # → Valid configuration
+sudo systemctl restart caddy
 ```
 
 - Pas de ligne `tls` ni d'adresse e-mail : Caddy obtient le certificat tout
@@ -504,6 +523,10 @@ Rapatriez ensuite l'archive sur votre PC :
 | L'étape **deploy** échoue en `ssh: handshake failed` | secret `VPS_SSH_KEY` incomplet (il faut les lignes BEGIN/END), ou la clé publique n'est pas dans `~/.ssh/authorized_keys` |
 | Le VPS rame pendant l'analyse d'une annonce | Chrome consomme de la mémoire : vérifiez que le swap est actif (`swapon --show`), ou mettez `LISTING_BROWSER_FALLBACK=false` |
 | Le conteneur `web` s'arrête aussitôt, journaux : `htpasswd absent ou vide` | le fichier de l'étape 3c manque, ou `docker-compose.yml` n'a pas la ligne `volumes` du service `web` |
+| `docker compose up -d` : `rootless netns: kill network process: permission denied`, et `sudo journalctl -k \| grep DENIED` montre `profile="pasta"` | AppArmor empêche Podman d'arrêter le réseau de l'ancien conteneur : appliquer le réglage 5 de l'étape 2, supprimer le reste bloqué (`docker compose ps -a` le montre sous un nom préfixé, à retirer avec `podman rm -f <nom>`), puis relancer `docker compose up -d` |
+| `web` toujours à « Up Less than a second » dans `docker compose ps`, et `/api/health` ne répond rien | le conteneur redémarre en boucle, presque toujours faute de mot de passe : `docker compose logs --tail 30 web` |
+| `No such file or directory` en créant `web/htpasswd` | le dossier manque : `mkdir -p ~/patrimonia/web`, puis refaire l'étape 3c |
+| `Job for caddy.service failed` au `reload`, journaux de Caddy : `open /var/log/caddy/patrimonia.log: permission denied` | le fichier de journal a été créé par root (un `caddy validate` lancé avec `sudo` seul) : `sudo chown -R caddy:caddy /var/log/caddy`, puis `sudo systemctl restart caddy` |
 | Erreur 500 sur toutes les pages, journaux de `web` : `Permission denied` sur `htpasswd` | `chmod 644 ~/patrimonia/web/htpasswd`, puis `docker compose restart web` |
 | Erreur 429 (« Too Many Requests ») | une limite de débit a été atteinte (voir « Sécurité ») : attendez une minute |
 
