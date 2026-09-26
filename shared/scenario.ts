@@ -13,7 +13,7 @@ import { z } from 'zod';
 /** Bump when the client store's shape changes incompatibly. */
 export const SCENARIO_FORMAT_VERSION = 1;
 
-export const ScenarioKind = z.enum(['sci', 'saisonnier']);
+export const ScenarioKind = z.enum(['sci', 'saisonnier', 'frontalier']);
 export type ScenarioKind = z.infer<typeof ScenarioKind>;
 
 export const SavedScenarioSchema = z.object({

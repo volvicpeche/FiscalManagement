@@ -78,6 +78,29 @@ export function browserFallbackEnabled(): boolean {
 }
 
 /**
+ * Names the actual reason Chrome would not start.
+ *
+ * The three failures below are indistinguishable from the UI otherwise, and
+ * only one of them ("le portail a refuse") is about the portal at all — the
+ * other two are a missing local install, which no amount of retrying fixes.
+ */
+function describeLaunchFailure(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+
+  if (/is not found at|Executable doesn'?t exist|playwright install/i.test(msg)) {
+    return (
+      "Google Chrome n'est pas installe sur le serveur, la lecture automatique " +
+      "est donc indisponible. Collez le texte de l'annonce a la place."
+    );
+  }
+  if (/Missing X server|\$DISPLAY|cannot open display/i.test(msg)) {
+    return (
+      "Chrome n'a aucun affichage disponible (DISPLAY) et ne peut pas etre " +
+      "lance. Collez le texte de l'annonce a la place."
+    );
+  }
+  return "Chrome n'a pas pu etre pilote pour lire cette annonce. Collez le texte de l'annonce a la place.";
+}
  * One page at a time, and a short queue behind it.
  *
  * Each page costs a few hundred MB of RAM on a small VPS. Without a limit, a
@@ -108,10 +131,11 @@ async function lireAvecChrome(url: URL): Promise<string> {
   let context: BrowserContext;
   try {
     context = await getContext();
-  } catch {
-    throw new Error(
-      "Chrome n'a pas pu etre pilote pour lire cette annonce. Collez le texte de l'annonce a la place.",
-    );
+  } catch (err) {
+    // The cause used to be swallowed here, which left every launch failure
+    // looking identical both in the UI and in the server log.
+    console.error('[listing] Chrome launch failed:', err);
+    throw new Error(describeLaunchFailure(err));
   }
 
   const page = await context.newPage();

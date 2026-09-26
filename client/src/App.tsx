@@ -31,6 +31,7 @@ import {
   BilanCard,
 } from '@/features/dashboard';
 import { SaisonnierPage } from '@/features/saisonnier';
+import { FrontalierPage } from '@/features/frontalier';
 import { AidePage } from '@/features/aide';
 import { SidebarLayout } from '@/components/SidebarLayout';
 import { ScenarioManager } from '@/features/scenarios';
@@ -47,6 +48,7 @@ const TABS = [
 type TabKey = (typeof TABS)[number]['key'];
 
 const MODES = [
+  { key: 'frontalier', label: 'Frontalier Geneve' },
   { key: 'sci', label: 'SCI / Holding' },
   { key: 'saisonnier', label: 'Location saisonniere' },
   { key: 'aide', label: 'Aide' },
@@ -142,6 +144,10 @@ function App() {
       {mode === 'aide' ? (
         <main className="mx-auto px-4 py-6 max-w-[1800px]">
           <AidePage />
+        </main>
+      ) : mode === 'frontalier' ? (
+        <main className="mx-auto px-4 py-6 max-w-[1800px]">
+          <FrontalierPage />
         </main>
       ) : mode === 'saisonnier' ? (
         <main className="mx-auto px-4 py-6 max-w-[1800px]">
