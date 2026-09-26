@@ -4,6 +4,7 @@ import cors from '@fastify/cors';
 import { simulationRoutes } from './routes/simulation.js';
 import { listingRoutes } from './routes/listings.js';
 import { scenarioRoutes } from './routes/scenarios.js';
+import { frontalierRoutes } from './routes/frontalier.js';
 import { closeBrowser } from './services/browserFetch.js';
 
 const server = Fastify({ logger: true });
@@ -15,6 +16,7 @@ await server.register(cors, {
 await server.register(simulationRoutes);
 await server.register(listingRoutes);
 await server.register(scenarioRoutes);
+await server.register(frontalierRoutes);
 
 server.get('/api/health', async () => {
   return { status: 'ok' };
