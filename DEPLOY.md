@@ -86,9 +86,10 @@ systemctl --user enable --now podman.socket
 curl -s --unix-socket /run/user/1000/podman/podman.sock http://d/_ping; echo   # → OK
 
 # 5. Laisser Podman arrêter son processus réseau (profil AppArmor de pasta)
-echo 'signal (receive) set=(term, kill) peer=podman,' | sudo tee /etc/apparmor.d/local/usr.bin.pasta
+echo 'signal (receive) set=(term, kill),' | sudo tee /etc/apparmor.d/local/usr.bin.pasta
 grep -q 'local/usr.bin.pasta' /etc/apparmor.d/usr.bin.pasta \
   || sudo sed -i 's/^}$/  include if exists <local\/usr.bin.pasta>\n}/' /etc/apparmor.d/usr.bin.pasta
+grep -q 'local/usr.bin.pasta' /etc/apparmor.d/usr.bin.pasta || echo 'INCLUDE MANQUANT'   # → rien
 sudo apparmor_parser -r /etc/apparmor.d/usr.bin.pasta && echo OK   # → OK
 ```
 
@@ -112,9 +113,15 @@ Pourquoi chacun :
    `docker compose up -d` échoue sur « rootless netns: kill network process:
    permission denied », et un conteneur reste à moitié supprimé. La règle
    autorise ce seul signal, de ce seul programme ; le reste du profil reste
-   actif. Elle vit dans `local/`, qui survit aux mises à jour du paquet. Le
-   profil fourni par Ubuntu n'inclut pas toujours ce fichier : la deuxième
-   commande ajoute l'inclusion si elle manque. Lors d'une mise à jour du
+   actif. Elle ne filtre pas l'expéditeur : lancé via le socket (déploiement
+   GitHub), Podman ne porte pas toujours l'étiquette `podman`, et une règle
+   limitée à celle-ci laissait le déploiement échouer alors que la commande
+   manuelle passait. Elle vit dans `local/`, qui survit aux mises à jour du
+   paquet. Le profil fourni par Ubuntu n'inclut pas toujours ce fichier : la
+   deuxième commande ajoute l'inclusion si elle manque. Si la troisième
+   affiche « INCLUDE MANQUANT », ajoutez à la main la ligne
+   `include if exists <local/usr.bin.pasta>` juste avant la dernière `}` de
+   `/etc/apparmor.d/usr.bin.pasta`, puis relancez `apparmor_parser`. Lors d'une mise à jour du
    paquet `passt`, gardez votre version du fichier modifié (choix par défaut).
 
 ## Étape 3 — Créer le dossier de l'application (VPS)
