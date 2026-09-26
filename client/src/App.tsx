@@ -34,6 +34,7 @@ import { SaisonnierPage } from '@/features/saisonnier';
 import { FrontalierPage } from '@/features/frontalier';
 import { AidePage } from '@/features/aide';
 import { SidebarLayout } from '@/components/SidebarLayout';
+import { Logo } from '@/components/Logo';
 import { ScenarioManager } from '@/features/scenarios';
 
 function Panel({ children }: { children: React.ReactNode }) {
@@ -98,11 +99,14 @@ function App() {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm border-b sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Patrimonia</h1>
-            <p className="text-sm text-gray-500">
-              Simulateur patrimonial — structures locatives, fiscalite et transmission
-            </p>
+          <div className="flex items-center gap-3">
+            <Logo size={44} className="shrink-0" />
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Patrimonia</h1>
+              <p className="text-sm text-gray-500">
+                Simulateur patrimonial — structures locatives, fiscalite et transmission
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-4">
@@ -112,7 +116,7 @@ function App() {
                   key={m.key}
                   type="button"
                   onClick={() => setMode(m.key)}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors ${
                     mode === m.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                   }`}
                 >
@@ -126,7 +130,7 @@ function App() {
                 <button
                   onClick={handleRun}
                   disabled={isPending || !validParts}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium whitespace-nowrap hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {isPending ? 'Calcul en cours...' : 'Comparer les montages'}
                 </button>
