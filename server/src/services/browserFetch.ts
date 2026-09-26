@@ -101,6 +101,8 @@ function describeLaunchFailure(err: unknown): string {
   }
   return "Chrome n'a pas pu etre pilote pour lire cette annonce. Collez le texte de l'annonce a la place.";
 }
+
+/**
  * One page at a time, and a short queue behind it.
  *
  * Each page costs a few hundred MB of RAM on a small VPS. Without a limit, a
