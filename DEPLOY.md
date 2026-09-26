@@ -276,51 +276,178 @@ VPS, reçoit tout le trafic sur les ports 80 et 443, obtient et renouvelle le
 certificat seul, redirige le HTTP vers le HTTPS, et transmet au conteneur
 `web`, qui n'est plus joignable que depuis le VPS lui-même.
 
+```
+Internet ──443──► Caddy (certificat) ──► 127.0.0.1:8080 ──► web (nginx, mot de passe) ──► server
+         ──80───► Caddy : redirection vers https://
+```
+
 Le port 80 reste ouvert, et c'est voulu : Let's Encrypt s'en sert pour
 vérifier que le domaine est bien à vous, et Caddy y renvoie vers le HTTPS
 quiconque tape l'adresse sans `https://`. Aucune page n'y est servie en clair.
 
-1. **Chez votre registrar** : un enregistrement `A` qui pointe
-   `patrimonia.votre-domaine.fr` vers l'IP du VPS. Attendez qu'il réponde :
-   `ping patrimonia.votre-domaine.fr` doit afficher l'IP du VPS.
+Dans la suite, remplacez `<DOMAINE>` par votre domaine (ex. `monpatrimonia.fr`).
+L'application peut vivre sur le domaine nu (`monpatrimonia.fr`) ou sur un
+sous-domaine (`app.monpatrimonia.fr`) : les commandes sont les mêmes.
 
-2. **VPS** — ne publier `web` qu'en local, sur le port 8080 :
+### H1. DNS (chez votre registrar)
 
-   ```bash
-   cd ~/patrimonia
-   sed -i 's/"80:80"/"127.0.0.1:8080:80"/' docker-compose.yml
-   docker compose up -d
-   ```
+Dans la zone DNS du domaine :
 
-3. **VPS** — installer et configurer Caddy :
+| Type | Nom | Valeur |
+|---|---|---|
+| `A` | `@` (domaine nu) | `<IP_DU_VPS>` |
+| `CNAME` | `www` | `<DOMAINE>.` (point final compris) |
 
-   ```bash
-   sudo apt install -y caddy
-   sudo tee /etc/caddy/Caddyfile >/dev/null <<'EOF'
-   patrimonia.votre-domaine.fr {
-       reverse_proxy 127.0.0.1:8080
-   }
-   EOF
-   sudo systemctl reload caddy
-   ```
+- **Supprimez tout autre enregistrement `A` ou `AAAA`** sur `@` et `www` : les
+  registrars créent souvent une page de parking par défaut. Un `AAAA` qui
+  pointe ailleurs fait échouer Let's Encrypt, qui essaie l'IPv6 en premier.
+- Ne créez **pas** d'`AAAA` vers le VPS pour l'instant : sa configuration IPv6
+  n'est pas couverte par ce guide.
+- Pour un sous-domaine, un seul `A` : nom `app`, valeur `<IP_DU_VPS>`.
 
-   Le service Caddy fourni par Ubuntu a le droit d'écouter sur les ports 80
-   et 443 sans être root : le réglage `sysctl` de l'étape 2 ne sert plus.
+Vérifiez depuis votre PC, jusqu'à obtenir l'IP du VPS (quelques minutes à
+quelques heures selon le registrar) :
 
-4. **VPS** — ouvrir le 443 et retirer le réglage devenu inutile :
+```bash
+dig +short A <DOMAINE>        # → <IP_DU_VPS>
+dig +short AAAA <DOMAINE>     # → rien
+dig +short www.<DOMAINE>      # → <DOMAINE>. puis <IP_DU_VPS>
+```
 
-   ```bash
-   sudo ufw allow 443/tcp
-   sudo rm /etc/sysctl.d/99-podman-port80.conf
-   sudo sysctl -w net.ipv4.ip_unprivileged_port_start=1024
-   ```
+**N'allez pas plus loin tant que le DNS ne répond pas** : Caddy tenterait
+d'obtenir le certificat, échouerait, et Let's Encrypt limite le nombre
+d'échecs par heure.
 
-   Ouvrez aussi le **443** dans le pare-feu OVH s'il est actif.
+### H2. Ne publier `web` qu'en local (VPS)
 
-5. **Vérifier** : `https://patrimonia.votre-domaine.fr/` s'ouvre avec le
-   cadenas, et `http://…` redirige vers `https://…`. Si le certificat tarde,
-   `sudo journalctl -u caddy -f` montre pourquoi (DNS pas encore propagé,
-   port fermé…).
+```bash
+cd ~/patrimonia
+sed -i 's/"80:80"/"127.0.0.1:8080:80"/' docker-compose.yml
+grep 8080 docker-compose.yml          # → - "127.0.0.1:8080:80"
+docker compose up -d
+
+# Le site répond en local, plus depuis Internet
+curl -s http://127.0.0.1:8080/api/health     # → {"status":"ok"}
+```
+
+À partir d'ici, le site est **coupé** depuis Internet jusqu'à l'étape H4.
+
+### H3. Installer Caddy (VPS)
+
+Depuis le dépôt officiel de Caddy, pour avoir la dernière version (celle
+d'Ubuntu est souvent en retard) :
+
+```bash
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+  | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+  | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update && sudo apt install -y caddy
+
+caddy version        # → v2.x
+```
+
+Caddy tourne comme service système (`caddy.service`) : il redémarre avec le
+VPS et a le droit d'écouter sur les ports 80 et 443 sans être root.
+
+### H4. Configurer Caddy (VPS)
+
+Écrivez la configuration, en remplaçant `monpatrimonia.fr` sur la **première
+ligne** par votre domaine :
+
+```bash
+DOMAINE=monpatrimonia.fr
+
+sudo tee /etc/caddy/Caddyfile >/dev/null <<CADDY
+$DOMAINE {
+	# Le conteneur web (nginx) : mot de passe, limites de débit, API.
+	reverse_proxy 127.0.0.1:8080
+
+	encode zstd gzip
+
+	# Le navigateur n'essaiera plus le HTTP pour ce domaine pendant un an.
+	# N'ajoutez includeSubDomains que si TOUS vos sous-domaines sont en HTTPS.
+	header Strict-Transport-Security "max-age=31536000"
+
+	log {
+		output file /var/log/caddy/patrimonia.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}
+
+www.$DOMAINE {
+	redir https://$DOMAINE{uri} permanent
+}
+CADDY
+
+sudo cat /etc/caddy/Caddyfile                 # relire : votre domaine doit y figurer 3 fois
+sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile   # → Valid configuration
+sudo systemctl reload caddy
+```
+
+- Pas de ligne `tls` ni d'adresse e-mail : Caddy obtient le certificat tout
+  seul dès qu'un nom de domaine figure en tête de bloc, et le renouvelle
+  environ 30 jours avant son expiration.
+- Pour un sous-domaine sans `www`, supprimez le bloc `www.…` du fichier.
+- Aucune limite de taille ni délai d'attente côté Caddy : ce sont ceux de
+  nginx (conteneur `web`) qui s'appliquent.
+
+### H5. Pare-feu (VPS et OVH)
+
+```bash
+sudo ufw allow 443/tcp
+sudo ufw allow 443/udp      # HTTP/3, facultatif mais gratuit
+sudo ufw status             # → 22, 80, 443 autorisés
+
+# Le réglage de l'étape 2 n'est plus nécessaire : c'est Caddy qui écoute sur 80
+sudo rm /etc/sysctl.d/99-podman-port80.conf
+sudo sysctl -w net.ipv4.ip_unprivileged_port_start=1024
+```
+
+Si le pare-feu de l'espace client OVH est actif, ouvrez-y aussi le **443**
+(TCP, et UDP pour HTTP/3).
+
+### H6. Vérifier
+
+Depuis votre PC :
+
+```bash
+curl -sI http://<DOMAINE>/ | head -3       # → 308, Location: https://<DOMAINE>/
+curl -s https://<DOMAINE>/api/health       # → {"status":"ok"}
+curl -sI https://<DOMAINE>/ | grep -i -E '^HTTP|strict-transport|www-authenticate'
+                                           # → 401, HSTS et la demande de mot de passe
+curl -sI https://www.<DOMAINE>/ | head -3  # → 301 vers https://<DOMAINE>/
+```
+
+Puis ouvrez `https://<DOMAINE>/` : cadenas dans la barre d'adresse, puis
+demande d'identifiant et de mot de passe (ceux de l'étape 3c).
+
+Si le certificat n'arrive pas, les journaux de Caddy disent pourquoi :
+`sudo journalctl -u caddy -f`.
+
+| Message dans les journaux | Cause et solution |
+|---|---|
+| `no such host`, `NXDOMAIN` | le DNS ne répond pas encore : attendre, revérifier avec `dig` |
+| `connection refused`, `timeout during connect` | port 80 ou 443 fermé : `ufw` ou pare-feu OVH |
+| `Invalid response from http://…/.well-known/acme-challenge` | le domaine pointe ailleurs, souvent un `AAAA` de parking resté chez le registrar |
+| `too many failed authorizations`, `rateLimited` | trop d'essais ratés : corriger la cause, attendre une heure, puis `sudo systemctl restart caddy` |
+| `bind: address already in use` sur le port 80 | le conteneur `web` publie encore le port 80 : l'étape H2 n'a pas été appliquée |
+| `502 Bad Gateway` dans le navigateur | le conteneur `web` est arrêté : `docker compose ps`, puis `docker compose up -d` |
+
+### H7. Et ensuite
+
+- **Rien à faire pour les renouvellements** : Caddy s'en charge et garde ses
+  certificats dans `/var/lib/caddy`, hors des conteneurs. Les déploiements
+  (`docker compose up -d`) n'y touchent pas.
+- **Les limites de débit de nginx deviennent globales** : toutes les requêtes
+  arrivent désormais de Caddy, donc de la même adresse. Pour un usage
+  personnel, c'est sans conséquence.
+- **Le mot de passe du site reste indispensable** : le HTTPS protège le
+  trajet, pas l'accès.
 
 ---
 
@@ -424,11 +551,12 @@ Pour aller plus loin, vous pouvez n'ouvrir le port 80 qu'à votre propre IP :
 `sudo ufw delete allow 80/tcp`, puis
 `sudo ufw allow from <VOTRE_IP> to any port 80 proto tcp`. `ufw` filtre bien
 ce port, car Podman sans root l'ouvre comme un programme ordinaire du VPS.
-En contrepartie, un changement d'IP (box, 4G) vous coupe l'accès.
+En contrepartie, un changement d'IP (box, 4G) vous coupe l'accès. Une fois en
+HTTPS, ne le faites pas : Let's Encrypt doit joindre le port 80 pour
+renouveler le certificat.
 
-**Reste le HTTP** : tant que le site n'est pas en HTTPS, le mot de passe et vos
-données circulent en clair. C'est le prochain chantier (section « Passer en
-HTTPS »).
+**Tant que le site n'est pas en HTTPS**, le mot de passe et vos données
+circulent en clair : voir la section « Passer en HTTPS ».
 
 ---
 
