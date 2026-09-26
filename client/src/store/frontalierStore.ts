@@ -22,9 +22,35 @@ import type {
  * `sources` remembers which document filled which field ("contribuable.
  * salaireBrut" → "certificat-2026.pdf"), so every figure read by the model
  * stays traceable and visibly different from a figure typed by hand.
+ *
+ * Works are kept as their own list of lines rather than inside each
+ * property: most years have none, so they sit behind a switch that leaves
+ * them out of the calculation without losing them. The request only sees
+ * per-property totals, built in `buildFrontalierRequest`.
  */
 
 export type QuiPersonne = 'contribuable' | 'conjoint';
+
+export type CategorieTravaux = 'ENTRETIEN' | 'ENERGIE' | 'PLUS_VALUE';
+
+export interface LigneTravaux {
+  id: string;
+  description: string;
+  /** Index of the property in `biensFrance`. */
+  bien: number;
+  categorie: CategorieTravaux;
+  montantEur: string;
+  /** Document the line was read from, if any. */
+  source?: string;
+}
+
+const CHAMP_TRAVAUX: Record<CategorieTravaux, 'travauxEntretienEur' | 'travauxEnergieEur' | 'travauxPlusValueEur'> = {
+  ENTRETIEN: 'travauxEntretienEur',
+  ENERGIE: 'travauxEnergieEur',
+  PLUS_VALUE: 'travauxPlusValueEur',
+};
+
+const nouvelId = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Math.random()));
 
 const personneVide = (activite: PersonneFrontalier['activite']): PersonneFrontalier => ({
   prenom: '',
@@ -70,12 +96,34 @@ const DEDUCTIONS_VIDES: DeductionsFoyer = {
 };
 
 /**
- * Saves made before the works were split carry a single `travauxEur`: it was
- * always meant as maintenance, so that is where it goes.
+ * Older saves hold works inside each property — a single `travauxEur`, then
+ * three split fields. Both become lines; the property fields are cleared so
+ * the lines stay the only place works live.
  */
-function migrerBien(b: BienFrance & { travauxEur?: string }): BienFrance {
-  const { travauxEur, ...reste } = b;
-  return { ...bienVide(), ...(travauxEur ? { travauxEntretienEur: travauxEur } : {}), ...reste };
+function migrerBiens(biens: (Partial<BienFrance> & { travauxEur?: string })[]): { biens: BienFrance[]; lignes: LigneTravaux[] } {
+  const lignes: LigneTravaux[] = [];
+  const out = biens.map((b, i) => {
+    const { travauxEur, ...reste } = b;
+    const anciens: [CategorieTravaux | 'ANCIEN', string][] = [];
+    if (travauxEur) anciens.push(['ANCIEN', travauxEur]);
+    for (const [cat, champ] of Object.entries(CHAMP_TRAVAUX) as [CategorieTravaux, keyof BienFrance][]) {
+      const v = reste[champ];
+      if (typeof v === 'string') anciens.push([cat, v]);
+    }
+    for (const [cat, v] of anciens) {
+      if (parseFloat(v) > 0) {
+        lignes.push({
+          id: nouvelId(),
+          description: 'Travaux',
+          bien: i,
+          categorie: cat === 'ANCIEN' ? 'ENTRETIEN' : cat,
+          montantEur: v,
+        });
+      }
+    }
+    return { ...bienVide(), ...reste, travauxEntretienEur: '0.00', travauxEnergieEur: '0.00', travauxPlusValueEur: '0.00' };
+  });
+  return { biens: out, lignes };
 }
 
 export interface FrontalierInputs {
@@ -88,6 +136,8 @@ export interface FrontalierInputs {
   deductions: DeductionsFoyer;
   biensFrance: BienFrance[];
   autresRevenusEtrangersEur: string;
+  travauxActifs: boolean;
+  travaux: LigneTravaux[];
   sources: Record<string, string>;
 }
 
@@ -101,6 +151,8 @@ const DEFAULTS: FrontalierInputs = {
   deductions: DEDUCTIONS_VIDES,
   biensFrance: [],
   autresRevenusEtrangersEur: '0.00',
+  travauxActifs: false,
+  travaux: [],
   sources: {},
 };
 
@@ -121,6 +173,11 @@ interface FrontalierStore extends FrontalierInputs {
   addBien: () => void;
   updateBien: (i: number, p: Partial<BienFrance>) => void;
   removeBien: (i: number) => void;
+  setTravauxActifs: (actif: boolean) => void;
+  /** Adds a works line; creates the principal residence first when there is no property yet. */
+  addTravaux: () => void;
+  updateTravaux: (id: string, p: Partial<Omit<LigneTravaux, 'id'>>) => void;
+  removeTravaux: (id: string) => void;
   /** Applies the selected fields of a read document. Returns messages for what could not be applied. */
   appliquerDocument: (doc: ExtractionAAppliquer) => string[];
   setResult: (r: FrontalierResult | null) => void;
@@ -140,7 +197,8 @@ export interface ExtractionAAppliquer {
 }
 
 // Where each extracted field lands, and in which currency the form holds it.
-const CIBLES: Record<ChampCible, { zone: 'personne' | 'deductions' | 'bien' | 'garde'; cle: string; devise: 'CHF' | 'EUR' }> = {
+// Works go to their own list: `cle` is then the category.
+const CIBLES: Record<ChampCible, { zone: 'personne' | 'deductions' | 'bien' | 'garde' | 'travaux'; cle: string; devise: 'CHF' | 'EUR' }> = {
   SALAIRE_BRUT: { zone: 'personne', cle: 'salaireBrut', devise: 'CHF' },
   COTISATIONS_SOCIALES: { zone: 'personne', cle: 'cotisationsSociales', devise: 'CHF' },
   LPP_ORDINAIRE: { zone: 'personne', cle: 'lppOrdinaire', devise: 'CHF' },
@@ -157,9 +215,9 @@ const CIBLES: Record<ChampCible, { zone: 'personne' | 'deductions' | 'bien' | 'g
   BIEN_INTERETS_EMPRUNT: { zone: 'bien', cle: 'interetsEmpruntEur', devise: 'EUR' },
   BIEN_CHARGES_COPRO: { zone: 'bien', cle: 'chargesCoproEur', devise: 'EUR' },
   BIEN_TAXE_FONCIERE: { zone: 'bien', cle: 'taxeFonciereEur', devise: 'EUR' },
-  BIEN_TRAVAUX_ENTRETIEN: { zone: 'bien', cle: 'travauxEntretienEur', devise: 'EUR' },
-  BIEN_TRAVAUX_ENERGIE: { zone: 'bien', cle: 'travauxEnergieEur', devise: 'EUR' },
-  BIEN_TRAVAUX_PLUS_VALUE: { zone: 'bien', cle: 'travauxPlusValueEur', devise: 'EUR' },
+  BIEN_TRAVAUX_ENTRETIEN: { zone: 'travaux', cle: 'ENTRETIEN', devise: 'EUR' },
+  BIEN_TRAVAUX_ENERGIE: { zone: 'travaux', cle: 'ENERGIE', devise: 'EUR' },
+  BIEN_TRAVAUX_PLUS_VALUE: { zone: 'travaux', cle: 'PLUS_VALUE', devise: 'EUR' },
   BIEN_ASSURANCE: { zone: 'bien', cle: 'assuranceEur', devise: 'EUR' },
   BIEN_LOYERS: { zone: 'bien', cle: 'loyersBrutsEur', devise: 'EUR' },
 };
@@ -189,7 +247,7 @@ export const LIBELLES_CIBLES: Record<ChampCible, string> = {
 };
 
 export function cibleEstBien(c: ChampCible): boolean {
-  return CIBLES[c].zone === 'bien';
+  return CIBLES[c].zone === 'bien' || CIBLES[c].zone === 'travaux';
 }
 
 export function cibleEstPersonnelle(c: ChampCible): boolean {
@@ -231,9 +289,38 @@ export const useFrontalierStore = create<FrontalierStore>((set, get) => ({
   removeBien: (i) =>
     set((s) => ({
       biensFrance: s.biensFrance.filter((_, j) => j !== i),
+      // Works of the removed property go with it; the others follow their property.
+      travaux: s.travaux.filter((t) => t.bien !== i).map((t) => (t.bien > i ? { ...t, bien: t.bien - 1 } : t)),
       // Indices shift: drop every property source rather than mislabel one.
       sources: Object.fromEntries(Object.entries(s.sources).filter(([k]) => !k.startsWith('biensFrance.'))),
     })),
+
+  setTravauxActifs: (travauxActifs) => set({ travauxActifs }),
+
+  addTravaux: () =>
+    set((s) => {
+      const biensFrance =
+        s.biensFrance.length > 0
+          ? s.biensFrance
+          : [{ ...bienVide(), label: 'Residence principale', usage: 'RESIDENCE_PRINCIPALE' as const }];
+      const bien = biensFrance.findIndex((b) => b.usage === 'RESIDENCE_PRINCIPALE');
+      return {
+        biensFrance,
+        travauxActifs: true,
+        travaux: [
+          ...s.travaux,
+          { id: nouvelId(), description: '', bien: Math.max(bien, 0), categorie: 'ENTRETIEN', montantEur: '0.00' },
+        ],
+      };
+    }),
+
+  updateTravaux: (id, p) =>
+    set((s) => ({
+      // An edited amount is the user's own figure, no longer the document's.
+      travaux: s.travaux.map((t) => (t.id === id ? { ...t, ...p, ...('montantEur' in p ? { source: undefined } : {}) } : t)),
+    })),
+
+  removeTravaux: (id) => set((s) => ({ travaux: s.travaux.filter((t) => t.id !== id) })),
 
   appliquerDocument: ({ fileName, extraction, retenus, personne, bien, cumuler }) => {
     const s = get();
@@ -245,6 +332,8 @@ export const useFrontalierStore = create<FrontalierStore>((set, get) => ({
       deductions: { ...s.deductions },
       biensFrance: s.biensFrance.map((b) => ({ ...b })),
       enfants: s.enfants.map((e) => ({ ...e })),
+      travaux: [...s.travaux],
+      travauxActifs: s.travauxActifs,
       sources: { ...s.sources },
     };
 
@@ -259,6 +348,19 @@ export const useFrontalierStore = create<FrontalierStore>((set, get) => ({
       const cible = CIBLES[champ.cible];
       let valeur = champ.valeur;
       if (champ.devise !== cible.devise) valeur = champ.devise === 'EUR' ? valeur * fx : valeur / fx;
+
+      if (cible.zone === 'travaux') {
+        next.travaux.push({
+          id: nouvelId(),
+          description: champ.source || fileName,
+          bien: indexBien,
+          categorie: cible.cle as CategorieTravaux,
+          montantEur: valeur.toFixed(2),
+          source: fileName,
+        });
+        next.travauxActifs = true;
+        continue;
+      }
 
       let objet: Record<string, unknown>;
       let chemin: string;
@@ -298,7 +400,10 @@ export const useFrontalierStore = create<FrontalierStore>((set, get) => ({
   setResult: (result) => set({ result }),
 
   hydrate: (data) =>
-    set((s) => ({
+    set((s) => {
+      const migres = data.biensFrance ? migrerBiens(data.biensFrance) : null;
+      const travaux = migres ? [...(data.travaux ?? []), ...migres.lignes] : (data.travaux ?? s.travaux);
+      return {
       etatCivil: data.etatCivil ?? s.etatCivil,
       communeTravail: data.communeTravail ?? s.communeTravail,
       tauxChangeEurChf: data.tauxChangeEurChf ?? s.tauxChangeEurChf,
@@ -306,12 +411,15 @@ export const useFrontalierStore = create<FrontalierStore>((set, get) => ({
       conjoint: data.conjoint ? { ...personneVide('FRANCE'), ...data.conjoint } : s.conjoint,
       enfants: data.enfants ?? s.enfants,
       deductions: data.deductions ? { ...DEDUCTIONS_VIDES, ...data.deductions } : s.deductions,
-      biensFrance: data.biensFrance ? data.biensFrance.map(migrerBien) : s.biensFrance,
+      biensFrance: migres ? migres.biens : s.biensFrance,
+      travaux,
+      travauxActifs: data.travauxActifs ?? travaux.length > 0,
       autresRevenusEtrangersEur: data.autresRevenusEtrangersEur ?? s.autresRevenusEtrangersEur,
       sources: data.sources ?? {},
       // A loaded scenario has not been run yet.
       result: null,
-    })),
+      };
+    }),
 }));
 
 export function selectInputs(s: FrontalierInputs): FrontalierInputs {
@@ -325,8 +433,28 @@ export function selectInputs(s: FrontalierInputs): FrontalierInputs {
     deductions: s.deductions,
     biensFrance: s.biensFrance,
     autresRevenusEtrangersEur: s.autresRevenusEtrangersEur,
+    travauxActifs: s.travauxActifs,
+    travaux: s.travaux,
     sources: s.sources,
   };
+}
+
+/** Per-property works totals, or nothing at all when the switch is off. */
+function biensAvecTravaux(s: FrontalierInputs): BienFrance[] {
+  return s.biensFrance.map((b, i) => {
+    const totaux = { travauxEntretienEur: 0, travauxEnergieEur: 0, travauxPlusValueEur: 0 };
+    if (s.travauxActifs) {
+      for (const t of s.travaux) {
+        if (t.bien === i) totaux[CHAMP_TRAVAUX[t.categorie]] += parseFloat(t.montantEur) || 0;
+      }
+    }
+    return {
+      ...b,
+      travauxEntretienEur: totaux.travauxEntretienEur.toFixed(2),
+      travauxEnergieEur: totaux.travauxEnergieEur.toFixed(2),
+      travauxPlusValueEur: totaux.travauxPlusValueEur.toFixed(2),
+    };
+  });
 }
 
 export function buildFrontalierRequest(s: FrontalierInputs): FrontalierRequestInput {
@@ -339,7 +467,7 @@ export function buildFrontalierRequest(s: FrontalierInputs): FrontalierRequestIn
     conjoint: s.etatCivil === 'MARIE' ? s.conjoint : undefined,
     enfants: s.enfants,
     deductions: s.deductions,
-    biensFrance: s.biensFrance,
+    biensFrance: biensAvecTravaux(s),
     autresRevenusEtrangersEur: s.autresRevenusEtrangersEur,
   };
 }

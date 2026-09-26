@@ -7,6 +7,7 @@ import { FoyerForm } from './FoyerForm';
 import { PersonneForm } from './PersonneForm';
 import { DeductionsForm } from './DeductionsForm';
 import { BiensFranceForm } from './BiensFranceForm';
+import { TravauxForm } from './TravauxForm';
 import { DocumentDropzone } from './DocumentDropzone';
 import { FrontalierResultats } from './FrontalierResultats';
 
@@ -43,6 +44,7 @@ export function FrontalierPage() {
           <Panel><PersonneForm qui="contribuable" /></Panel>
           {store.etatCivil === 'MARIE' && <Panel><PersonneForm qui="conjoint" /></Panel>}
           <Panel><DeductionsForm /></Panel>
+          <Panel><TravauxForm /></Panel>
           <Panel><BiensFranceForm /></Panel>
         </>
       }
