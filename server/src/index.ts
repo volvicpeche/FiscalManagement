@@ -10,6 +10,7 @@ import { llmSettingsRoutes } from './routes/llmSettings.js';
 import { closeBrowser } from './services/browserFetch.js';
 import { closeDb } from './services/db.js';
 import { authPlugin } from './plugins/auth.js';
+import { diagnostiquerSupabase, formaterDiagnostic } from './services/diagnosticSupabase.js';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 if (!supabaseUrl) {
@@ -57,6 +58,17 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 const start = async () => {
   try {
     await server.listen({ port: 3000, host: '0.0.0.0' });
+    // After listening, and without waiting: a slow or paused Supabase must
+    // not hold the app back. The verdict lands in the logs a moment later.
+    if (process.env.SUPABASE_DIAGNOSTIC !== 'false') {
+      diagnostiquerSupabase({
+        supabaseUrl,
+        anonKey: process.env.SUPABASE_ANON_KEY || undefined,
+        jwtSecret: process.env.SUPABASE_JWT_SECRET || undefined,
+      })
+        .then((lignes) => console.log(formaterDiagnostic(lignes)))
+        .catch((err) => server.log.warn({ err }, 'diagnostic Supabase impossible'));
+    }
   } catch (err) {
     server.log.error(err);
     process.exit(1);
