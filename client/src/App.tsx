@@ -99,7 +99,7 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm border-b sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="max-w-[1800px] mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <div className="flex items-center gap-3 min-w-0">
             <Logo size={40} className="shrink-0" />
             <div className="min-w-0">
@@ -127,23 +127,6 @@ function App() {
               ))}
             </div>
 
-            {mode === 'sci' && (
-              <div className="flex flex-col items-end gap-1">
-                <button
-                  onClick={handleRun}
-                  disabled={isPending || !validParts}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium whitespace-nowrap hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {isPending ? 'Calcul en cours...' : 'Comparer les montages'}
-                </button>
-                {!validParts && (
-                  <span className="text-xs text-red-600">
-                    La repartition des parts doit totaliser 100 %.
-                  </span>
-                )}
-              </div>
-            )}
-
             <UserMenu />
           </div>
         </div>
@@ -162,11 +145,7 @@ function App() {
           <SaisonnierPage />
         </main>
       ) : (
-        <main
-          className={`mx-auto px-4 py-6 transition-[max-width] ${
-            showForms ? 'max-w-7xl' : 'max-w-[1800px]'
-          }`}
-        >
+        <main className="mx-auto px-4 py-6 max-w-[1800px]">
           {error && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
               Erreur: {error.message}
@@ -196,6 +175,21 @@ function App() {
             }
           >
             <div className="space-y-6">
+              <div className="space-y-1">
+                <button
+                  onClick={handleRun}
+                  disabled={isPending || !validParts}
+                  className="w-full px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isPending ? 'Calcul en cours...' : 'Comparer les montages'}
+                </button>
+                {!validParts && (
+                  <p className="text-xs text-red-600 text-center">
+                    La repartition des parts doit totaliser 100 %.
+                  </p>
+                )}
+              </div>
+
               {hasAnyResult(results) ? (
                 <>
                   <div className="flex gap-1 border-b border-gray-200">
