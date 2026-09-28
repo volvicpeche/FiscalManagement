@@ -4,6 +4,7 @@ import type {
   FrontalierRequestInput,
   FrontalierResult,
 } from '@shared/frontalier.js';
+import { apiFetch } from '@/lib/api';
 
 /** Fallback wording when the response carries no usable body of its own. */
 function statusMessage(status: number): string {
@@ -31,7 +32,7 @@ async function parseBody(response: Response): Promise<unknown> {
 async function send<T>(url: string, init: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(url, init);
+    response = await apiFetch(url, init);
   } catch {
     throw new Error(statusMessage(0));
   }

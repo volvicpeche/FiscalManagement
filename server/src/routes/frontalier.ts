@@ -3,6 +3,7 @@ import multipart from '@fastify/multipart';
 import { FrontalierRequestSchema, type DocumentExtractionResult } from '@shared/frontalier.js';
 import { simulateFrontalier } from '../engine/frontalierGe.js';
 import { extractDocument, mediaTypeAccepte } from '../services/llm/documentExtractor.js';
+import { consommerQuota, QuotaLlmAtteintError } from '../services/llmQuota.js';
 
 const MAX_FICHIER = 10 * 1024 * 1024;
 const MAX_FICHIERS = 10;
@@ -55,6 +56,20 @@ export async function frontalierRoutes(server: FastifyInstance) {
 
     if (recus.length === 0) {
       return reply.status(400).send({ error: 'Aucun fichier recu' });
+    }
+
+    // One paid call per readable file, booked all at once: a batch that would
+    // overflow the quota is refused whole rather than half read.
+    const payants = recus.filter((r) => mediaTypeAccepte(r.mime)).length;
+    if (payants > 0) {
+      try {
+        await consommerQuota(request.user.id, payants);
+      } catch (err) {
+        if (err instanceof QuotaLlmAtteintError) {
+          return reply.status(429).send({ error: err.message });
+        }
+        throw err;
+      }
     }
 
     // One call per file, in parallel: a failed read is reported for that file

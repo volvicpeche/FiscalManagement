@@ -19,7 +19,10 @@ cp server/.env.example server/.env
 | Variable | Requise | Usage |
 | --- | --- | --- |
 | `LLM_PROVIDER` | Non (defaut `anthropic`) | Alimente le bouton « Analyser » de l'onglet *Location saisonniere* (extraction d'une annonce + estimation saisonniere). Sans cle valide pour le fournisseur choisi, ce bouton renvoie une erreur mais le reste de l'app (comparateur SCI/Holding, saisie manuelle des saisons) fonctionne normalement — rien d'autre dans l'app n'appelle un LLM. |
-| `DATABASE_URL` | Non | Reservee pour la persistance (Prisma) — pas encore utilisee par le serveur. |
+| `SUPABASE_URL` | **Oui** | Projet Supabase : comptes utilisateurs. Sans elle, le serveur refuse de demarrer. |
+| `SUPABASE_ANON_KEY` | **Oui** | Cle publique du projet, transmise au navigateur pour la page de connexion. |
+| `DATABASE_URL` | **Oui** | Postgres du projet Supabase (session pooler) : scenarios enregistres. En local, un Postgres simple convient (voir ci-dessous). |
+| `LLM_QUOTA_JOUR`, `MAX_SCENARIOS` | Non | Quota quotidien d'analyses LLM et nombre de scenarios, par utilisateur. |
 
 L'analyse d'annonce est **agnostique au fournisseur** : `LLM_PROVIDER` choisit lequel utiliser, chacun avec sa propre cle/modele dans `server/.env.example`.
 
@@ -32,6 +35,15 @@ L'analyse d'annonce est **agnostique au fournisseur** : `LLM_PROVIDER` choisit l
 
 Toutes ces API sont payantes et distinctes d'un abonnement grand public (Claude.ai, ChatGPT Plus, Gemini...) — chacune necessite sa propre facturation activee sur la console du fournisseur. Une fois `server/.env` renseigne, **redemarrez** `npm run dev` : le fichier n'est relu qu'au demarrage du process.
 
+### Base de donnees en local
+
+Le plus simple est d'utiliser un projet Supabase de developpement : `DATABASE_URL` pointe vers sa base et les migrations s'appliquent avec `npm run db:deploy --workspace=server`. Pour les tests, un Postgres local suffit :
+
+```bash
+psql "$DATABASE_URL" -f server/prisma/test/supabase-auth-stub.sql   # ce que Supabase fournit (auth.users)
+npm run db:deploy --workspace=server
+```
+
 ## Lancer l'application
 
 ```bash
@@ -42,5 +54,5 @@ npm run dev:client   # SPA Vite sur http://localhost:5173
 ## Tests
 
 ```bash
-npm test             # suite du moteur (server/)
+npm test             # suite du serveur ; les tests de base de donnees sont ignores sans DATABASE_URL
 ```

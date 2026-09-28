@@ -1,4 +1,4 @@
-# Relais vers le conteneur server, inclus par chaque location /api de nginx.conf.
+# Relais vers le conteneur server, inclus par chaque location /api de nginx.conf.template.
 proxy_pass http://server:3000;
 proxy_http_version 1.1;
 proxy_set_header Host $host;

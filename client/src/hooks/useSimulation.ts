@@ -1,8 +1,9 @@
 import { useMutation } from '@tanstack/react-query';
 import type { SimulationRequest, SimulationResult } from '@shared/schemas.js';
+import { apiFetch } from '@/lib/api';
 
 async function runSimulation(request: SimulationRequest): Promise<SimulationResult> {
-  const response = await fetch('/api/simulations/run', {
+  const response = await apiFetch('/api/simulations/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),

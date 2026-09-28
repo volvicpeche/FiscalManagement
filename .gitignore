@@ -141,5 +141,5 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
-# Mot de passe du site (auth_basic nginx), cree sur le VPS uniquement
-web/htpasswd
+# Adresse du projet Supabase pour le conteneur web, cree sur le VPS uniquement
+web/.env

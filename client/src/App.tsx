@@ -36,6 +36,7 @@ import { AidePage } from '@/features/aide';
 import { SidebarLayout } from '@/components/SidebarLayout';
 import { Logo } from '@/components/Logo';
 import { ScenarioManager } from '@/features/scenarios';
+import { UserMenu } from '@/features/auth';
 
 function Panel({ children }: { children: React.ReactNode }) {
   return <div className="bg-white rounded-lg border p-4">{children}</div>;
@@ -141,6 +142,8 @@ function App() {
                 )}
               </div>
             )}
+
+            <UserMenu />
           </div>
         </div>
       </header>

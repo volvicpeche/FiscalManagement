@@ -1,4 +1,4 @@
-# En-têtes de sécurité, inclus par nginx.conf au niveau server et dans chaque
+# En-têtes de sécurité, inclus par nginx.conf.template au niveau server et dans chaque
 # location (nginx n'hérite pas des add_header dès qu'une location en déclare).
 #
 # CSP : l'application ne charge rien d'extérieur et Vite ne produit aucun

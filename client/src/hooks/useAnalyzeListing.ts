@@ -1,5 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import type { ListingExtraction } from '@shared/listing.js';
+import { apiFetch } from '@/lib/api';
 
 /** A URL to fetch server-side, or text the user pasted from the listing. */
 export type AnalyzeInput = { url: string } | { text: string };
@@ -44,7 +45,7 @@ function errorMessageFrom(body: unknown, status: number): string {
 async function analyzeListing(input: AnalyzeInput): Promise<ListingExtraction> {
   let response: Response;
   try {
-    response = await fetch('/api/listings/analyze', {
+    response = await apiFetch('/api/listings/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),

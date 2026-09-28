@@ -20,9 +20,19 @@ Deux conteneurs tournent sur le VPS :
   `server`. C'est le seul conteneur publié, sur le port 80.
 
 Le VPS ne contient **pas** le code source : il télécharge des images déjà
-construites sur GHCR (le registre d'images de GitHub). Il n'y a pas de base de
-données : les scénarios enregistrés sont des fichiers JSON, conservés dans un
-volume (voir « Sauvegarder les scénarios »).
+construites sur GHCR (le registre d'images de GitHub). Les comptes
+utilisateurs et les scénarios enregistrés vivent chez **Supabase** (un
+Postgres hébergé, avec son service d'authentification) : le VPS ne garde
+aucune donnée.
+
+```
+navigateur ──► web (nginx) ──/api/*──────────► server ──► Postgres Supabase
+                    └──────/supabase/auth/v1──► Supabase Auth
+```
+
+Le navigateur ne contacte jamais `supabase.co` directement : nginx relaie la
+connexion. Un proxy d'entreprise qui bloquerait Supabase ne bloque donc pas
+l'application.
 
 **Prérequis** : un VPS OVH sous **Ubuntu 26.04**, l'utilisateur `ubuntu` créé
 par OVH, et l'adresse IP du VPS. Dans la suite, remplacez `<IP_DU_VPS>` par
@@ -100,6 +110,55 @@ Pourquoi chacun :
    directement à Podman : il passe par ce socket, inactif par défaut. Sans
    lui, le déploiement échoue sur « Cannot connect to the Docker daemon ».
 
+## Étape 2 bis — Créer le projet Supabase (navigateur)
+
+Sur [supabase.com](https://supabase.com), créez un compte puis **New project** :
+
+- **Region** : une région européenne, *West EU (Paris)* ou *Central EU
+  (Frankfurt)* : vos données fiscales restent dans l'UE.
+- **Database password** : générez-le et gardez-le, il entre dans
+  `DATABASE_URL` à l'étape 3b.
+
+Puis, dans le tableau de bord du projet :
+
+1. **Authentication → Sign In / Providers → Email** : *Enable Email provider*
+   et **Confirm email** activés. Chacun peut créer un compte, mais doit
+   prouver que l'adresse est à lui.
+2. **Authentication → URL Configuration** :
+   - *Site URL* : `https://<DOMAINE>` (ou `http://<IP_DU_VPS>` tant que vous
+     n'êtes pas en HTTPS) ;
+   - *Redirect URLs* : ajoutez `https://<DOMAINE>/auth/confirmer`, et
+     `http://localhost:5173/auth/confirmer` pour le développement.
+3. **Authentication → Emails → Templates** : les liens des e-mails doivent
+   pointer vers **votre** domaine, pas vers `supabase.co` (qu'un proxy
+   d'entreprise peut bloquer). Remplacez le lien de deux modèles :
+   - *Confirm signup* :
+     `<a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=signup">Confirmer mon adresse</a>`
+   - *Reset password* :
+     `<a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=recovery">Choisir un nouveau mot de passe</a>`
+
+   `{{ .RedirectTo }}` vaut `https://<DOMAINE>/auth/confirmer`, envoyé par
+   l'application. Traduisez le reste du texte au passage.
+4. **Authentication → Emails → SMTP Settings** : branchez un vrai serveur
+   d'envoi (Brevo, Postmark, Resend… ont des offres gratuites). Le SMTP
+   intégré de Supabase n'envoie que **quelques e-mails par heure**, et
+   seulement aux membres de votre organisation Supabase : sans SMTP, les
+   inscriptions échouent.
+5. Relevez trois valeurs pour l'étape 3 :
+
+| Valeur | Où la trouver |
+|---|---|
+| URL du projet (`https://<ref>.supabase.co`) | **Project Settings → Data API** |
+| Clé publique *anon* (ou *publishable*) | **Project Settings → API Keys** |
+| Chaîne de connexion **Session pooler** | bouton **Connect** en haut du tableau de bord → *Session pooler* |
+
+> Prenez bien le **Session pooler** (port 5432) : la connexion directe
+> n'existe qu'en IPv6, que ce VPS n'utilise pas, et le *Transaction pooler*
+> (port 6543) ne convient pas à Prisma.
+
+Ne copiez **jamais** la clé *service_role* (ou *secret*) : l'application n'en
+a pas besoin, et elle ouvre toute la base.
+
 ## Étape 3 — Créer le dossier de l'application (VPS)
 
 Tout se passe dans `~/patrimonia`, qui contiendra trois fichiers :
@@ -110,7 +169,7 @@ Tout se passe dans `~/patrimonia`, qui contiendra trois fichiers :
 ├── server/
 │   └── .env             ← vos réglages et clés secrètes
 └── web/
-    └── htpasswd         ← le mot de passe du site
+    └── .env             ← l'adresse du projet Supabase
 ```
 
 ```bash
@@ -142,8 +201,8 @@ services:
       - server
     ports:
       - "80:80"
-    volumes:
-      - ./web/htpasswd:/etc/nginx/auth/htpasswd:ro
+    env_file:
+      - web/.env
 
 volumes:
   scenarios:
@@ -162,6 +221,16 @@ le VPS se contente de les télécharger.
 
 ```bash
 cat > ~/patrimonia/server/.env <<'EOF'
+# Projet Supabase (étape 2 bis). Remplacez chaque <…>.
+SUPABASE_URL="https://<ref>.supabase.co"
+SUPABASE_ANON_KEY="<clé anon>"
+# Session pooler, avec le mot de passe de la base à la place de [YOUR-PASSWORD]
+DATABASE_URL="postgresql://postgres.<ref>:<mot de passe>@aws-0-eu-west-3.pooler.supabase.com:5432/postgres"
+
+# Par utilisateur : analyses LLM par jour, scénarios enregistrés.
+LLM_QUOTA_JOUR=20
+MAX_SCENARIOS=200
+
 # Bouton « Analyser une annonce ». Laissez la clé vide si vous ne l'utilisez
 # pas : le reste de l'application fonctionne sans.
 LLM_PROVIDER="anthropic"
@@ -179,32 +248,26 @@ chmod 600 ~/patrimonia/server/.env
 
 - Pour un autre fournisseur que `anthropic` (OpenAI, Gemini, compatible
   OpenAI), les variables sont décrites dans `server/.env.example`.
-- `chmod 600` : vous seul pouvez lire ce fichier.
+- `chmod 600` : vous seul pouvez lire ce fichier. Il contient le mot de passe
+  de la base de données.
+- Au démarrage, le conteneur `server` applique les migrations de la base
+  (création des tables au premier lancement). Si `DATABASE_URL` est fausse,
+  il s'arrête avec l'erreur dans `docker compose logs server`.
 - Ce fichier ne doit **jamais** être commité : il n'existe que sur le VPS.
 
-### 3c. `web/htpasswd` : le mot de passe du site
+### 3c. `web/.env` : l'adresse du projet Supabase
 
-Tout le site est protégé par un identifiant et un mot de passe, demandés par
-le navigateur à la première visite. Sans ce fichier, le conteneur `web`
-**refuse de démarrer** : c'est voulu, pour que le site ne se retrouve jamais
-ouvert à tous par erreur.
+nginx relaie la page de connexion vers Supabase. Sans ce fichier, le
+conteneur `web` **refuse de démarrer**.
 
 ```bash
-# Remplacez « florian » par l'identifiant de votre choix ; le mot de passe
-# est demandé deux fois, sans s'afficher.
-printf 'florian:%s\n' "$(openssl passwd -apr1)" > ~/patrimonia/web/htpasswd
-chmod 644 ~/patrimonia/web/htpasswd
+# Même URL que SUPABASE_URL ci-dessus, sans barre finale
+echo 'SUPABASE_URL=https://<ref>.supabase.co' > ~/patrimonia/web/.env
 ```
 
-- Le fichier ne contient qu'une **empreinte** du mot de passe, jamais le mot de
-  passe lui-même.
-- `chmod 644` et non `600` : le serveur nginx du conteneur tourne sous son
-  propre utilisateur et doit pouvoir le lire.
-- Choisissez un mot de passe long (4 mots au hasard, par exemple) : il est
-  la seule barrière entre Internet et vos scénarios.
-- Tant que le site est en HTTP, ce mot de passe circule **en clair** à chaque
-  requête. Passez en HTTPS dès que possible, et ne réutilisez pas un mot de
-  passe qui sert ailleurs.
+Il n'y a plus de mot de passe commun au site : chacun se connecte avec son
+propre compte (étape 6). Si un ancien fichier `web/htpasswd` traîne, il ne
+sert plus et peut être supprimé.
 
 ## Étape 4 — Créer une clé SSH de déploiement (votre PC)
 
@@ -258,7 +321,12 @@ Vérifiez depuis votre PC :
 curl http://<IP_DU_VPS>/api/health     # → {"status":"ok"}
 ```
 
-puis ouvrez `http://<IP_DU_VPS>/` dans le navigateur.
+puis ouvrez `http://<IP_DU_VPS>/` dans le navigateur : la page de connexion
+s'affiche. Créez votre compte (onglet **Créer un compte**), cliquez sur le
+lien reçu par e-mail, connectez-vous.
+
+Si vous aviez des scénarios enregistrés avant le passage à Supabase, importez-les
+maintenant (« Importer les anciens scénarios », plus bas).
 
 > Au tout premier passage, GHCR crée les deux images en **privé**. Ça
 > fonctionne tel quel : le workflow se connecte à GHCR avant de télécharger.
@@ -277,7 +345,7 @@ certificat seul, redirige le HTTP vers le HTTPS, et transmet au conteneur
 `web`, qui n'est plus joignable que depuis le VPS lui-même.
 
 ```
-Internet ──443──► Caddy (certificat) ──► 127.0.0.1:8080 ──► web (nginx, mot de passe) ──► server
+Internet ──443──► Caddy (certificat) ──► 127.0.0.1:8080 ──► web (nginx) ──► server
          ──80───► Caddy : redirection vers https://
 ```
 
@@ -362,7 +430,7 @@ DOMAINE=monpatrimonia.fr
 
 sudo tee /etc/caddy/Caddyfile >/dev/null <<CADDY
 $DOMAINE {
-	# Le conteneur web (nginx) : mot de passe, limites de débit, API.
+	# Le conteneur web (nginx) : application, limites de débit, API.
 	reverse_proxy 127.0.0.1:8080
 
 	encode zstd gzip
@@ -418,13 +486,17 @@ Depuis votre PC :
 ```bash
 curl -sI http://<DOMAINE>/ | head -3       # → 308, Location: https://<DOMAINE>/
 curl -s https://<DOMAINE>/api/health       # → {"status":"ok"}
-curl -sI https://<DOMAINE>/ | grep -i -E '^HTTP|strict-transport|www-authenticate'
-                                           # → 401, HSTS et la demande de mot de passe
+curl -sI https://<DOMAINE>/ | grep -i -E '^HTTP|strict-transport'
+                                           # → 200 et HSTS
+curl -s https://<DOMAINE>/api/simulations  # → {"error":"Connexion requise."}
 curl -sI https://www.<DOMAINE>/ | head -3  # → 301 vers https://<DOMAINE>/
 ```
 
 Puis ouvrez `https://<DOMAINE>/` : cadenas dans la barre d'adresse, puis
-demande d'identifiant et de mot de passe (ceux de l'étape 3c).
+page de connexion de l'application.
+
+Dans Supabase (**Authentication → URL Configuration**), remplacez la *Site URL*
+`http://<IP_DU_VPS>` par `https://<DOMAINE>` si vous aviez commencé en HTTP.
 
 Si le certificat n'arrive pas, les journaux de Caddy disent pourquoi :
 `sudo journalctl -u caddy -f`.
@@ -446,8 +518,8 @@ Si le certificat n'arrive pas, les journaux de Caddy disent pourquoi :
 - **Les limites de débit de nginx deviennent globales** : toutes les requêtes
   arrivent désormais de Caddy, donc de la même adresse. Pour un usage
   personnel, c'est sans conséquence.
-- **Le mot de passe du site reste indispensable** : le HTTPS protège le
-  trajet, pas l'accès.
+- **La connexion reste indispensable** : le HTTPS protège le trajet, les
+  comptes Supabase protègent l'accès.
 
 ---
 
@@ -463,7 +535,8 @@ Toutes ces commandes se lancent **sur le VPS**, dans `~/patrimonia`.
 | Prendre en compte un `.env` modifié | `docker compose up -d --force-recreate server` |
 | Redémarrer | `docker compose restart` |
 | Revenir à une version précédente | `IMAGE_TAG=<12 caractères du commit> docker compose pull`, puis `IMAGE_TAG=<même valeur> docker compose up -d` |
-| Changer le mot de passe du site | refaire la commande de l'étape 3c, puis `docker compose restart web` |
+| Voir, bloquer ou supprimer un compte | Supabase → **Authentication → Users**. Supprimer un compte supprime ses scénarios |
+| Modifier un quota (`LLM_QUOTA_JOUR`, `MAX_SCENARIOS`) | éditer `server/.env`, puis `docker compose up -d --force-recreate server` |
 
 Un `docker compose restart` seul ne relit pas `server/.env` : il faut
 recréer le conteneur, d'où le `--force-recreate`. Pour un retour en arrière,
@@ -472,24 +545,73 @@ les étiquettes disponibles sont listées sur la page GitHub du repo, rubrique
 
 ## Sauvegarder les scénarios
 
-Les scénarios enregistrés sont des fichiers JSON dans le volume `scenarios`,
-monté sur `/app/server/data` dans le conteneur `server`. Chaque déploiement
-remplace le conteneur, **pas** le volume : les scénarios survivent.
+Les scénarios sont dans la base Supabase, table `scenarios`, une ligne par
+scénario et par utilisateur. Supabase en fait une sauvegarde quotidienne,
+gardée 7 jours sur les offres payantes. L'offre gratuite n'en garde pas : faites
+les vôtres, depuis votre PC ou le VPS :
+
+```bash
+# Chaîne du « Session pooler », comme DATABASE_URL
+pg_dump "<DATABASE_URL>" --table=public.scenarios --data-only -Fc \
+  -f scenarios-$(date +%F).dump
+```
+
+Sur l'offre gratuite, Supabase **met en pause** un projet resté une semaine sans
+aucune requête. Il suffit de le relancer depuis le tableau de bord, sans perte
+de données.
+
+## Migrer une installation existante (ancienne version avec mot de passe)
+
+Le déploiement automatique met à jour les images, **pas** les fichiers du VPS.
+Avant de pousser cette version sur `main`, sur un VPS déjà installé :
+
+1. Créez le projet Supabase (étape 2 bis).
+2. Ajoutez les variables Supabase à `~/patrimonia/server/.env` (étape 3b) et
+   créez `~/patrimonia/web/.env` (étape 3c).
+3. Dans `~/patrimonia/docker-compose.yml`, service `web`, remplacez
+
+   ```yaml
+       volumes:
+         - ./web/htpasswd:/etc/nginx/auth/htpasswd:ro
+   ```
+
+   par
+
+   ```yaml
+       env_file:
+         - web/.env
+   ```
+
+   Gardez le volume `scenarios` du service `server` : il contient les anciens
+   scénarios, à importer ensuite.
+4. Poussez sur `main` (ou relancez le workflow **Deploy**), créez votre
+   compte, puis importez vos scénarios (section suivante).
+
+Si le déploiement passe avant ces étapes, les conteneurs refusent de démarrer
+avec un message explicite dans `docker compose logs`, et l'application
+n'est pas ouverte à tous. Faites les étapes, puis `docker compose up -d`.
+
+## Importer les anciens scénarios
+
+Avant Supabase, les scénarios étaient des fichiers JSON dans le volume
+`scenarios` du VPS. Pour les rattacher à votre compte, une seule fois :
+
+1. Créez votre compte dans l'application et connectez-vous une fois.
+2. Relevez son identifiant dans Supabase → **Authentication → Users**,
+   colonne *UID* (de la forme `3f2504e0-4f89-41d3-…`).
+3. Sur le VPS :
 
 ```bash
 cd ~/patrimonia
-docker volume ls      # le nom est préfixé par le dossier : patrimonia_scenarios
-
-# Sauvegarde dans ~/patrimonia/scenarios-AAAA-MM-JJ.tar.gz
-docker run --rm -v patrimonia_scenarios:/data -v "$PWD":/backup docker.io/library/alpine \
-  tar czf /backup/scenarios-$(date +%F).tar.gz -C /data .
+docker compose exec server node dist/server/src/scripts/import-scenarios.js --user <UID>
 ```
 
-Rapatriez ensuite l'archive sur votre PC :
-`scp ubuntu@<IP_DU_VPS>:patrimonia/scenarios-*.tar.gz .`
-
-> ⚠️ `docker compose down` garde le volume. `docker compose down -v` le
-> **supprime**, et tous les scénarios avec. N'utilisez jamais `-v` sur le VPS.
+Le script liste les scénarios importés, ceux déjà présents et les fichiers
+illisibles. Vous pouvez le relancer sans créer de doublons. Vérifiez dans
+l'application que tout y est, puis, si vous voulez, retirez le volume :
+supprimez les deux lignes `volumes:` du service `server` et le bloc `volumes:`
+final de `docker-compose.yml`, `docker compose up -d`, puis
+`docker volume rm patrimonia_scenarios`.
 
 ## Dépannage
 
@@ -503,8 +625,15 @@ Rapatriez ensuite l'archive sur votre PC :
 | `unauthorized` au `pull` en le lançant à la main | vous n'êtes pas connecté à GHCR sur le VPS. Le workflow le fait tout seul ; à la main : `podman login ghcr.io` avec votre nom GitHub et un jeton `read:packages` |
 | L'étape **deploy** échoue en `ssh: handshake failed` | secret `VPS_SSH_KEY` incomplet (il faut les lignes BEGIN/END), ou la clé publique n'est pas dans `~/.ssh/authorized_keys` |
 | Le VPS rame pendant l'analyse d'une annonce | Chrome consomme de la mémoire : vérifiez que le swap est actif (`swapon --show`), ou mettez `LISTING_BROWSER_FALLBACK=false` |
-| Le conteneur `web` s'arrête aussitôt, journaux : `htpasswd absent ou vide` | le fichier de l'étape 3c manque, ou `docker-compose.yml` n'a pas la ligne `volumes` du service `web` |
-| Erreur 500 sur toutes les pages, journaux de `web` : `Permission denied` sur `htpasswd` | `chmod 644 ~/patrimonia/web/htpasswd`, puis `docker compose restart web` |
+| Le conteneur `web` s'arrête aussitôt, journaux : `SUPABASE_URL absente` ou `invalide` | `~/patrimonia/web/.env` manque (étape 3c), ou `docker-compose.yml` n'a pas l'`env_file` du service `web`. L'URL s'écrit sans barre finale |
+| Le conteneur `server` s'arrête aussitôt, journaux : `SUPABASE_URL absente` ou `DATABASE_URL absente` | variables manquantes dans `server/.env` (étape 3b), puis `docker compose up -d --force-recreate server` |
+| Journaux de `server` : `P1001: Can't reach database server` | `DATABASE_URL` n'est pas celle du **Session pooler**, le mot de passe est faux, ou le projet Supabase est en pause (tableau de bord → *Restore*) |
+| « Application indisponible » au chargement de la page | `server` est arrêté ou `SUPABASE_ANON_KEY` est vide : `docker compose logs server` |
+| « E-mail ou mot de passe incorrect » alors qu'ils sont bons | le compte n'est pas encore confirmé (lien de l'e-mail), ou il a été supprimé dans Supabase |
+| L'e-mail de confirmation n'arrive jamais | SMTP intégré de Supabase (limité, étape 2 bis, point 4), ou l'e-mail est dans les indésirables |
+| Le lien de l'e-mail mène à `supabase.co` ou à une page d'erreur | les modèles d'e-mail n'ont pas été modifiés, ou `https://<DOMAINE>/auth/confirmer` manque dans les *Redirect URLs* (étape 2 bis) |
+| Erreur 502 sur la connexion, journaux de `web` : `could not be resolved` | le conteneur `web` n'arrive pas à résoudre le nom de Supabase : vérifiez le DNS du VPS (`resolvectl status`) |
+| « Quota de … analyses par jour atteint » | quota LLM par utilisateur (`LLM_QUOTA_JOUR`), remis à zéro à minuit UTC |
 | Erreur 429 (« Too Many Requests ») | une limite de débit a été atteinte (voir « Sécurité ») : attendez une minute |
 
 ---
@@ -515,22 +644,38 @@ Ce que l'application met en place, et ce qu'il vous reste à faire.
 
 **Côté application** (dans les images, rien à configurer) :
 
-- **Mot de passe sur tout le site** (étape 3c). Seule la sonde `/api/health`
-  reste publique : elle ne répond que `{"status":"ok"}`.
-- **Limites de débit par adresse IP**, appliquées avant même la vérification
-  du mot de passe, donc aussi aux tentatives pour le deviner :
-  20 requêtes/s pour le site, 5 analyses d'annonce par minute (chacune peut
-  lancer Chrome et consommer votre clé LLM), 30 enregistrements ou
-  suppressions de scénarios par minute.
+- **Un compte par personne**, géré par Supabase : mots de passe hachés chez
+  Supabase, jamais vus par le serveur ; adresse e-mail confirmée avant la
+  première connexion. Chaque appel à l'API porte un jeton signé par Supabase,
+  vérifié par le serveur ; sans jeton valide, seules `/api/health` et
+  `/api/config` répondent.
+- **Chacun ne voit que ses scénarios** : le serveur filtre chaque requête sur
+  l'utilisateur connecté, et répond « introuvable » pour le scénario d'un autre.
+- **Tables fermées à l'API publique de Supabase** : la clé *anon*, publique,
+  ne donne accès à rien (RLS activée, aucun droit). Seul le serveur, avec le
+  mot de passe de la base, y accède.
+- **Quotas par compte** : 20 analyses LLM par jour (`LLM_QUOTA_JOUR`) et 200
+  scénarios (`MAX_SCENARIOS`). L'inscription est ouverte : ce sont eux qui
+  empêchent un inconnu de consommer votre clé LLM ou de remplir la base.
+- **Limites de débit par adresse IP** : 20 requêtes/s pour le site,
+  30 tentatives de connexion par minute, 5 analyses d'annonce par minute
+  (chacune peut lancer Chrome et consommer votre clé LLM), 30 enregistrements
+  ou suppressions de scénarios par minute. Supabase applique en plus ses
+  propres limites.
 - **Un seul Chrome à la fois**, avec au plus une annonce en attente : au-delà,
   la demande est refusée tout de suite au lieu de saturer la mémoire.
 - **Pas d'accès au réseau interne via l'analyse d'annonce** : le serveur vérifie
   les adresses IP réellement obtenues (pas seulement le nom saisi), à chaque
   redirection et pour chaque ressource que charge Chrome.
-- **200 scénarios au plus** (variable `MAX_SCENARIOS` dans `server/.env`) et
-  requêtes limitées à 1 Mo : impossible de remplir le disque.
+- **Requêtes limitées à 1 Mo**, 100 Mo pour les justificatifs.
 - **En-têtes de sécurité** : politique de contenu stricte (CSP), affichage dans
   une iframe interdit, version de nginx masquée.
+
+Toutes les tentatives de connexion passent par le VPS : pour Supabase, elles
+viennent toutes de la même adresse. Ses limites par IP (quelques dizaines de
+connexions toutes les 5 minutes) s'appliquent donc à l'ensemble des
+utilisateurs. C'est sans conséquence pour quelques personnes. Au-delà, relevez
+ces limites dans **Authentication → Rate Limits**.
 
 **Côté VPS** (à faire une fois) :
 
@@ -555,7 +700,7 @@ En contrepartie, un changement d'IP (box, 4G) vous coupe l'accès. Une fois en
 HTTPS, ne le faites pas : Let's Encrypt doit joindre le port 80 pour
 renouveler le certificat.
 
-**Tant que le site n'est pas en HTTPS**, le mot de passe et vos données
+**Tant que le site n'est pas en HTTPS**, les mots de passe et vos données
 circulent en clair : voir la section « Passer en HTTPS ».
 
 ---
