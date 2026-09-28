@@ -108,7 +108,7 @@ The engine is the heart of the app — pure TypeScript functions, fully tested, 
 - `POST /api/frontalier/run` — Geneva TOU vs impot a la source for one year (`FrontalierRequestSchema` in `shared/frontalier.ts`)
 - `POST /api/frontalier/documents` — multipart upload (PDF/JPEG/PNG/WebP, 10 × 10 MB); Claude reads each file into amounts tagged with their form field (`services/llm/documentExtractor.ts`, Anthropic only). Files stay in memory, never on disk; the client applies nothing until the user validates each field.
 - `GET /api/simulations`, `GET|PUT|DELETE /api/simulations/:id`, `POST /api/simulations` — saved scenarios of the logged-in user
-- `GET /api/config` — public: the Supabase anon key, read by the client at start-up
+- `GET /api/config` — public: the Supabase publishable key (`SUPABASE_ANON_KEY`; a legacy `anon` JWT also works), read by the client at start-up. It refuses to serve a secret key (`sb_secret_…` or a `service_role` JWT, `services/cleSupabase.ts`)
 
 ## Authentication & persistence
 

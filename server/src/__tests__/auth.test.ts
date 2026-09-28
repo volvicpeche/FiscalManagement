@@ -85,6 +85,15 @@ describe('auth plugin', () => {
     expect(res.json()).toEqual({ supabaseAnonKey: 'cle-anon-publique' });
   });
 
+  it('should never serve a secret key to the browser', async () => {
+    const avant = process.env.SUPABASE_ANON_KEY;
+    process.env.SUPABASE_ANON_KEY = 'sb_secret_ne-doit-jamais-sortir';
+    const res = await server.inject({ method: 'GET', url: '/api/config' });
+    process.env.SUPABASE_ANON_KEY = avant;
+    expect(res.statusCode).toBe(503);
+    expect(res.body).not.toContain('sb_secret');
+  });
+
   it('should not be fooled by a query string on a public route', async () => {
     const res = await server.inject({ method: 'GET', url: '/api/moi?/api/health' });
     expect(res.statusCode).toBe(401);

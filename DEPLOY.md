@@ -137,13 +137,20 @@ et gardez un bloc-notes ouvert pour y coller les 3 valeurs.
 
 **A2 — La clé publique** → `SUPABASE_ANON_KEY`
 
-- Où : **Project Settings** → **API Keys**. Prenez la clé nommée **anon**
-  (onglet *Legacy API keys*) ou **publishable**, jamais celle nommée
-  *service_role* ou *secret*.
-- Ça ressemble à : `eyJhbGciOiJIUzI1NiIsInR5cCI6…` (très longue) ou
-  `sb_publishable_…`
+- Où : **Project Settings** → **API Keys** → onglet *Publishable and secret
+  API keys* → la clé **publishable**. Si la liste est vide, créez-la avec
+  *Create new API keys*.
+- Ça ressemble à : `sb_publishable_…`
 - À coller : dans `server/.env` (étape 3b).
 - Elle est publique : le navigateur la reçoit de toute façon.
+- À défaut, l'ancienne clé **anon** (onglet *Legacy API keys*, commence par
+  `eyJ…`) fonctionne aussi, mais Supabase retire progressivement ces clés :
+  préférez la publishable.
+
+> ⚠️ Ne prenez **jamais** la clé **secret** (`sb_secret_…`), ni l'ancienne
+> **service_role** : elles donnent tous les droits sur votre base, et
+> Patrimonia n'en a pas besoin. Si vous en collez une par erreur, le serveur
+> refuse de l'envoyer au navigateur et le signale au démarrage.
 
 **A3 — La connexion à la base** → `DATABASE_URL`
 
