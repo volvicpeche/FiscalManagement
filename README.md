@@ -21,7 +21,8 @@ cp server/.env.example server/.env
 | `LLM_PROVIDER` | Non (defaut `anthropic`) | Alimente le bouton « Analyser » de l'onglet *Location saisonniere* (extraction d'une annonce + estimation saisonniere). Sans cle valide pour le fournisseur choisi, ce bouton renvoie une erreur mais le reste de l'app (comparateur SCI/Holding, saisie manuelle des saisons) fonctionne normalement — rien d'autre dans l'app n'appelle un LLM. |
 | `SUPABASE_URL` | **Oui** | Projet Supabase : comptes utilisateurs. Sans elle, le serveur refuse de demarrer. |
 | `SUPABASE_ANON_KEY` | **Oui** | Cle publique du projet, transmise au navigateur pour la page de connexion. |
-| `DATABASE_URL` | **Oui** | Postgres du projet Supabase (session pooler) : scenarios enregistres. En local, un Postgres simple convient (voir ci-dessous). |
+| `SUPABASE_JWT_SECRET` | Selon le projet | Ancien secret JWT, seulement si le projet signe encore ses jetons en HS256 (voir `DEPLOY.md`, etape 2 bis). |
+| `DATABASE_URL` | **Oui** | Postgres du projet Supabase (session pooler) : scenarios enregistres, dans le schema dedie `tax`. En local, un Postgres simple convient (voir ci-dessous). |
 | `LLM_QUOTA_JOUR`, `MAX_SCENARIOS` | Non | Quota quotidien d'analyses LLM et nombre de scenarios, par utilisateur. |
 
 L'analyse d'annonce est **agnostique au fournisseur** : `LLM_PROVIDER` choisit lequel utiliser, chacun avec sa propre cle/modele dans `server/.env.example`.
