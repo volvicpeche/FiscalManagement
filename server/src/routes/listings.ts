@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { ListingAnalyzeRequestSchema } from '@shared/listing.js';
 import { analyzeListing, analyzeListingText } from '../services/listingAnalyzer.js';
-import { consommerQuota, QuotaLlmAtteintError } from '../services/llmQuota.js';
+import { messageErreurLlm } from '../services/llm/config.js';
+import { preparerLlm } from './llmAcces.js';
 
 export async function listingRoutes(server: FastifyInstance) {
   server.post('/api/listings/analyze', async (request, reply) => {
@@ -18,22 +19,15 @@ export async function listingRoutes(server: FastifyInstance) {
       });
     }
 
-    try {
-      await consommerQuota(request.user.id);
-    } catch (err) {
-      if (err instanceof QuotaLlmAtteintError) {
-        return reply.status(429).send({ error: err.message });
-      }
-      throw err;
-    }
+    const config = await preparerLlm(request, reply, 'annonce');
+    if (!config) return reply;
 
     try {
       return 'url' in parsed.data
-        ? await analyzeListing(parsed.data.url)
-        : await analyzeListingText(parsed.data.text);
+        ? await analyzeListing(parsed.data.url, config)
+        : await analyzeListingText(parsed.data.text, config);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Echec de l'analyse de l'annonce";
-      return reply.status(422).send({ error: message });
+      return reply.status(422).send({ error: messageErreurLlm(err, config) });
     }
   });
 }

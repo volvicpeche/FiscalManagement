@@ -3,33 +3,24 @@ import { extractListingViaAnthropic } from './anthropicProvider.js';
 import { extractListingViaOpenAI } from './openaiProvider.js';
 import { extractListingViaGemini } from './geminiProvider.js';
 import { extractListingViaOpenAiCompatible } from './openaiCompatibleProvider.js';
+import type { LlmConfig } from './config.js';
 
-const PROVIDERS = ['anthropic', 'openai', 'gemini', 'openai_compatible'] as const;
-export type LlmProvider = (typeof PROVIDERS)[number];
-
-export function resolveLlmProvider(): LlmProvider {
-  const raw = (process.env.LLM_PROVIDER || 'anthropic').trim().toLowerCase();
-  if ((PROVIDERS as readonly string[]).includes(raw)) return raw as LlmProvider;
-
-  throw new Error(
-    `LLM_PROVIDER invalide : "${raw}". Valeurs acceptees : ${PROVIDERS.join(', ')}.`,
-  );
-}
+export { resolveLlmProvider, configServeur, type LlmConfig } from './config.js';
 
 /**
- * Extracts listing features + a rough seasonal-rental estimate via whichever
- * LLM provider is configured through LLM_PROVIDER (default: anthropic).
- * Each provider reads its own API key / model env vars — see .env.example.
+ * Extracts listing features + a rough seasonal-rental estimate with the
+ * provider and key of `config` — the user's own, or the server's for the
+ * allow-listed accounts (services/llmSettings.ts).
  */
-export async function extractListingViaLlm(text: string): Promise<ListingExtraction> {
-  switch (resolveLlmProvider()) {
+export async function extractListingViaLlm(text: string, config: LlmConfig): Promise<ListingExtraction> {
+  switch (config.provider) {
     case 'anthropic':
-      return extractListingViaAnthropic(text);
+      return extractListingViaAnthropic(text, config);
     case 'openai':
-      return extractListingViaOpenAI(text);
+      return extractListingViaOpenAI(text, config);
     case 'gemini':
-      return extractListingViaGemini(text);
+      return extractListingViaGemini(text, config);
     case 'openai_compatible':
-      return extractListingViaOpenAiCompatible(text);
+      return extractListingViaOpenAiCompatible(text, config);
   }
 }

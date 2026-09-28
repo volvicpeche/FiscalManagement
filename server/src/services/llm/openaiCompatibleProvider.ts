@@ -2,24 +2,24 @@ import OpenAI from 'openai';
 import type { ListingExtraction } from '@shared/listing.js';
 import { EXTRACTION_SYSTEM_PROMPT, EXTRACTION_JSON_SHAPE, buildUserPrompt } from './prompt.js';
 import { parseExtractionJson } from './jsonMode.js';
+import { fetchApiPublique, type LlmConfig } from './config.js';
 
 /**
  * Any OpenAI-compatible chat-completions endpoint: Qwen/DashScope, DeepSeek,
  * Groq, Mistral, a local Ollama/vLLM server, etc. One generic slot instead of
  * a bespoke module per provider — they all speak the same wire format.
  */
-export async function extractListingViaOpenAiCompatible(text: string): Promise<ListingExtraction> {
-  const apiKey = process.env.OPENAI_COMPATIBLE_API_KEY;
-  const baseURL = process.env.OPENAI_COMPATIBLE_BASE_URL;
-  const model = process.env.OPENAI_COMPATIBLE_MODEL;
+export async function extractListingViaOpenAiCompatible(text: string, config: LlmConfig): Promise<ListingExtraction> {
+  const { apiKey, baseUrl: baseURL, model } = config;
+  if (!baseURL) throw new Error("URL de l'API compatible OpenAI manquante");
 
-  if (!apiKey || !baseURL || !model) {
-    throw new Error(
-      'OPENAI_COMPATIBLE_API_KEY, OPENAI_COMPATIBLE_BASE_URL et OPENAI_COMPATIBLE_MODEL doivent tous etre renseignes',
-    );
-  }
-
-  const client = new OpenAI({ apiKey, baseURL });
+  // A base URL typed by a user is an address the server will call: guard
+  // every request against the internal network (see fetchApiPublique).
+  const client = new OpenAI({
+    apiKey,
+    baseURL,
+    ...(config.source === 'utilisateur' && { fetch: fetchApiPublique, maxRetries: 0 }),
+  });
   const completion = await client.chat.completions.create({
     model,
     response_format: { type: 'json_object' },
