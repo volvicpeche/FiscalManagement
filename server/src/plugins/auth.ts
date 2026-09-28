@@ -2,13 +2,21 @@ import fp from 'fastify-plugin';
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 
 /**
- * Authentication of every /api route by a Supabase access token.
+ * Authentication of every /api route by a Supabase access token, verified
+ * locally with no call to Supabase per request. Two kinds of project exist:
  *
- * Supabase signs its access tokens with an asymmetric key and publishes the
- * public half at /auth/v1/.well-known/jwks.json: the server verifies them
- * locally, with no secret and no call to Supabase per request (jose caches the
- * key set). The token comes in `Authorization: Bearer <jwt>`, never in a
- * cookie, so there is no CSRF surface.
+ * - Signing keys (projects created or migrated since 2025): tokens are signed
+ *   with an asymmetric key whose public half is published at
+ *   /auth/v1/.well-known/jwks.json (jose caches it). Nothing secret here.
+ * - Legacy JWT secret (older projects): tokens are HS256, signed with the
+ *   project's shared secret, and the JWKS is empty. Accepted ONLY when
+ *   SUPABASE_JWT_SECRET is configured — an HS256 token is otherwise refused,
+ *   never checked against a key it was not made for.
+ *
+ * The algorithm in the token header picks the key; jose then refuses any
+ * mismatch between that algorithm and the key type (so no `alg: none`, no
+ * HS256 signed with a public key). The token comes in `Authorization: Bearer
+ * <jwt>`, never in a cookie, so there is no CSRF surface.
  */
 
 export interface AuthUser {
@@ -31,6 +39,8 @@ export interface AuthOptions {
   supabaseUrl: string;
   /** Overrides the remote key set — tests sign their own tokens. */
   jwks?: JWTVerifyGetKey;
+  /** Legacy JWT secret of the project, for HS256 tokens. Absent: HS256 refused. */
+  jwtSecret?: string;
 }
 
 const SESSION_EXPIREE = { error: 'Session expiree, reconnectez-vous.' };
@@ -40,6 +50,15 @@ export const authPlugin = fp<AuthOptions>(
     const base = opts.supabaseUrl.replace(/\/+$/, '');
     const issuer = `${base}/auth/v1`;
     const jwks = opts.jwks ?? createRemoteJWKSet(new URL(`${issuer}/.well-known/jwks.json`));
+    const secret = opts.jwtSecret ? new TextEncoder().encode(opts.jwtSecret) : null;
+
+    const key: JWTVerifyGetKey = async (header, token) => {
+      if (header.alg === 'HS256') {
+        if (!secret) throw new Error('jeton HS256 sans SUPABASE_JWT_SECRET configure');
+        return secret;
+      }
+      return jwks(header, token);
+    };
 
     server.decorateRequest('user', null as unknown as AuthUser);
 
@@ -52,7 +71,7 @@ export const authPlugin = fp<AuthOptions>(
       if (!token) return reply.status(401).send({ error: 'Connexion requise.' });
 
       try {
-        const { payload } = await jwtVerify(token, jwks, {
+        const { payload } = await jwtVerify(token, key, {
           issuer,
           audience: 'authenticated',
         });

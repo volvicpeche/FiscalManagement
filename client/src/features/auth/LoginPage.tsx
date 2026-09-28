@@ -17,8 +17,13 @@ const TITRES: Record<Onglet, string> = {
   oubli: 'Reinitialiser le mot de passe',
 };
 
-/** Where the links of the confirmation and reset e-mails lead (see ConfirmPage). */
-export const URL_CONFIRMATION = () => `${window.location.origin}/auth/confirmer`;
+/**
+ * Where the links of the confirmation and reset e-mails lead (see ConfirmPage).
+ * `type` is ours: with the default templates, Supabase appends only a `code`.
+ * Must be listed in the project's Redirect URLs (DEPLOY.md).
+ */
+export const URL_CONFIRMATION = (type: 'signup' | 'recovery') =>
+  `${window.location.origin}/auth/confirmer?type=${type}`;
 
 export function LoginPage({ supabase }: { supabase: SupabaseClient }) {
   const [onglet, setOnglet] = useState<Onglet>('connexion');
@@ -67,7 +72,7 @@ export function LoginPage({ supabase }: { supabase: SupabaseClient }) {
         const { error } = await supabase.auth.signUp({
           email: adresse,
           password: motDePasse,
-          options: { emailRedirectTo: URL_CONFIRMATION() },
+          options: { emailRedirectTo: URL_CONFIRMATION('signup') },
         });
         if (error) throw error;
         // Same message whether or not the address already had an account:
@@ -79,7 +84,7 @@ export function LoginPage({ supabase }: { supabase: SupabaseClient }) {
         setConfirmation('');
       } else {
         const { error } = await supabase.auth.resetPasswordForEmail(adresse, {
-          redirectTo: URL_CONFIRMATION(),
+          redirectTo: URL_CONFIRMATION('recovery'),
         });
         if (error) throw error;
         setInfo(`Si un compte existe pour ${adresse}, un e-mail avec un lien de reinitialisation vient d'y etre envoye.`);

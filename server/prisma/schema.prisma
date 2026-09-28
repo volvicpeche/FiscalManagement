@@ -1,5 +1,10 @@
 // Persistence of saved scenarios, in the Postgres of the Supabase project.
 //
+// That project is shared with other applications: every table here lives in
+// the dedicated `tax` schema, never in `public`. The schema is not named in
+// this file: prisma.config.ts puts it on the migration URL, and the adapter
+// option in src/services/db.ts on the queries (DB_SCHEMA).
+//
 // Users live in Supabase's own `auth.users` table: the server never stores a
 // password. `user_id` is the `sub` of the Supabase JWT, and the foreign key to
 // `auth.users` is added by hand in the migration (Prisma cannot model a table

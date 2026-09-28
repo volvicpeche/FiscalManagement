@@ -31,8 +31,11 @@ async function create(): Promise<SupabaseClient> {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      // The e-mail links land on /auth/confirmer and are verified there by
-      // ConfirmPage (token_hash), not parsed from the URL by the library.
+      // PKCE: the e-mail links (default Supabase templates) come back to
+      // /auth/confirmer with a `code`, exchanged there by ConfirmPage against
+      // the verifier this browser kept — not parsed from the URL by the
+      // library.
+      flowType: 'pkce',
       detectSessionInUrl: false,
     },
   });
