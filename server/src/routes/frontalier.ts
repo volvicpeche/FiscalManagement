@@ -3,8 +3,8 @@ import multipart from '@fastify/multipart';
 import { FrontalierRequestSchema, type DocumentExtractionResult } from '@shared/frontalier.js';
 import { simulateFrontalier } from '../engine/frontalierGe.js';
 import { extractDocument, mediaTypeAccepte } from '../services/llm/documentExtractor.js';
-import { messageErreurLlm, type LlmConfig } from '../services/llm/config.js';
-import { preparerLlm } from './llmAcces.js';
+import { messageErreurLlm } from '../services/llm/config.js';
+import { reserverQuota, resoudreLlm } from './llmAcces.js';
 
 const MAX_FICHIER = 10 * 1024 * 1024;
 const MAX_FICHIERS = 10;
@@ -38,6 +38,10 @@ export async function frontalierRoutes(server: FastifyInstance) {
       return reply.status(400).send({ error: 'Envoyez les documents en multipart/form-data' });
     }
 
+    // No usable key: refuse before receiving a single byte of the files.
+    const config = await resoudreLlm(request, reply, 'document');
+    if (!config) return reply;
+
     const recus: { fileName: string; mime: string; buffer: Buffer }[] = [];
     try {
       for await (const part of request.files()) {
@@ -63,11 +67,7 @@ export async function frontalierRoutes(server: FastifyInstance) {
     // all at once: a batch that would overflow the quota is refused whole
     // rather than half read.
     const payants = recus.filter((r) => mediaTypeAccepte(r.mime)).length;
-    let config: LlmConfig | null = null;
-    if (payants > 0) {
-      config = await preparerLlm(request, reply, 'document', payants);
-      if (!config) return reply;
-    }
+    if (payants > 0 && !(await reserverQuota(request, reply, config, payants))) return reply;
 
     // One call per file, in parallel: a failed read is reported for that file
     // and never sinks the others.
@@ -77,10 +77,10 @@ export async function frontalierRoutes(server: FastifyInstance) {
           return { fileName, extraction: null, erreur: `Format non pris en charge (${mime}) : PDF, JPEG, PNG ou WebP` };
         }
         try {
-          return { fileName, extraction: await extractDocument(buffer, mime, fileName, config!), erreur: null };
+          return { fileName, extraction: await extractDocument(buffer, mime, fileName, config), erreur: null };
         } catch (err) {
           request.log.warn({ err, fileName }, 'lecture de document echouee');
-          return { fileName, extraction: null, erreur: messageErreurLlm(err, config!) };
+          return { fileName, extraction: null, erreur: messageErreurLlm(err, config) };
         }
       }),
     );

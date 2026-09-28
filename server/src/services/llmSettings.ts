@@ -41,7 +41,14 @@ export function cleServeurAutorisee(user: AuthUser): boolean {
 export async function lireParametresLlm(user: AuthUser): Promise<LlmSettingsView> {
   const row = await db().llmSettings.findUnique({ where: { userId: user.id } });
   const provider = row ? LlmProviderSchema.safeParse(row.provider) : null;
+  // Same rules as resoudreConfigLlm, without decrypting anything.
+  const perso = provider?.success ? provider.data : null;
+  const serveur = cleServeurAutorisee(user) ? configServeur() : null;
   return {
+    disponible: {
+      annonce: perso !== null || serveur !== null,
+      document: perso === 'anthropic' || serveur?.provider === 'anthropic',
+    },
     configuree: Boolean(row && provider?.success),
     provider: provider?.success ? provider.data : null,
     model: row?.model ?? null,

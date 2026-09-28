@@ -79,6 +79,16 @@ describe.skipIf(!hasDb)('llmSettings (Postgres)', () => {
     expect((await lireParametresLlm(bob)).cleServeurAutorisee).toBe(true);
   });
 
+  it('should tell the client which features a key would serve', async () => {
+    expect((await lireParametresLlm(alice)).disponible).toEqual({ annonce: false, document: false });
+    await enregistrerParametresLlm(alice, { provider: 'openai', apiKey: 'sk-proj-abcdefgh1234' });
+    expect((await lireParametresLlm(alice)).disponible).toEqual({ annonce: true, document: false });
+    await enregistrerParametresLlm(alice, { provider: 'anthropic', apiKey: 'sk-ant-api03-zzzz9876' });
+    expect((await lireParametresLlm(alice)).disponible).toEqual({ annonce: true, document: true });
+    // Allow-listed, no key of their own: the server's Anthropic key serves both.
+    expect((await lireParametresLlm(bob)).disponible).toEqual({ annonce: true, document: true });
+  });
+
   it('should need Anthropic to read documents', async () => {
     await enregistrerParametresLlm(alice, { provider: 'openai', apiKey: 'sk-proj-abcdefgh1234' });
     await expect(resoudreConfigLlm(alice, 'document')).rejects.toThrow(/Anthropic/);

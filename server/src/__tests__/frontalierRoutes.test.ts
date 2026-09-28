@@ -1,11 +1,23 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { frontalierRoutes } from '../routes/frontalier.js';
+
+// Key resolution needs the database; here the user simply has an Anthropic
+// key of their own (no quota). Refusals without a key: llmRoutes.test.ts.
+vi.mock('../services/llmSettings.js', async (original) => ({
+  ...(await original<typeof import('../services/llmSettings.js')>()),
+  resoudreConfigLlm: async () => ({ provider: 'anthropic', apiKey: 'sk-test', model: 'm', source: 'utilisateur' }),
+}));
+
+const { frontalierRoutes } = await import('../routes/frontalier.js');
 
 let server: FastifyInstance;
 
 beforeAll(async () => {
   server = Fastify();
+  server.decorateRequest('user', null as never);
+  server.addHook('onRequest', async (request) => {
+    request.user = { id: '11111111-2222-4333-8444-555555555555', email: 'a@b.fr' };
+  });
   await server.register(frontalierRoutes);
   await server.ready();
 });

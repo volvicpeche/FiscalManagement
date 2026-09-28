@@ -40,6 +40,14 @@ server {
     # Ne pas annoncer la version de nginx.
     server_tokens off;
 
+    # Adresse du conteneur server, relue toutes les 10 s au lieu d'une seule
+    # fois au démarrage : recréer server (déploiement, force-recreate) lui
+    # donne une nouvelle IP, et nginx répondait 502 jusqu'à son propre
+    # redémarrage. Passer par une variable oblige nginx à la résoudre à la
+    # demande, avec le DNS interne des conteneurs.
+    resolver ${NGINX_LOCAL_RESOLVERS} valid=10s ipv6=off;
+    set $api http://server:3000;
+
     # Rien dans l'application n'envoie plus que quelques dizaines de Ko.
     client_max_body_size 1m;
 
@@ -62,7 +70,7 @@ server {
 
     # Sonde de disponibilité : elle ne révèle rien.
     location = /api/health {
-        proxy_pass http://server:3000;
+        proxy_pass $api;
     }
 
     # ─── Relais vers Supabase (authentification seulement) ──────────────────

@@ -75,4 +75,10 @@ export interface LlmSettingsView {
   cleServeurAutorisee: boolean;
   /** Whether the server can store keys at all (LLM_KEYS_SECRET set). */
   stockageDisponible: boolean;
+  /**
+   * Whether each paid feature would get a key right now — the user's own, or
+   * the server's for allow-listed accounts. The client disables what is not
+   * available; the server refuses it anyway (403 LLM_NON_CONFIGURE).
+   */
+  disponible: { annonce: boolean; document: boolean };
 }
