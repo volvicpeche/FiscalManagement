@@ -20,7 +20,7 @@ cp server/.env.example server/.env
 | --- | --- | --- |
 | `LLM_PROVIDER` | Non (defaut `anthropic`) | Alimente le bouton « Analyser » de l'onglet *Location saisonniere* (extraction d'une annonce + estimation saisonniere). Sans cle valide pour le fournisseur choisi, ce bouton renvoie une erreur mais le reste de l'app (comparateur SCI/Holding, saisie manuelle des saisons) fonctionne normalement — rien d'autre dans l'app n'appelle un LLM. |
 | `SUPABASE_URL` | **Oui** | Projet Supabase : comptes utilisateurs. Sans elle, le serveur refuse de demarrer. |
-| `SUPABASE_ANON_KEY` | **Oui** | Cle publique du projet, transmise au navigateur pour la page de connexion. |
+| `SUPABASE_ANON_KEY` | **Oui** | Cle **publishable** du projet (`sb_publishable_…`, ou a defaut l'ancienne cle `anon`), transmise au navigateur pour la page de connexion. Jamais la cle `secret`. |
 | `SUPABASE_JWT_SECRET` | Rarement | Ancien secret JWT, seulement si le bilan de demarrage le demande (voir `DEPLOY.md`, etape 2 bis). |
 | `DATABASE_URL` | **Oui** | Postgres du projet Supabase (session pooler) : scenarios enregistres, dans le schema dedie `tax`. En local, un Postgres simple convient (voir ci-dessous). |
 | `LLM_KEYS_SECRET` | Pour les cles LLM | Chiffre les cles API que chaque utilisateur saisit dans l'application (bouton « Cle LLM »). `openssl rand -base64 32`. A sauvegarder. |

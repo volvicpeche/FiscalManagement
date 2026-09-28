@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { cleLegacy as jwt } from './helpers/cleLegacy.js';
 import { diagnostiquerSupabase, formaterDiagnostic, type DiagnosticOptions } from '../services/diagnosticSupabase.js';
 
 const URL_PROJET = 'https://projet.supabase.co';
@@ -55,6 +56,22 @@ describe('diagnostiquerSupabase', () => {
     const avec = await lancer({ jwtSecret: 'secret', fetchImpl: faux({ cles: [] }) });
     expect(avec.some((l) => l.niveau === 'erreur')).toBe(false);
     expect(avec.map((l) => l.message).join()).toMatch(/ancien secret JWT \(SUPABASE_JWT_SECRET renseigne\)/);
+  });
+
+  it('should say nothing about a publishable key, and suggest it over a legacy anon key', async () => {
+    const publishable = await lancer({ anonKey: 'sb_publishable_x', fetchImpl: faux({ cleValide: 'sb_publishable_x' }) });
+    expect(niveaux(publishable)).toEqual(['ok', 'ok', 'info']);
+
+    const legacy = jwt('anon');
+    const lignes = await lancer({ anonKey: legacy, fetchImpl: faux({ cleValide: legacy }) });
+    expect(lignes[0]).toMatchObject({ niveau: 'info', message: expect.stringMatching(/legacy.*publishable/) });
+  });
+
+  it('should flag a secret key pasted as the public one', async () => {
+    for (const cle of ['sb_secret_x', jwt('service_role')]) {
+      const lignes = await lancer({ anonKey: cle, fetchImpl: faux({ cleValide: cle }) });
+      expect(lignes[0]).toMatchObject({ niveau: 'erreur', message: expect.stringMatching(/cle SECRETE/) });
+    }
   });
 
   it('should only warn, never fail, when Supabase is unreachable', async () => {

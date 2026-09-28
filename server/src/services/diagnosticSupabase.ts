@@ -13,6 +13,8 @@
  * DATABASE_URL missing).
  */
 
+import { MESSAGE_CLE_SECRETE, natureCleSupabase } from './cleSupabase.js';
+
 export type Niveau = 'ok' | 'info' | 'avertissement' | 'erreur';
 
 export interface LigneDiagnostic {
@@ -59,8 +61,19 @@ export async function diagnostiquerSupabase(opts: DiagnosticOptions): Promise<Li
   if (!opts.anonKey) {
     erreur(
       'SUPABASE_ANON_KEY absente de server/.env : la page de connexion ne peut pas s’afficher. ' +
-        'Copiez la cle « anon » (ou « publishable ») depuis Supabase → Project Settings → API Keys.',
+        'Copiez la cle « publishable » depuis Supabase → Project Settings → API Keys.',
     );
+  } else {
+    const nature = natureCleSupabase(opts.anonKey);
+    if (nature === 'secret') {
+      // Refused by /api/config too: it never reaches a browser.
+      erreur(MESSAGE_CLE_SECRETE);
+    } else if (nature === 'anon_legacy') {
+      info(
+        'Cle « anon » legacy : elle fonctionne, mais Supabase retire progressivement ces cles. ' +
+          'Remplacez-la quand vous voulez par la cle « publishable » (Project Settings → API Keys).',
+      );
+    }
   }
 
   const reglages = await lire('/settings');
@@ -72,7 +85,7 @@ export async function diagnostiquerSupabase(opts: DiagnosticOptions): Promise<Li
     );
   } else if (reglages.status === 401 || reglages.status === 403) {
     erreur(
-      'SUPABASE_ANON_KEY refusee par Supabase. Recopiez la cle « anon » (ou « publishable ») depuis ' +
+      'SUPABASE_ANON_KEY refusee par Supabase. Recopiez la cle « publishable » depuis ' +
         'Project Settings → API Keys, sans espace ni guillemet en trop.',
     );
   } else if (!reglages.ok) {
