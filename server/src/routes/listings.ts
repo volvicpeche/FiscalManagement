@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { ListingAnalyzeRequestSchema } from '@shared/listing.js';
 import { analyzeListing, analyzeListingText } from '../services/listingAnalyzer.js';
+import { consommerQuota, QuotaLlmAtteintError } from '../services/llmQuota.js';
 
 export async function listingRoutes(server: FastifyInstance) {
   server.post('/api/listings/analyze', async (request, reply) => {
@@ -15,6 +16,15 @@ export async function listingRoutes(server: FastifyInstance) {
         error: specific?.message ?? "Fournissez soit l'URL de l'annonce, soit son texte.",
         details: parsed.error.flatten(),
       });
+    }
+
+    try {
+      await consommerQuota(request.user.id);
+    } catch (err) {
+      if (err instanceof QuotaLlmAtteintError) {
+        return reply.status(429).send({ error: err.message });
+      }
+      throw err;
     }
 
     try {

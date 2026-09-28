@@ -1,6 +1,3 @@
-import { randomUUID } from 'node:crypto';
-import { mkdir, readdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
-import path from 'node:path';
 import {
   SavedScenarioSchema,
   SCENARIO_FORMAT_VERSION,
@@ -8,28 +5,25 @@ import {
   type SaveScenarioRequest,
   type ScenarioSummary,
 } from '@shared/scenario.js';
+import type { Prisma } from '../generated/prisma/client.js';
+import { db } from './db.js';
 
 /**
- * Scenario persistence, on the filesystem.
+ * Scenario persistence, in the Supabase Postgres, one row per scenario.
  *
- * Deliberately not Prisma: nothing under server/src touches a database, and the
- * app is documented as running without one. Requiring a Postgres install just
- * to save a scenario would be a real regression for a tool run locally. The
- * interface here is narrow enough that swapping in Prisma later means
- * reimplementing five functions.
- *
- * One JSON file per scenario, written atomically — a crash mid-write leaves the
- * previous version intact rather than a truncated file.
+ * Every function takes the owner first and filters on it: a scenario of
+ * someone else is indistinguishable from one that does not exist (404, not
+ * 403 — a 403 would confirm the id is real). This filter is the ONLY access
+ * control on the data: the server connects as `postgres`, which bypasses RLS.
  */
 
-const DATA_DIR = process.env.SCENARIO_DIR ?? path.join(process.cwd(), 'data', 'scenarios');
-
-/** Ids come from the URL, so they must never be able to escape the directory. */
+/** Ids come from the URL; rejecting anything else spares Postgres a cast error. */
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Ceiling on stored scenarios. Each is capped at the 1 MB request body limit,
- * so without it a loop of POSTs could fill the disk. Far above personal use.
+ * Ceiling on stored scenarios, PER USER. Each is capped at the 1 MB request
+ * body limit, and sign-up is open: without it one account could fill the
+ * database. Far above personal use.
  */
 export const MAX_SCENARIOS = Number(process.env.MAX_SCENARIOS ?? 200);
 
@@ -46,104 +40,102 @@ export function isValidId(id: string): boolean {
   return ID_PATTERN.test(id);
 }
 
-function fileFor(id: string): string {
-  if (!isValidId(id)) throw new Error('Identifiant de scenario invalide');
-  return path.join(DATA_DIR, `${id}.json`);
-}
+type Row = {
+  id: string;
+  nom: string;
+  kind: string;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
+  data?: Prisma.JsonValue;
+};
 
-async function ensureDir(): Promise<void> {
-  await mkdir(DATA_DIR, { recursive: true });
-}
-
-/** Write to a sibling temp file, then rename: rename is atomic on both OSes. */
-async function writeAtomic(file: string, contents: string): Promise<void> {
-  const tmp = `${file}.${randomUUID()}.tmp`;
-  await writeFile(tmp, contents, 'utf8');
-  await rename(tmp, file);
-}
-
-export async function saveScenario(input: SaveScenarioRequest): Promise<SavedScenario> {
-  await ensureDir();
-  const existants = (await readdir(DATA_DIR)).filter((f) => f.endsWith('.json'));
-  if (existants.length >= MAX_SCENARIOS) throw new TropDeScenariosError();
-
-  const now = new Date().toISOString();
-
-  const scenario: SavedScenario = {
-    id: randomUUID(),
-    nom: input.nom,
-    kind: input.kind,
-    version: SCENARIO_FORMAT_VERSION,
-    createdAt: now,
-    updatedAt: now,
-    data: input.data,
+function toPlain(row: Row) {
+  return {
+    ...row,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
-
-  await writeAtomic(fileFor(scenario.id), JSON.stringify(scenario, null, 2));
-  return scenario;
 }
 
-export async function getScenario(id: string): Promise<SavedScenario | null> {
-  try {
-    const raw = await readFile(fileFor(id), 'utf8');
-    const parsed = SavedScenarioSchema.safeParse(JSON.parse(raw));
-    // A file we cannot parse is reported as missing rather than crashing the
-    // request: the caller gets a clean 404 and the file stays for inspection.
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
-  }
+/**
+ * A row we cannot parse (a `kind` or a payload no schema accepts any more) is
+ * reported as missing rather than crashing the request: the caller gets a
+ * clean 404 and the row stays for inspection.
+ */
+function toScenario(row: Row): SavedScenario | null {
+  const parsed = SavedScenarioSchema.safeParse(toPlain(row));
+  return parsed.success ? parsed.data : null;
+}
+
+export async function saveScenario(
+  userId: string,
+  input: SaveScenarioRequest,
+): Promise<SavedScenario> {
+  const existants = await db().scenario.count({ where: { userId } });
+  if (existants >= MAX_SCENARIOS) throw new TropDeScenariosError();
+
+  const row = await db().scenario.create({
+    data: {
+      userId,
+      nom: input.nom,
+      kind: input.kind,
+      version: SCENARIO_FORMAT_VERSION,
+      data: input.data as Prisma.InputJsonObject,
+    },
+  });
+  return toScenario(row)!;
+}
+
+export async function getScenario(userId: string, id: string): Promise<SavedScenario | null> {
+  if (!isValidId(id)) return null;
+  const row = await db().scenario.findFirst({ where: { id, userId } });
+  return row ? toScenario(row) : null;
 }
 
 export async function updateScenario(
+  userId: string,
   id: string,
   input: SaveScenarioRequest,
 ): Promise<SavedScenario | null> {
-  const existing = await getScenario(id);
-  if (!existing) return null;
+  if (!isValidId(id)) return null;
 
-  const updated: SavedScenario = {
-    ...existing,
-    nom: input.nom,
-    kind: input.kind,
-    // Rewriting a scenario brings it up to the current format.
-    version: SCENARIO_FORMAT_VERSION,
-    updatedAt: new Date().toISOString(),
-    data: input.data,
-  };
-
-  await writeAtomic(fileFor(id), JSON.stringify(updated, null, 2));
-  return updated;
+  // updateMany: the only update that can filter on something else than the
+  // primary key, so the owner check and the write are one statement.
+  const { count } = await db().scenario.updateMany({
+    where: { id, userId },
+    data: {
+      nom: input.nom,
+      kind: input.kind,
+      // Rewriting a scenario brings it up to the current format.
+      version: SCENARIO_FORMAT_VERSION,
+      data: input.data as Prisma.InputJsonObject,
+    },
+  });
+  return count === 0 ? null : getScenario(userId, id);
 }
 
-export async function deleteScenario(id: string): Promise<boolean> {
-  try {
-    await unlink(fileFor(id));
-    return true;
-  } catch {
-    return false;
-  }
+export async function deleteScenario(userId: string, id: string): Promise<boolean> {
+  if (!isValidId(id)) return false;
+  const { count } = await db().scenario.deleteMany({ where: { id, userId } });
+  return count > 0;
 }
 
 /** Most recently updated first — that is the one you usually want back. */
-export async function listScenarios(): Promise<ScenarioSummary[]> {
-  await ensureDir();
-
-  let files: string[];
-  try {
-    files = await readdir(DATA_DIR);
-  } catch {
-    return [];
-  }
+export async function listScenarios(userId: string): Promise<ScenarioSummary[]> {
+  const rows = await db().scenario.findMany({
+    where: { userId },
+    orderBy: { updatedAt: 'desc' },
+    // The payload can weigh up to 1 MB each; a listing never needs it.
+    select: { id: true, nom: true, kind: true, version: true, createdAt: true, updatedAt: true },
+  });
 
   const summaries: ScenarioSummary[] = [];
-  for (const file of files) {
-    if (!file.endsWith('.json')) continue;
-    const scenario = await getScenario(file.replace(/\.json$/, ''));
+  for (const row of rows) {
+    const scenario = toScenario({ ...row, data: {} });
     if (!scenario) continue;
     const { data: _data, ...summary } = scenario;
     summaries.push(summary);
   }
-
-  return summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return summaries;
 }

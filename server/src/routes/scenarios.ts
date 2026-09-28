@@ -10,8 +10,9 @@ import {
   updateScenario,
 } from '../services/scenarioStore.js';
 
+/** Every route is scoped to the logged-in user (see plugins/auth.ts). */
 export async function scenarioRoutes(server: FastifyInstance) {
-  server.get('/api/simulations', async () => listScenarios());
+  server.get('/api/simulations', async (request) => listScenarios(request.user.id));
 
   server.get<{ Params: { id: string } }>('/api/simulations/:id', async (request, reply) => {
     const { id } = request.params;
@@ -19,7 +20,7 @@ export async function scenarioRoutes(server: FastifyInstance) {
       return reply.status(400).send({ error: 'Identifiant de scenario invalide' });
     }
 
-    const scenario = await getScenario(id);
+    const scenario = await getScenario(request.user.id, id);
     if (!scenario) {
       return reply.status(404).send({ error: 'Scenario introuvable' });
     }
@@ -37,7 +38,7 @@ export async function scenarioRoutes(server: FastifyInstance) {
     }
 
     try {
-      return reply.status(201).send(await saveScenario(parsed.data));
+      return reply.status(201).send(await saveScenario(request.user.id, parsed.data));
     } catch (err) {
       if (err instanceof TropDeScenariosError) {
         return reply.status(409).send({ error: err.message });
@@ -61,7 +62,7 @@ export async function scenarioRoutes(server: FastifyInstance) {
       });
     }
 
-    const updated = await updateScenario(id, parsed.data);
+    const updated = await updateScenario(request.user.id, id, parsed.data);
     if (!updated) {
       return reply.status(404).send({ error: 'Scenario introuvable' });
     }
@@ -74,7 +75,7 @@ export async function scenarioRoutes(server: FastifyInstance) {
       return reply.status(400).send({ error: 'Identifiant de scenario invalide' });
     }
 
-    const removed = await deleteScenario(id);
+    const removed = await deleteScenario(request.user.id, id);
     if (!removed) {
       return reply.status(404).send({ error: 'Scenario introuvable' });
     }

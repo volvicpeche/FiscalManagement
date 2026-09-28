@@ -1,1 +1,3 @@
 data/
+# Client Prisma, genere par `prisma generate` (build, postinstall)
+src/generated/
