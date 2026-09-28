@@ -9,7 +9,7 @@ import {
   DocumentType,
   type DocumentExtraction,
 } from '@shared/frontalier.js';
-import { resolveLlmProvider } from './index.js';
+import type { LlmConfig } from './config.js';
 
 /**
  * Reads a Swiss or French tax document — salary certificate, 3a statement,
@@ -87,9 +87,14 @@ export function mediaTypeAccepte(mime: string): mime is MediaTypeAccepte {
   return mime in MEDIA_TYPES;
 }
 
-export async function extractDocument(buffer: Buffer, mime: MediaTypeAccepte, fileName: string): Promise<DocumentExtraction> {
-  if (resolveLlmProvider() !== 'anthropic') {
-    throw new Error('La lecture de documents necessite LLM_PROVIDER=anthropic.');
+export async function extractDocument(
+  buffer: Buffer,
+  mime: MediaTypeAccepte,
+  fileName: string,
+  config: LlmConfig,
+): Promise<DocumentExtraction> {
+  if (config.provider !== 'anthropic') {
+    throw new Error('La lecture des justificatifs necessite une cle Anthropic.');
   }
 
   const data = buffer.toString('base64');
@@ -98,9 +103,9 @@ export async function extractDocument(buffer: Buffer, mime: MediaTypeAccepte, fi
       ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } }
       : { type: 'image', source: { type: 'base64', media_type: mime as Exclude<MediaTypeAccepte, 'application/pdf'>, data } };
 
-  const client = new Anthropic();
+  const client = new Anthropic({ apiKey: config.apiKey });
   const response = await client.messages.parse({
-    model: process.env.ANTHROPIC_MODEL || 'claude-opus-5',
+    model: config.model,
     max_tokens: 4000,
     system: DOCUMENT_SYSTEM_PROMPT,
     messages: [

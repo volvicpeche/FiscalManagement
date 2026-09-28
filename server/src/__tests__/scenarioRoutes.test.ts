@@ -102,7 +102,12 @@ describe.skipIf(!hasDb)('routes /api/simulations (Postgres)', () => {
   });
 
   it('should answer 429 on a listing analysis once the daily quota is spent', async () => {
-    const dave = await as(await createUser());
+    // The quota only applies to the server's key, i.e. to allow-listed accounts.
+    process.env.LLM_SERVER_KEY_EMAILS = 'dave@exemple.fr';
+    process.env.LLM_PROVIDER = 'anthropic';
+    process.env.ANTHROPIC_API_KEY = 'sk-cle-du-serveur';
+    const daveId = await createUser();
+    const dave = { id: daveId, auth: { authorization: `Bearer ${await supabase.token(daveId, { email: 'dave@exemple.fr' })}` } };
     await db().llmUsage.create({ data: { userId: dave.id, jour: jourUtc(), appels: LLM_QUOTA_JOUR } });
 
     const res = await server.inject({

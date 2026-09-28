@@ -30,9 +30,14 @@ navigateur ──► web (nginx) ──/api/*──────────► s
                     └──────/supabase/auth/v1──► Supabase Auth
 ```
 
-Le navigateur ne contacte jamais `supabase.co` directement : nginx relaie la
-connexion. Un proxy d'entreprise qui bloquerait Supabase ne bloque donc pas
-l'application.
+Le navigateur ne contacte pas `supabase.co` pour se connecter : nginx relaie
+la connexion. Un proxy d'entreprise qui bloquerait Supabase ne bloque donc pas
+l'application. Seul le lien des e-mails (confirmation d'inscription, mot de
+passe oublié) passe par `supabase.co` avant de revenir sur l'application.
+
+Le projet Supabase peut être **partagé avec d'autres applications** : toutes
+les tables de Patrimonia vivent dans leur propre schéma Postgres, `tax`, et
+rien n'est écrit dans `public`.
 
 **Prérequis** : un VPS OVH sous **Ubuntu 26.04**, l'utilisateur `ubuntu` créé
 par OVH, et l'adresse IP du VPS. Dans la suite, remplacez `<IP_DU_VPS>` par
@@ -110,47 +115,56 @@ Pourquoi chacun :
    directement à Podman : il passe par ce socket, inactif par défaut. Sans
    lui, le déploiement échoue sur « Cannot connect to the Docker daemon ».
 
-## Étape 2 bis — Créer le projet Supabase (navigateur)
+## Étape 2 bis — Préparer votre projet Supabase (navigateur)
 
-Sur [supabase.com](https://supabase.com), créez un compte puis **New project** :
+Patrimonia s'installe dans un projet Supabase **existant**, y compris sur
+l'offre gratuite, et à côté d'autres applications :
 
-- **Region** : une région européenne, *West EU (Paris)* ou *Central EU
-  (Frankfurt)* : vos données fiscales restent dans l'UE.
-- **Database password** : générez-le et gardez-le, il entre dans
-  `DATABASE_URL` à l'étape 3b.
+- **ses tables sont dans le schéma `tax`**, créé automatiquement au premier
+  démarrage du conteneur `server`, avec son propre historique de migrations.
+  Rien n'est créé ni modifié dans `public`. Pour les voir : **Table Editor**,
+  sélecteur de schéma en haut à gauche, `tax` ;
+- **l'authentification est celle du projet** : mêmes comptes, mêmes modèles
+  d'e-mail, que Patrimonia ne modifie pas.
 
-Puis, dans le tableau de bord du projet :
+Dans le tableau de bord du projet :
 
-1. **Authentication → Sign In / Providers → Email** : *Enable Email provider*
-   et **Confirm email** activés. Chacun peut créer un compte, mais doit
-   prouver que l'adresse est à lui.
-2. **Authentication → URL Configuration** :
-   - *Site URL* : `https://<DOMAINE>` (ou `http://<IP_DU_VPS>` tant que vous
-     n'êtes pas en HTTPS) ;
-   - *Redirect URLs* : ajoutez `https://<DOMAINE>/auth/confirmer`, et
-     `http://localhost:5173/auth/confirmer` pour le développement.
-3. **Authentication → Emails → Templates** : les liens des e-mails doivent
-   pointer vers **votre** domaine, pas vers `supabase.co` (qu'un proxy
-   d'entreprise peut bloquer). Remplacez le lien de deux modèles :
-   - *Confirm signup* :
-     `<a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=signup">Confirmer mon adresse</a>`
-   - *Reset password* :
-     `<a href="{{ .RedirectTo }}?token_hash={{ .TokenHash }}&type=recovery">Choisir un nouveau mot de passe</a>`
-
-   `{{ .RedirectTo }}` vaut `https://<DOMAINE>/auth/confirmer`, envoyé par
-   l'application. Traduisez le reste du texte au passage.
-4. **Authentication → Emails → SMTP Settings** : branchez un vrai serveur
-   d'envoi (Brevo, Postmark, Resend… ont des offres gratuites). Le SMTP
-   intégré de Supabase n'envoie que **quelques e-mails par heure**, et
-   seulement aux membres de votre organisation Supabase : sans SMTP, les
-   inscriptions échouent.
-5. Relevez trois valeurs pour l'étape 3 :
+1. **Authentication → Sign In / Providers → Email** : vérifiez que *Enable
+   Email provider* et **Confirm email** sont actifs. C'est ce qui empêche
+   de créer un compte avec l'adresse de quelqu'un d'autre.
+2. **Authentication → URL Configuration → Redirect URLs** : **ajoutez**
+   `https://<DOMAINE>/auth/confirmer**` (ou `http://<IP_DU_VPS>/auth/confirmer**`
+   tant que vous n'êtes pas en HTTPS), et `http://localhost:5173/auth/confirmer**`
+   pour le développement. Les `**` finaux comptent : l'application ajoute
+   `?type=signup` ou `?type=recovery` à l'adresse, qui sans eux serait
+   refusée. **Ne changez pas la *Site URL*** : elle sert à vos autres
+   applications.
+3. **Ne touchez pas aux modèles d'e-mail** (*Authentication → Emails →
+   Templates*) : ils sont communs à toutes vos applications, et Patrimonia
+   fonctionne avec ceux par défaut. Le lien de l'e-mail passe par
+   `supabase.co`, confirme l'adresse, puis revient sur
+   `/auth/confirmer`.
+4. **Authentication → Emails → SMTP Settings** : si ce n'est pas déjà fait,
+   branchez un vrai serveur d'envoi (Brevo, Postmark, Resend… ont des offres
+   gratuites). Le SMTP intégré de Supabase n'envoie que **quelques e-mails
+   par heure**, et seulement aux membres de votre organisation Supabase. Ce
+   réglage sert aussi à vos autres applications.
+5. **Project Settings → JWT Keys** : regardez la clé de signature
+   **active** (*Current key*).
+   - Une clé *ECC (P-256)* ou *RSA* : rien à faire, le serveur lit les clés
+     publiques du projet tout seul.
+   - *Legacy JWT secret* (fréquent sur un projet ancien) : cliquez pour
+     afficher le secret et gardez-le pour `SUPABASE_JWT_SECRET` (étape 3b).
+     **Ne lancez pas** la migration des clés depuis cet écran pour Patrimonia :
+     elle change la signature des jetons de toutes vos applications.
+6. Relevez les valeurs de l'étape 3 :
 
 | Valeur | Où la trouver |
 |---|---|
 | URL du projet (`https://<ref>.supabase.co`) | **Project Settings → Data API** |
 | Clé publique *anon* (ou *publishable*) | **Project Settings → API Keys** |
 | Chaîne de connexion **Session pooler** | bouton **Connect** en haut du tableau de bord → *Session pooler* |
+| Mot de passe de la base | celui choisi à la création du projet. Oublié : **Project Settings → Database → Reset database password**, mais vos autres applications qui l'utilisent devront être mises à jour |
 
 > Prenez bien le **Session pooler** (port 5432) : la connexion directe
 > n'existe qu'en IPv6, que ce VPS n'utilise pas, et le *Transaction pooler*
@@ -158,6 +172,19 @@ Puis, dans le tableau de bord du projet :
 
 Ne copiez **jamais** la clé *service_role* (ou *secret*) : l'application n'en
 a pas besoin, et elle ouvre toute la base.
+
+**Ce que le partage implique** :
+
+- **Une seule liste d'utilisateurs** pour toutes vos applications : un compte
+  créé ailleurs peut se connecter à Patrimonia, et un compte créé dans
+  Patrimonia existe aussi pour vos autres applications. Dans Patrimonia,
+  chacun ne voit que ses propres scénarios.
+- Supprimer un utilisateur dans Supabase supprime aussi ses scénarios
+  Patrimonia.
+- Les limites de débit et le SMTP de Supabase sont communs à toutes vos
+  applications.
+- La mise en pause après une semaine sans activité (offre gratuite) vaut pour
+  tout le projet. Vos autres applications le gardent éveillé.
 
 ## Étape 3 — Créer le dossier de l'application (VPS)
 
@@ -224,18 +251,31 @@ cat > ~/patrimonia/server/.env <<'EOF'
 # Projet Supabase (étape 2 bis). Remplacez chaque <…>.
 SUPABASE_URL="https://<ref>.supabase.co"
 SUPABASE_ANON_KEY="<clé anon>"
+# Seulement si la clé de signature active est « Legacy JWT secret »
+# (étape 2 bis, point 5). Sinon, laissez vide.
+SUPABASE_JWT_SECRET=""
 # Session pooler, avec le mot de passe de la base à la place de [YOUR-PASSWORD]
 DATABASE_URL="postgresql://postgres.<ref>:<mot de passe>@aws-0-eu-west-3.pooler.supabase.com:5432/postgres"
 
-# Par utilisateur : analyses LLM par jour, scénarios enregistrés.
-LLM_QUOTA_JOUR=20
+# Scénarios enregistrés, par utilisateur.
 MAX_SCENARIOS=200
 
-# Bouton « Analyser une annonce ». Laissez la clé vide si vous ne l'utilisez
-# pas : le reste de l'application fonctionne sans.
+# Clés LLM des utilisateurs (bouton « Clé LLM » dans l'application) : chaque
+# utilisateur saisit la sienne, chiffrée en base avec cette clé-ci.
+# Générez-la une fois avec :  openssl rand -base64 32
+# et SAUVEGARDEZ-LA : perdue ou changée, toutes les clés enregistrées
+# deviennent illisibles et chacun doit ressaisir la sienne.
+LLM_KEYS_SECRET="<résultat de openssl rand -base64 32>"
+
+# Votre propre clé, pour les comptes listés ici seulement (e-mails séparés
+# par des virgules), quand ils n'ont pas saisi de clé à eux. Vide : personne.
+LLM_SERVER_KEY_EMAILS="vous@exemple.fr"
 LLM_PROVIDER="anthropic"
 ANTHROPIC_API_KEY=""
 ANTHROPIC_MODEL="claude-opus-5"
+# Analyses par jour sur VOTRE clé, par compte autorisé. Aucun quota pour qui
+# utilise sa propre clé.
+LLM_QUOTA_JOUR=20
 
 # SeLoger, LeBonCoin et PAP bloquent les requêtes simples : le serveur ouvre
 # alors un vrai Chrome dans le conteneur (sur un écran virtuel, Xvfb). Environ
@@ -249,9 +289,12 @@ chmod 600 ~/patrimonia/server/.env
 - Pour un autre fournisseur que `anthropic` (OpenAI, Gemini, compatible
   OpenAI), les variables sont décrites dans `server/.env.example`.
 - `chmod 600` : vous seul pouvez lire ce fichier. Il contient le mot de passe
-  de la base de données.
-- Au démarrage, le conteneur `server` applique les migrations de la base
-  (création des tables au premier lancement). Si `DATABASE_URL` est fausse,
+  de la base de données et la clé qui chiffre les clés LLM des utilisateurs.
+- Gardez une copie de `LLM_KEYS_SECRET` hors du VPS (gestionnaire de mots de
+  passe) : la base Supabase ne contient que des clés chiffrées, inutilisables
+  sans elle.
+- Au démarrage, le conteneur `server` applique les migrations de la base,
+  dans le schéma `tax` (créé au premier lancement, avec ses tables). Si `DATABASE_URL` est fausse,
   il s'arrête avec l'erreur dans `docker compose logs server`.
 - Ce fichier ne doit **jamais** être commité : il n'existe que sur le VPS.
 
@@ -495,8 +538,8 @@ curl -sI https://www.<DOMAINE>/ | head -3  # → 301 vers https://<DOMAINE>/
 Puis ouvrez `https://<DOMAINE>/` : cadenas dans la barre d'adresse, puis
 page de connexion de l'application.
 
-Dans Supabase (**Authentication → URL Configuration**), remplacez la *Site URL*
-`http://<IP_DU_VPS>` par `https://<DOMAINE>` si vous aviez commencé en HTTP.
+Dans Supabase (**Authentication → URL Configuration → Redirect URLs**),
+ajoutez `https://<DOMAINE>/auth/confirmer**` si vous aviez commencé en HTTP.
 
 Si le certificat n'arrive pas, les journaux de Caddy disent pourquoi :
 `sudo journalctl -u caddy -f`.
@@ -545,14 +588,14 @@ les étiquettes disponibles sont listées sur la page GitHub du repo, rubrique
 
 ## Sauvegarder les scénarios
 
-Les scénarios sont dans la base Supabase, table `scenarios`, une ligne par
+Les scénarios sont dans la base Supabase, table `tax.scenarios`, une ligne par
 scénario et par utilisateur. Supabase en fait une sauvegarde quotidienne,
 gardée 7 jours sur les offres payantes. L'offre gratuite n'en garde pas : faites
 les vôtres, depuis votre PC ou le VPS :
 
 ```bash
 # Chaîne du « Session pooler », comme DATABASE_URL
-pg_dump "<DATABASE_URL>" --table=public.scenarios --data-only -Fc \
+pg_dump "<DATABASE_URL>" --schema=tax -Fc \
   -f scenarios-$(date +%F).dump
 ```
 
@@ -565,7 +608,7 @@ de données.
 Le déploiement automatique met à jour les images, **pas** les fichiers du VPS.
 Avant de pousser cette version sur `main`, sur un VPS déjà installé :
 
-1. Créez le projet Supabase (étape 2 bis).
+1. Préparez le projet Supabase (étape 2 bis).
 2. Ajoutez les variables Supabase à `~/patrimonia/server/.env` (étape 3b) et
    créez `~/patrimonia/web/.env` (étape 3c).
 3. Dans `~/patrimonia/docker-compose.yml`, service `web`, remplacez
@@ -631,9 +674,15 @@ final de `docker-compose.yml`, `docker compose up -d`, puis
 | « Application indisponible » au chargement de la page | `server` est arrêté ou `SUPABASE_ANON_KEY` est vide : `docker compose logs server` |
 | « E-mail ou mot de passe incorrect » alors qu'ils sont bons | le compte n'est pas encore confirmé (lien de l'e-mail), ou il a été supprimé dans Supabase |
 | L'e-mail de confirmation n'arrive jamais | SMTP intégré de Supabase (limité, étape 2 bis, point 4), ou l'e-mail est dans les indésirables |
-| Le lien de l'e-mail mène à `supabase.co` ou à une page d'erreur | les modèles d'e-mail n'ont pas été modifiés, ou `https://<DOMAINE>/auth/confirmer` manque dans les *Redirect URLs* (étape 2 bis) |
+| Le lien de l'e-mail mène à la *Site URL* d'une autre application | `https://<DOMAINE>/auth/confirmer**` manque dans les *Redirect URLs*, ou sans ses `**` (étape 2 bis, point 2) : Supabase retombe alors sur la *Site URL* |
+| Le lien de l'e-mail ne s'ouvre pas depuis le poste de l'entreprise | il passe par `supabase.co`, que le proxy bloque : ouvrez-le depuis un autre appareil (téléphone). L'adresse est confirmée, il ne reste qu'à se connecter depuis le poste |
+| « Ouvrez ce lien dans le navigateur où vous avez fait la demande » | lien de mot de passe oublié ouvert dans un autre navigateur : refaites la demande depuis celui où vous voulez vous connecter |
+| Connexion réussie, puis « Session expirée » à chaque action | le projet signe ses jetons avec l'ancien secret : renseignez `SUPABASE_JWT_SECRET` (étape 2 bis, point 5), puis `docker compose up -d --force-recreate server` |
 | Erreur 502 sur la connexion, journaux de `web` : `could not be resolved` | le conteneur `web` n'arrive pas à résoudre le nom de Supabase : vérifiez le DNS du VPS (`resolvectl status`) |
-| « Quota de … analyses par jour atteint » | quota LLM par utilisateur (`LLM_QUOTA_JOUR`), remis à zéro à minuit UTC |
+| « Quota de … analyses par jour atteint » | quota sur votre clé serveur (`LLM_QUOTA_JOUR`), par compte autorisé, remis à zéro à minuit UTC. L'utilisateur peut aussi saisir sa propre clé |
+| « Renseignez votre clé API dans « Clé LLM » » | l'utilisateur n'a pas de clé à lui et son e-mail n'est pas dans `LLM_SERVER_KEY_EMAILS` : il la saisit via le bouton « Clé LLM » |
+| « L'enregistrement des clés API n'est pas configuré » | `LLM_KEYS_SECRET` absente ou invalide dans `server/.env` (32 octets en base64 : `openssl rand -base64 32`) |
+| « Votre clé API enregistrée ne peut plus être lue » | `LLM_KEYS_SECRET` a changé : restaurez l'ancienne valeur, ou chacun ressaisit sa clé |
 | Erreur 429 (« Too Many Requests ») | une limite de débit a été atteinte (voir « Sécurité ») : attendez une minute |
 
 ---
@@ -651,12 +700,22 @@ Ce que l'application met en place, et ce qu'il vous reste à faire.
   `/api/config` répondent.
 - **Chacun ne voit que ses scénarios** : le serveur filtre chaque requête sur
   l'utilisateur connecté, et répond « introuvable » pour le scénario d'un autre.
-- **Tables fermées à l'API publique de Supabase** : la clé *anon*, publique,
-  ne donne accès à rien (RLS activée, aucun droit). Seul le serveur, avec le
-  mot de passe de la base, y accède.
-- **Quotas par compte** : 20 analyses LLM par jour (`LLM_QUOTA_JOUR`) et 200
-  scénarios (`MAX_SCENARIOS`). L'inscription est ouverte : ce sont eux qui
-  empêchent un inconnu de consommer votre clé LLM ou de remplir la base.
+- **Tables fermées à l'API publique de Supabase** : elles sont dans le schéma
+  `tax`, que l'API publique n'expose pas, et la clé *anon*, publique, n'y a
+  de toute façon aucun droit (RLS activée, aucun privilège, même sur le
+  schéma). Seul le serveur, avec le mot de passe de la base, y accède.
+- **Chacun paie son LLM** : l'analyse d'annonce et la lecture de
+  justificatifs utilisent la clé API que l'utilisateur a saisie (bouton « Clé
+  LLM »). Elle est chiffrée en base (AES-256-GCM, avec `LLM_KEYS_SECRET`) et
+  ne revient jamais au navigateur : seuls ses 4 derniers caractères
+  s'affichent. Votre clé ne sert qu'aux comptes de `LLM_SERVER_KEY_EMAILS`,
+  avec un quota de 20 analyses par jour (`LLM_QUOTA_JOUR`).
+- **API « compatible OpenAI »** : l'adresse saisie par l'utilisateur doit être
+  en https, et le serveur refuse toute adresse interne (réseau privé,
+  métadonnées du VPS), à l'enregistrement et à chaque appel, sans suivre de
+  redirection.
+- **200 scénarios par compte** (`MAX_SCENARIOS`) : l'inscription est ouverte,
+  personne ne peut remplir la base.
 - **Limites de débit par adresse IP** : 20 requêtes/s pour le site,
   30 tentatives de connexion par minute, 5 analyses d'annonce par minute
   (chacune peut lancer Chrome et consommer votre clé LLM), 30 enregistrements

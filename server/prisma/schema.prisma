@@ -1,5 +1,10 @@
 // Persistence of saved scenarios, in the Postgres of the Supabase project.
 //
+// That project is shared with other applications: every table here lives in
+// the dedicated `tax` schema, never in `public`. The schema is not named in
+// this file: prisma.config.ts puts it on the migration URL, and the adapter
+// option in src/services/db.ts on the queries (DB_SCHEMA).
+//
 // Users live in Supabase's own `auth.users` table: the server never stores a
 // password. `user_id` is the `sub` of the Supabase JWT, and the foreign key to
 // `auth.users` is added by hand in the migration (Prisma cannot model a table
@@ -51,4 +56,22 @@ model LlmUsage {
 
   @@id([userId, jour])
   @@map("llm_usage")
+}
+
+// ─── Per-user LLM key ────────────────────────────────────────────────────────
+
+/// A user's own LLM provider and API key. The key is encrypted with
+/// LLM_KEYS_SECRET (AES-256-GCM, bound to the user id — services/secretBox.ts)
+/// and never sent back to the client: only its last four characters are.
+model LlmSettings {
+  userId      String   @id @map("user_id") @db.Uuid
+  /// 'anthropic' | 'openai' | 'gemini' | 'openai_compatible', validated by Zod.
+  provider    String
+  model       String?  @db.VarChar(100)
+  baseUrl     String?  @map("base_url") @db.VarChar(300)
+  cleChiffree String   @map("cle_chiffree")
+  cleFin      String   @map("cle_fin") @db.VarChar(4)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("llm_settings")
 }

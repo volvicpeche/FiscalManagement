@@ -21,10 +21,15 @@ cp server/.env.example server/.env
 | `LLM_PROVIDER` | Non (defaut `anthropic`) | Alimente le bouton « Analyser » de l'onglet *Location saisonniere* (extraction d'une annonce + estimation saisonniere). Sans cle valide pour le fournisseur choisi, ce bouton renvoie une erreur mais le reste de l'app (comparateur SCI/Holding, saisie manuelle des saisons) fonctionne normalement — rien d'autre dans l'app n'appelle un LLM. |
 | `SUPABASE_URL` | **Oui** | Projet Supabase : comptes utilisateurs. Sans elle, le serveur refuse de demarrer. |
 | `SUPABASE_ANON_KEY` | **Oui** | Cle publique du projet, transmise au navigateur pour la page de connexion. |
-| `DATABASE_URL` | **Oui** | Postgres du projet Supabase (session pooler) : scenarios enregistres. En local, un Postgres simple convient (voir ci-dessous). |
-| `LLM_QUOTA_JOUR`, `MAX_SCENARIOS` | Non | Quota quotidien d'analyses LLM et nombre de scenarios, par utilisateur. |
+| `SUPABASE_JWT_SECRET` | Selon le projet | Ancien secret JWT, seulement si le projet signe encore ses jetons en HS256 (voir `DEPLOY.md`, etape 2 bis). |
+| `DATABASE_URL` | **Oui** | Postgres du projet Supabase (session pooler) : scenarios enregistres, dans le schema dedie `tax`. En local, un Postgres simple convient (voir ci-dessous). |
+| `LLM_KEYS_SECRET` | Pour les cles LLM | Chiffre les cles API que chaque utilisateur saisit dans l'application (bouton « Cle LLM »). `openssl rand -base64 32`. A sauvegarder. |
+| `LLM_SERVER_KEY_EMAILS` | Non | Comptes autorises a utiliser la cle LLM du serveur (ci-dessous) quand ils n'ont pas la leur. Vide : personne. |
+| `LLM_QUOTA_JOUR`, `MAX_SCENARIOS` | Non | Analyses par jour sur la cle du serveur, et nombre de scenarios, par utilisateur. |
 
-L'analyse d'annonce est **agnostique au fournisseur** : `LLM_PROVIDER` choisit lequel utiliser, chacun avec sa propre cle/modele dans `server/.env.example`.
+**Chaque utilisateur utilise sa propre cle LLM**, saisie dans l'application (bouton « Cle LLM ») : Anthropic, OpenAI, Gemini ou une API compatible OpenAI. La lecture des justificatifs (onglet Frontalier) demande une cle Anthropic.
+
+La cle du serveur, ci-dessous, ne sert qu'aux comptes de `LLM_SERVER_KEY_EMAILS`. `LLM_PROVIDER` choisit le fournisseur, chacun avec sa propre cle/modele dans `server/.env.example`.
 
 | `LLM_PROVIDER` | Fournisseur | Ou creer la cle | Variables a renseigner |
 | --- | --- | --- | --- |

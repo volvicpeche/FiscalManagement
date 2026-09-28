@@ -12,6 +12,11 @@ const PAR_CODE: Record<string, string> = {
   over_email_send_rate_limit: "Trop d'e-mails envoyes. Patientez quelques minutes avant de reessayer.",
   over_request_rate_limit: 'Trop de tentatives. Patientez quelques minutes avant de reessayer.',
   otp_expired: 'Ce lien a expire ou a deja servi. Demandez-en un nouveau.',
+  flow_state_expired: 'Ce lien a expire. Demandez-en un nouveau.',
+  flow_state_not_found: 'Ce lien a deja servi ou a expire. Demandez-en un nouveau.',
+  bad_code_verifier: 'Ouvrez ce lien dans le navigateur ou vous avez fait la demande.',
+  pkce_code_verifier_not_found: 'Ouvrez ce lien dans le navigateur ou vous avez fait la demande.',
+  access_denied: 'Lien refuse. Demandez-en un nouveau.',
   signup_disabled: 'La creation de compte est desactivee.',
   email_address_invalid: 'Adresse e-mail invalide.',
 };
