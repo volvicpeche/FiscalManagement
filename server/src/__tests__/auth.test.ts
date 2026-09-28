@@ -2,7 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { authPlugin } from '../plugins/auth.js';
 import { configRoutes } from '../routes/config.js';
-import { fakeSupabase, SUPABASE_URL, type FakeSupabase } from './helpers/jwt.js';
+import { SignJWT } from 'jose';
+import { fakeSupabase, SUPABASE_URL, ISSUER, type FakeSupabase } from './helpers/jwt.js';
 
 const USER = '11111111-2222-4333-8444-555555555555';
 
@@ -87,5 +88,66 @@ describe('auth plugin', () => {
   it('should not be fooled by a query string on a public route', async () => {
     const res = await server.inject({ method: 'GET', url: '/api/moi?/api/health' });
     expect(res.statusCode).toBe(401);
+  });
+});
+
+describe('auth plugin — legacy JWT secret (HS256)', () => {
+  const SECRET = 'super-secret-jwt-token-with-at-least-32-characters-long';
+  const hs256 = (secret: string, over: { iss?: string } = {}) =>
+    new SignJWT({ email: 'legacy@exemple.fr', role: 'authenticated' })
+      .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+      .setSubject(USER)
+      .setIssuer(over.iss ?? ISSUER)
+      .setAudience('authenticated')
+      .setIssuedAt()
+      .setExpirationTime('1h')
+      .sign(new TextEncoder().encode(secret));
+
+  let legacy: FastifyInstance;
+
+  beforeAll(async () => {
+    legacy = Fastify();
+    await legacy.register(authPlugin, { supabaseUrl: SUPABASE_URL, jwks: supabase.jwks, jwtSecret: SECRET });
+    legacy.get('/api/moi', async (request) => request.user);
+    await legacy.ready();
+  });
+
+  afterAll(() => legacy.close());
+
+  const moiLegacy = (token: string) =>
+    legacy.inject({ method: 'GET', url: '/api/moi', headers: { authorization: `Bearer ${token}` } });
+
+  it('should accept a token signed with the configured secret', async () => {
+    const res = await moiLegacy(await hs256(SECRET));
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ id: USER, email: 'legacy@exemple.fr' });
+  });
+
+  it('should refuse a token signed with another secret', async () => {
+    expect((await moiLegacy(await hs256('un-autre-secret-de-plus-de-32-caracteres!!'))).statusCode).toBe(401);
+  });
+
+  it('should still check the issuer of an HS256 token', async () => {
+    const token = await hs256(SECRET, { iss: 'https://autre.supabase.co/auth/v1' });
+    expect((await moiLegacy(token)).statusCode).toBe(401);
+  });
+
+  it('should keep accepting asymmetric tokens alongside', async () => {
+    expect((await moiLegacy(await supabase.token(USER))).statusCode).toBe(200);
+  });
+
+  it('should refuse an HS256 token when no secret is configured', async () => {
+    // `server` (first describe) has no jwtSecret.
+    const res = await moi(`Bearer ${await hs256(SECRET)}`);
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('should refuse an unsigned token (alg: none)', async () => {
+    const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
+    const now = Math.floor(Date.now() / 1000);
+    const unsigned = `${b64({ alg: 'none', typ: 'JWT' })}.${b64({
+      sub: USER, iss: ISSUER, aud: 'authenticated', iat: now, exp: now + 3600,
+    })}.`;
+    expect((await moiLegacy(unsigned)).statusCode).toBe(401);
   });
 });

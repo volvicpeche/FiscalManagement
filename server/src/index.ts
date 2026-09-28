@@ -24,7 +24,11 @@ await server.register(cors, {
 });
 
 // Before any route: every /api route but /health and /config needs a token.
-await server.register(authPlugin, { supabaseUrl });
+await server.register(authPlugin, {
+  supabaseUrl,
+  // Only for a project still signing with its legacy JWT secret (HS256).
+  jwtSecret: process.env.SUPABASE_JWT_SECRET || undefined,
+});
 
 await server.register(configRoutes);
 
