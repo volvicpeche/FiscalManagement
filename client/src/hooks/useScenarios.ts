@@ -5,6 +5,7 @@ import type {
   ScenarioKind,
   ScenarioSummary,
 } from '@shared/scenario.js';
+import { apiFetch } from '@/lib/api';
 
 /** Reads a response without assuming it is JSON, as the listing hook does. */
 async function readJson(response: Response): Promise<unknown> {
@@ -20,7 +21,7 @@ async function readJson(response: Response): Promise<unknown> {
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(url, init);
+    response = await apiFetch(url, init);
   } catch {
     throw new Error('Serveur injoignable. Est-il demarre (npm run dev:server) ?');
   }

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type { CostLine, ManagementMode } from '@shared/schemas.js';
 import type { CostPresetKey } from '@/lib/profiles';
+import { apiFetch } from '@/lib/api';
 
 export type CostPresets = Record<
   ManagementMode,
@@ -8,7 +9,7 @@ export type CostPresets = Record<
 >;
 
 async function fetchCostPresets(): Promise<CostPresets> {
-  const response = await fetch('/api/costs/presets');
+  const response = await apiFetch('/api/costs/presets');
   if (!response.ok) throw new Error('Impossible de charger les couts de reference');
   return response.json();
 }
