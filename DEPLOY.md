@@ -257,15 +257,25 @@ SUPABASE_JWT_SECRET=""
 # Session pooler, avec le mot de passe de la base à la place de [YOUR-PASSWORD]
 DATABASE_URL="postgresql://postgres.<ref>:<mot de passe>@aws-0-eu-west-3.pooler.supabase.com:5432/postgres"
 
-# Par utilisateur : analyses LLM par jour, scénarios enregistrés.
-LLM_QUOTA_JOUR=20
+# Scénarios enregistrés, par utilisateur.
 MAX_SCENARIOS=200
 
-# Bouton « Analyser une annonce ». Laissez la clé vide si vous ne l'utilisez
-# pas : le reste de l'application fonctionne sans.
+# Clés LLM des utilisateurs (bouton « Clé LLM » dans l'application) : chaque
+# utilisateur saisit la sienne, chiffrée en base avec cette clé-ci.
+# Générez-la une fois avec :  openssl rand -base64 32
+# et SAUVEGARDEZ-LA : perdue ou changée, toutes les clés enregistrées
+# deviennent illisibles et chacun doit ressaisir la sienne.
+LLM_KEYS_SECRET="<résultat de openssl rand -base64 32>"
+
+# Votre propre clé, pour les comptes listés ici seulement (e-mails séparés
+# par des virgules), quand ils n'ont pas saisi de clé à eux. Vide : personne.
+LLM_SERVER_KEY_EMAILS="vous@exemple.fr"
 LLM_PROVIDER="anthropic"
 ANTHROPIC_API_KEY=""
 ANTHROPIC_MODEL="claude-opus-5"
+# Analyses par jour sur VOTRE clé, par compte autorisé. Aucun quota pour qui
+# utilise sa propre clé.
+LLM_QUOTA_JOUR=20
 
 # SeLoger, LeBonCoin et PAP bloquent les requêtes simples : le serveur ouvre
 # alors un vrai Chrome dans le conteneur (sur un écran virtuel, Xvfb). Environ
@@ -279,7 +289,10 @@ chmod 600 ~/patrimonia/server/.env
 - Pour un autre fournisseur que `anthropic` (OpenAI, Gemini, compatible
   OpenAI), les variables sont décrites dans `server/.env.example`.
 - `chmod 600` : vous seul pouvez lire ce fichier. Il contient le mot de passe
-  de la base de données.
+  de la base de données et la clé qui chiffre les clés LLM des utilisateurs.
+- Gardez une copie de `LLM_KEYS_SECRET` hors du VPS (gestionnaire de mots de
+  passe) : la base Supabase ne contient que des clés chiffrées, inutilisables
+  sans elle.
 - Au démarrage, le conteneur `server` applique les migrations de la base,
   dans le schéma `tax` (créé au premier lancement, avec ses tables). Si `DATABASE_URL` est fausse,
   il s'arrête avec l'erreur dans `docker compose logs server`.
@@ -666,7 +679,10 @@ final de `docker-compose.yml`, `docker compose up -d`, puis
 | « Ouvrez ce lien dans le navigateur où vous avez fait la demande » | lien de mot de passe oublié ouvert dans un autre navigateur : refaites la demande depuis celui où vous voulez vous connecter |
 | Connexion réussie, puis « Session expirée » à chaque action | le projet signe ses jetons avec l'ancien secret : renseignez `SUPABASE_JWT_SECRET` (étape 2 bis, point 5), puis `docker compose up -d --force-recreate server` |
 | Erreur 502 sur la connexion, journaux de `web` : `could not be resolved` | le conteneur `web` n'arrive pas à résoudre le nom de Supabase : vérifiez le DNS du VPS (`resolvectl status`) |
-| « Quota de … analyses par jour atteint » | quota LLM par utilisateur (`LLM_QUOTA_JOUR`), remis à zéro à minuit UTC |
+| « Quota de … analyses par jour atteint » | quota sur votre clé serveur (`LLM_QUOTA_JOUR`), par compte autorisé, remis à zéro à minuit UTC. L'utilisateur peut aussi saisir sa propre clé |
+| « Renseignez votre clé API dans « Clé LLM » » | l'utilisateur n'a pas de clé à lui et son e-mail n'est pas dans `LLM_SERVER_KEY_EMAILS` : il la saisit via le bouton « Clé LLM » |
+| « L'enregistrement des clés API n'est pas configuré » | `LLM_KEYS_SECRET` absente ou invalide dans `server/.env` (32 octets en base64 : `openssl rand -base64 32`) |
+| « Votre clé API enregistrée ne peut plus être lue » | `LLM_KEYS_SECRET` a changé : restaurez l'ancienne valeur, ou chacun ressaisit sa clé |
 | Erreur 429 (« Too Many Requests ») | une limite de débit a été atteinte (voir « Sécurité ») : attendez une minute |
 
 ---
@@ -688,9 +704,18 @@ Ce que l'application met en place, et ce qu'il vous reste à faire.
   `tax`, que l'API publique n'expose pas, et la clé *anon*, publique, n'y a
   de toute façon aucun droit (RLS activée, aucun privilège, même sur le
   schéma). Seul le serveur, avec le mot de passe de la base, y accède.
-- **Quotas par compte** : 20 analyses LLM par jour (`LLM_QUOTA_JOUR`) et 200
-  scénarios (`MAX_SCENARIOS`). L'inscription est ouverte : ce sont eux qui
-  empêchent un inconnu de consommer votre clé LLM ou de remplir la base.
+- **Chacun paie son LLM** : l'analyse d'annonce et la lecture de
+  justificatifs utilisent la clé API que l'utilisateur a saisie (bouton « Clé
+  LLM »). Elle est chiffrée en base (AES-256-GCM, avec `LLM_KEYS_SECRET`) et
+  ne revient jamais au navigateur : seuls ses 4 derniers caractères
+  s'affichent. Votre clé ne sert qu'aux comptes de `LLM_SERVER_KEY_EMAILS`,
+  avec un quota de 20 analyses par jour (`LLM_QUOTA_JOUR`).
+- **API « compatible OpenAI »** : l'adresse saisie par l'utilisateur doit être
+  en https, et le serveur refuse toute adresse interne (réseau privé,
+  métadonnées du VPS), à l'enregistrement et à chaque appel, sans suivre de
+  redirection.
+- **200 scénarios par compte** (`MAX_SCENARIOS`) : l'inscription est ouverte,
+  personne ne peut remplir la base.
 - **Limites de débit par adresse IP** : 20 requêtes/s pour le site,
   30 tentatives de connexion par minute, 5 analyses d'annonce par minute
   (chacune peut lancer Chrome et consommer votre clé LLM), 30 enregistrements
