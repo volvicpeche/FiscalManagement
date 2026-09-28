@@ -70,7 +70,7 @@ export function FrontalierPage() {
           <div className="bg-white rounded-lg border p-12 text-center text-gray-400">
             <p className="text-lg">Cliquez sur « Comparer TOU et impot a la source » pour lancer le calcul</p>
             <p className="text-sm mt-2">
-              Quasi-resident genevois, annee 2026 — ICC + IFD compares a l’impot retenu, test des 90 %, gain de chaque
+              Quasi-resident en Suisse, annee 2026 — ICC + IFD compares a l’impot retenu, test des 90 %, gain de chaque
               deduction
             </p>
           </div>

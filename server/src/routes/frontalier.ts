@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import multipart from '@fastify/multipart';
 import { FrontalierRequestSchema, type DocumentExtractionResult } from '@shared/frontalier.js';
-import { simulateFrontalier } from '../engine/frontalierGe.js';
+import { CantonIndisponibleError, simulateFrontalier } from '../engine/frontalier/index.js';
 import { extractDocument, mediaTypeAccepte } from '../services/llm/documentExtractor.js';
 import { messageErreurLlm } from '../services/llm/config.js';
 import { reserverQuota, resoudreLlm } from './llmAcces.js';
@@ -25,7 +25,15 @@ export async function frontalierRoutes(server: FastifyInstance) {
       });
     }
 
-    return simulateFrontalier(parsed.data);
+    try {
+      return simulateFrontalier(parsed.data);
+    } catch (err) {
+      // A canton on the list whose official figures are not in the engine yet.
+      if (err instanceof CantonIndisponibleError) {
+        return reply.status(422).send({ error: err.message, code: 'CANTON_INDISPONIBLE' });
+      }
+      throw err;
+    }
   });
 
   /**

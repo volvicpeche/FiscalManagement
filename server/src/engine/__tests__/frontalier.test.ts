@@ -17,8 +17,10 @@ import {
   impotBaseIccSplitting,
   impotIfdBareme,
   simulateFrontalier,
-} from '../frontalierGe.js';
-import { IFD_BAREME_MARIES, IFD_BAREME_SEUL } from '../baremesGeneve.js';
+  CANTONS,
+  CantonIndisponibleError,
+} from '../frontalier/index.js';
+import { IFD_BAREME_MARIES, IFD_BAREME_SEUL } from '../baremesFederaux.js';
 
 function baseParams(overrides: Partial<FrontalierRequestInput> = {}): FrontalierRequest {
   return FrontalierRequestSchema.parse({
@@ -337,5 +339,22 @@ describe('simulateFrontalier — travaux de rehabilitation', () => {
     const plusValue = simulateFrontalier(baseParams({ biensFrance: [{ ...base, travauxPlusValueEur: '15000.00' }] }));
     expect(new Decimal(entretien.totalTou).lt(plusValue.totalTou)).toBe(true);
     expect(plusValue.avertissements.some((a) => /plus-value/.test(a))).toBe(true);
+  });
+});
+
+describe('simulateFrontalier — canton de travail', () => {
+  it('should default to Geneva and name its administration and deadline', () => {
+    const r = simulateFrontalier(baseParams());
+    expect(r.canton).toBe('GE');
+    expect(r.nomCanton).toBe('Geneve');
+    expect(r.dateLimite).toBe('2027-03-31');
+    expect(r.avertissements.some((a) => a.includes("l'AFC-GE au plus tard le 31 mars 2027"))).toBe(true);
+  });
+
+  it('should refuse Zurich until its official figures are in the engine, listing what is missing', () => {
+    const zh = CANTONS.ZH;
+    expect(zh.disponible).toBe(false);
+    expect(() => simulateFrontalier(baseParams({ canton: 'ZH' }))).toThrow(CantonIndisponibleError);
+    expect(() => simulateFrontalier(baseParams({ canton: 'ZH' }))).toThrow(/tar26zh/);
   });
 });

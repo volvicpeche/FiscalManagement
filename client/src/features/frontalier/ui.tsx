@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { CommuneGe } from '@shared/frontalier.js';
+import type { CantonTravail, CommuneGe } from '@shared/frontalier.js';
 
 export const inputClass = 'w-full rounded-md border border-gray-300 px-3 py-2 text-sm';
 export const labelClass = 'block text-sm font-medium text-gray-700 mb-1';
@@ -86,6 +86,16 @@ export const CODES_TARIF = [
   ...['A', 'B', 'C'].flatMap((l) => [0, 1, 2, 3, 4, 5].map((n) => `${l}${n}`)),
   ...[1, 2, 3, 4, 5].map((n) => `H${n}`),
 ];
+
+/**
+ * Cantons ou un frontalier est impose a la source, donc peut demander la TOU.
+ * `disponible: false` : prevu, mais les baremes officiels ne sont pas encore
+ * dans le moteur (server/src/engine/frontalier/zurich.ts).
+ */
+export const CANTONS_TRAVAIL: Record<CantonTravail, { nom: string; disponible: boolean }> = {
+  GE: { nom: 'Geneve', disponible: true },
+  ZH: { nom: 'Zurich', disponible: false },
+};
 
 export const LIBELLES_COMMUNES: Record<CommuneGe, string> = {
   GENEVE: 'Ville de Geneve',

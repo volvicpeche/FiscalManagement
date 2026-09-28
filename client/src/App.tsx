@@ -50,7 +50,7 @@ const TABS = [
 type TabKey = (typeof TABS)[number]['key'];
 
 const MODES = [
-  { key: 'frontalier', label: 'Frontalier Geneve' },
+  { key: 'frontalier', label: 'Frontalier Suisse' },
   { key: 'sci', label: 'SCI / Holding' },
   { key: 'saisonnier', label: 'Location saisonniere' },
   { key: 'aide', label: 'Aide' },

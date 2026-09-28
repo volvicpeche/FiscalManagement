@@ -19,7 +19,7 @@ export function BiensFranceForm() {
 
   return (
     <div className="space-y-4">
-      <Titre aide="Exoneres a Geneve mais pris en compte pour le taux, et bruts dans le test des 90 %.">
+      <Titre aide="Exoneres en Suisse mais pris en compte pour le taux, et bruts dans le test des 90 %.">
         Revenus en France
       </Titre>
 

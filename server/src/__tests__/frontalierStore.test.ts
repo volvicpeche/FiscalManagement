@@ -66,3 +66,15 @@ describe('frontalierStore — travaux', () => {
     expect(store().biensFrance[1].travauxEnergieEur).toBe('0.00');
   });
 });
+
+describe('frontalierStore — canton de travail', () => {
+  it('should send the canton, Geneva by default', () => {
+    expect(buildFrontalierRequest(store()).canton).toBe('GE');
+  });
+
+  it('should load a scenario saved before the canton choice as Geneva', () => {
+    useFrontalierStore.setState({ canton: 'ZH' });
+    store().hydrate({ etatCivil: 'MARIE' });
+    expect(store().canton).toBe('GE');
+  });
+});

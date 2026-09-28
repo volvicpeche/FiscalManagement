@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type {
   BienFrance,
+  CantonTravail,
   ChampCible,
   CommuneGe,
   DeductionsFoyer,
@@ -128,6 +129,7 @@ function migrerBiens(biens: (Partial<BienFrance> & { travauxEur?: string })[]): 
 
 export interface FrontalierInputs {
   etatCivil: EtatCivilGe;
+  canton: CantonTravail;
   communeTravail: CommuneGe;
   tauxChangeEurChf: string;
   contribuable: PersonneFrontalier;
@@ -143,6 +145,7 @@ export interface FrontalierInputs {
 
 const DEFAULTS: FrontalierInputs = {
   etatCivil: 'CELIBATAIRE',
+  canton: 'GE',
   communeTravail: 'GENEVE',
   tauxChangeEurChf: '0.9300',
   contribuable: { ...personneVide('SUISSE'), salaireBrut: '100000.00', cotisationsSociales: '6400.00', lppOrdinaire: '5000.00' },
@@ -166,7 +169,7 @@ function sansSources(sources: Record<string, string>, prefix: string, keys: stri
 interface FrontalierStore extends FrontalierInputs {
   result: FrontalierResult | null;
 
-  updateFoyer: (p: Partial<Pick<FrontalierInputs, 'etatCivil' | 'communeTravail' | 'tauxChangeEurChf' | 'autresRevenusEtrangersEur'>>) => void;
+  updateFoyer: (p: Partial<Pick<FrontalierInputs, 'etatCivil' | 'canton' | 'communeTravail' | 'tauxChangeEurChf' | 'autresRevenusEtrangersEur'>>) => void;
   updatePersonne: (qui: QuiPersonne, p: Partial<PersonneFrontalier>) => void;
   setEnfants: (e: Enfant[]) => void;
   updateDeductions: (p: Partial<DeductionsFoyer>) => void;
@@ -405,6 +408,8 @@ export const useFrontalierStore = create<FrontalierStore>((set, get) => ({
       const travaux = migres ? [...(data.travaux ?? []), ...migres.lignes] : (data.travaux ?? s.travaux);
       return {
       etatCivil: data.etatCivil ?? s.etatCivil,
+      // Scenarios saved before the canton choice were all Geneva.
+      canton: data.canton ?? 'GE',
       communeTravail: data.communeTravail ?? s.communeTravail,
       tauxChangeEurChf: data.tauxChangeEurChf ?? s.tauxChangeEurChf,
       contribuable: data.contribuable ? { ...personneVide('SUISSE'), ...data.contribuable } : s.contribuable,
@@ -425,6 +430,7 @@ export const useFrontalierStore = create<FrontalierStore>((set, get) => ({
 export function selectInputs(s: FrontalierInputs): FrontalierInputs {
   return {
     etatCivil: s.etatCivil,
+    canton: s.canton,
     communeTravail: s.communeTravail,
     tauxChangeEurChf: s.tauxChangeEurChf,
     contribuable: s.contribuable,
@@ -461,6 +467,7 @@ export function buildFrontalierRequest(s: FrontalierInputs): FrontalierRequestIn
   return {
     annee: 2026,
     etatCivil: s.etatCivil,
+    canton: s.canton,
     communeTravail: s.communeTravail,
     tauxChangeEurChf: s.tauxChangeEurChf,
     contribuable: s.contribuable,
