@@ -115,76 +115,116 @@ Pourquoi chacun :
    directement à Podman : il passe par ce socket, inactif par défaut. Sans
    lui, le déploiement échoue sur « Cannot connect to the Docker daemon ».
 
-## Étape 2 bis — Préparer votre projet Supabase (navigateur)
+## Étape 2 bis — Relever 3 valeurs dans Supabase (navigateur)
 
-Patrimonia s'installe dans un projet Supabase **existant**, y compris sur
-l'offre gratuite, et à côté d'autres applications :
+Patrimonia se branche sur **votre projet Supabase existant**. Il y range ses
+tables à part (schéma `tax`) et ne touche ni à vos autres tables ni à vos
+autres applications. Il ne vous faut que **3 valeurs à copier** et **1
+réglage à ajouter**. Tout le reste est vérifié automatiquement au démarrage
+(point C).
 
-- **ses tables sont dans le schéma `tax`**, créé automatiquement au premier
-  démarrage du conteneur `server`, avec son propre historique de migrations.
-  Rien n'est créé ni modifié dans `public`. Pour les voir : **Table Editor**,
-  sélecteur de schéma en haut à gauche, `tax` ;
-- **l'authentification est celle du projet** : mêmes comptes, mêmes modèles
-  d'e-mail, que Patrimonia ne modifie pas.
+Ouvrez votre projet sur [supabase.com/dashboard](https://supabase.com/dashboard),
+et gardez un bloc-notes ouvert pour y coller les 3 valeurs.
 
-Dans le tableau de bord du projet :
+### A. Les 3 valeurs à copier
 
-1. **Authentication → Sign In / Providers → Email** : vérifiez que *Enable
-   Email provider* et **Confirm email** sont actifs. C'est ce qui empêche
-   de créer un compte avec l'adresse de quelqu'un d'autre.
-2. **Authentication → URL Configuration → Redirect URLs** : **ajoutez**
-   `https://<DOMAINE>/auth/confirmer**` (ou `http://<IP_DU_VPS>/auth/confirmer**`
-   tant que vous n'êtes pas en HTTPS), et `http://localhost:5173/auth/confirmer**`
-   pour le développement. Les `**` finaux comptent : l'application ajoute
-   `?type=signup` ou `?type=recovery` à l'adresse, qui sans eux serait
-   refusée. **Ne changez pas la *Site URL*** : elle sert à vos autres
-   applications.
-3. **Ne touchez pas aux modèles d'e-mail** (*Authentication → Emails →
-   Templates*) : ils sont communs à toutes vos applications, et Patrimonia
-   fonctionne avec ceux par défaut. Le lien de l'e-mail passe par
-   `supabase.co`, confirme l'adresse, puis revient sur
-   `/auth/confirmer`.
-4. **Authentication → Emails → SMTP Settings** : si ce n'est pas déjà fait,
-   branchez un vrai serveur d'envoi (Brevo, Postmark, Resend… ont des offres
-   gratuites). Le SMTP intégré de Supabase n'envoie que **quelques e-mails
-   par heure**, et seulement aux membres de votre organisation Supabase. Ce
-   réglage sert aussi à vos autres applications.
-5. **Project Settings → JWT Keys** : regardez la clé de signature
-   **active** (*Current key*).
-   - Une clé *ECC (P-256)* ou *RSA* : rien à faire, le serveur lit les clés
-     publiques du projet tout seul.
-   - *Legacy JWT secret* (fréquent sur un projet ancien) : cliquez pour
-     afficher le secret et gardez-le pour `SUPABASE_JWT_SECRET` (étape 3b).
-     **Ne lancez pas** la migration des clés depuis cet écran pour Patrimonia :
-     elle change la signature des jetons de toutes vos applications.
-6. Relevez les valeurs de l'étape 3 :
+**A1 — L'adresse du projet** → `SUPABASE_URL`
 
-| Valeur | Où la trouver |
-|---|---|
-| URL du projet (`https://<ref>.supabase.co`) | **Project Settings → Data API** |
-| Clé publique *anon* (ou *publishable*) | **Project Settings → API Keys** |
-| Chaîne de connexion **Session pooler** | bouton **Connect** en haut du tableau de bord → *Session pooler* |
-| Mot de passe de la base | celui choisi à la création du projet. Oublié : **Project Settings → Database → Reset database password**, mais vos autres applications qui l'utilisent devront être mises à jour |
+- Où : menu de gauche **Project Settings** (roue dentée, en bas) →
+  **Data API** → champ **Project URL** → bouton *Copy*.
+- Ça ressemble à : `https://abcdefghijklmnop.supabase.co`
+- À coller : dans `server/.env` (étape 3b) **et** dans `web/.env` (étape 3c).
 
-> Prenez bien le **Session pooler** (port 5432) : la connexion directe
-> n'existe qu'en IPv6, que ce VPS n'utilise pas, et le *Transaction pooler*
-> (port 6543) ne convient pas à Prisma.
+**A2 — La clé publique** → `SUPABASE_ANON_KEY`
 
-Ne copiez **jamais** la clé *service_role* (ou *secret*) : l'application n'en
-a pas besoin, et elle ouvre toute la base.
+- Où : **Project Settings** → **API Keys**. Prenez la clé nommée **anon**
+  (onglet *Legacy API keys*) ou **publishable**, jamais celle nommée
+  *service_role* ou *secret*.
+- Ça ressemble à : `eyJhbGciOiJIUzI1NiIsInR5cCI6…` (très longue) ou
+  `sb_publishable_…`
+- À coller : dans `server/.env` (étape 3b).
+- Elle est publique : le navigateur la reçoit de toute façon.
 
-**Ce que le partage implique** :
+**A3 — La connexion à la base** → `DATABASE_URL`
+
+- Où : bouton **Connect**, en haut de la page du projet → onglet
+  *Connection String* → section **Session pooler** → copiez l'adresse.
+- Ça ressemble à :
+  `postgresql://postgres.abcdefghijklmnop:[YOUR-PASSWORD]@aws-0-eu-west-3.pooler.supabase.com:5432/postgres`
+- **Remplacez `[YOUR-PASSWORD]`** (crochets compris) par le mot de passe de
+  la base, choisi à la création du projet. Oublié ? **Project Settings →
+  Database → Reset database password**, mais si une autre de vos
+  applications se connecte à la base avec ce mot de passe, mettez-la à jour
+  aussi.
+- Si le mot de passe contient `@`, `:`, `/`, `#`, `?` ou `%`, il casse
+  l'adresse : le plus simple est d'en générer un sans ces caractères.
+- À coller : dans `server/.env` (étape 3b).
+- Bien le *Session pooler*, pas *Direct connection* ni *Transaction pooler* :
+  les deux autres ne fonctionnent pas depuis ce VPS.
+
+### B. Le réglage à ajouter
+
+Sans lui, le lien de confirmation reçu par e-mail à l'inscription ramène vers
+une autre de vos applications au lieu de Patrimonia.
+
+- Où : menu de gauche **Authentication** → **URL Configuration** → section
+  **Redirect URLs** → **Add URL**.
+- Ajoutez, **avec les deux étoiles à la fin** :
+  - `https://<DOMAINE>/auth/confirmer**`
+    (ou `http://<IP_DU_VPS>/auth/confirmer**` tant que vous n'êtes pas en HTTPS) ;
+  - et, si vous développez sur votre PC : `http://localhost:5173/auth/confirmer**`.
+- **Ajoutez seulement.** Ne supprimez rien, et ne changez pas la *Site URL*
+  au-dessus : elles servent à vos autres applications.
+
+### C. Laisser le serveur vérifier le reste
+
+Une fois l'application démarrée (étape 6), lisez son bilan :
+
+```bash
+cd ~/patrimonia
+docker compose logs server | grep Supabase
+```
+
+Si tout va bien :
+
+```
+[Supabase] Configuration verifiee :
+[Supabase]   ✓ Adresse du projet et cle publique acceptees.
+[Supabase]   ✓ Signature des jetons : cles publiques du projet (rien a configurer).
+[Supabase]   i A verifier a la main : … Redirect URLs doit contenir « https://<votre domaine>/auth/confirmer** » …
+```
+
+Chaque ligne **✗** (à corriger) ou **⚠** (à vérifier) dit ce qui ne va pas et
+où cliquer dans Supabase. Le cas le plus courant sur un projet ancien :
+
+```
+[Supabase]   ✗ Votre projet signe ses jetons avec l'ancien secret JWT, et SUPABASE_JWT_SECRET est vide : …
+```
+
+Copiez alors le secret depuis **Project Settings → JWT Keys → Legacy JWT
+Secret** dans `SUPABASE_JWT_SECRET` (`server/.env`), puis
+`docker compose up -d --force-recreate server`. Ne cliquez sur aucun bouton de
+migration des clés sur cette page : cela changerait la connexion de toutes
+vos applications.
+
+<details>
+<summary>Bon à savoir sur le partage du projet</summary>
 
 - **Une seule liste d'utilisateurs** pour toutes vos applications : un compte
-  créé ailleurs peut se connecter à Patrimonia, et un compte créé dans
-  Patrimonia existe aussi pour vos autres applications. Dans Patrimonia,
-  chacun ne voit que ses propres scénarios.
-- Supprimer un utilisateur dans Supabase supprime aussi ses scénarios
-  Patrimonia.
-- Les limites de débit et le SMTP de Supabase sont communs à toutes vos
-  applications.
-- La mise en pause après une semaine sans activité (offre gratuite) vaut pour
-  tout le projet. Vos autres applications le gardent éveillé.
+  créé ailleurs peut se connecter à Patrimonia, et inversement. Dans
+  Patrimonia, chacun ne voit que ses propres scénarios.
+- Supprimer un utilisateur dans Supabase (**Authentication → Users**) supprime
+  aussi ses scénarios Patrimonia.
+- Les tables de Patrimonia : **Table Editor**, sélecteur de schéma en haut à
+  gauche → `tax`.
+- Les e-mails d'inscription partent avec les réglages communs du projet. Si
+  aucun n'arrive, voir « Dépannage » (SMTP).
+- Offre gratuite : le projet se met en pause après une semaine sans aucune
+  activité, toutes applications confondues.
+- Ne copiez **jamais** la clé *service_role* (ou *secret*) : Patrimonia n'en a
+  pas besoin, et elle ouvre toute la base.
+
+</details>
 
 ## Étape 3 — Créer le dossier de l'application (VPS)
 
@@ -248,14 +288,12 @@ le VPS se contente de les télécharger.
 
 ```bash
 cat > ~/patrimonia/server/.env <<'EOF'
-# Projet Supabase (étape 2 bis). Remplacez chaque <…>.
-SUPABASE_URL="https://<ref>.supabase.co"
-SUPABASE_ANON_KEY="<clé anon>"
-# Seulement si la clé de signature active est « Legacy JWT secret »
-# (étape 2 bis, point 5). Sinon, laissez vide.
+# Les 3 valeurs relevées à l'étape 2 bis :
+SUPABASE_URL="<valeur A1>"
+SUPABASE_ANON_KEY="<valeur A2>"
+DATABASE_URL="<valeur A3, [YOUR-PASSWORD] remplacé par le mot de passe>"
+# Laissez vide, sauf si le bilan de démarrage le demande (étape 2 bis, point C).
 SUPABASE_JWT_SECRET=""
-# Session pooler, avec le mot de passe de la base à la place de [YOUR-PASSWORD]
-DATABASE_URL="postgresql://postgres.<ref>:<mot de passe>@aws-0-eu-west-3.pooler.supabase.com:5432/postgres"
 
 # Scénarios enregistrés, par utilisateur.
 MAX_SCENARIOS=200
@@ -304,8 +342,8 @@ nginx relaie la page de connexion vers Supabase. Sans ce fichier, le
 conteneur `web` **refuse de démarrer**.
 
 ```bash
-# Même URL que SUPABASE_URL ci-dessus, sans barre finale
-echo 'SUPABASE_URL=https://<ref>.supabase.co' > ~/patrimonia/web/.env
+# La valeur A1 de l'étape 2 bis, la même que dans server/.env
+echo 'SUPABASE_URL=<valeur A1>' > ~/patrimonia/web/.env
 ```
 
 Il n'y a plus de mot de passe commun au site : chacun se connecte avec son
@@ -671,13 +709,14 @@ final de `docker-compose.yml`, `docker compose up -d`, puis
 | Le conteneur `web` s'arrête aussitôt, journaux : `SUPABASE_URL absente` ou `invalide` | `~/patrimonia/web/.env` manque (étape 3c), ou `docker-compose.yml` n'a pas l'`env_file` du service `web`. L'URL s'écrit sans barre finale |
 | Le conteneur `server` s'arrête aussitôt, journaux : `SUPABASE_URL absente` ou `DATABASE_URL absente` | variables manquantes dans `server/.env` (étape 3b), puis `docker compose up -d --force-recreate server` |
 | Journaux de `server` : `P1001: Can't reach database server` | `DATABASE_URL` n'est pas celle du **Session pooler**, le mot de passe est faux, ou le projet Supabase est en pause (tableau de bord → *Restore*) |
+| Un problème avec Supabase, quel qu'il soit | commencez par `docker compose logs server \| grep Supabase` : le bilan de démarrage dit ce qui manque et où le trouver (étape 2 bis, point C) |
 | « Application indisponible » au chargement de la page | `server` est arrêté ou `SUPABASE_ANON_KEY` est vide : `docker compose logs server` |
 | « E-mail ou mot de passe incorrect » alors qu'ils sont bons | le compte n'est pas encore confirmé (lien de l'e-mail), ou il a été supprimé dans Supabase |
-| L'e-mail de confirmation n'arrive jamais | SMTP intégré de Supabase (limité, étape 2 bis, point 4), ou l'e-mail est dans les indésirables |
-| Le lien de l'e-mail mène à la *Site URL* d'une autre application | `https://<DOMAINE>/auth/confirmer**` manque dans les *Redirect URLs*, ou sans ses `**` (étape 2 bis, point 2) : Supabase retombe alors sur la *Site URL* |
+| L'e-mail de confirmation n'arrive jamais | regardez les indésirables. Sinon, le projet utilise sans doute l'envoi intégré de Supabase, limité à quelques e-mails par heure et aux membres de votre organisation Supabase : branchez un vrai service d'envoi (Brevo, Resend, Postmark… offres gratuites) dans **Authentication → Emails → SMTP Settings**. Ce réglage sert aussi à vos autres applications |
+| Le lien de l'e-mail mène à la *Site URL* d'une autre application | `https://<DOMAINE>/auth/confirmer**` manque dans les *Redirect URLs*, ou sans ses `**` (étape 2 bis, point B) : Supabase retombe alors sur la *Site URL* |
 | Le lien de l'e-mail ne s'ouvre pas depuis le poste de l'entreprise | il passe par `supabase.co`, que le proxy bloque : ouvrez-le depuis un autre appareil (téléphone). L'adresse est confirmée, il ne reste qu'à se connecter depuis le poste |
 | « Ouvrez ce lien dans le navigateur où vous avez fait la demande » | lien de mot de passe oublié ouvert dans un autre navigateur : refaites la demande depuis celui où vous voulez vous connecter |
-| Connexion réussie, puis « Session expirée » à chaque action | le projet signe ses jetons avec l'ancien secret : renseignez `SUPABASE_JWT_SECRET` (étape 2 bis, point 5), puis `docker compose up -d --force-recreate server` |
+| Connexion réussie, puis « Session expirée » à chaque action | le projet signe ses jetons avec l'ancien secret : renseignez `SUPABASE_JWT_SECRET` (étape 2 bis, point C), puis `docker compose up -d --force-recreate server` |
 | Erreur 502 sur la connexion, journaux de `web` : `could not be resolved` | le conteneur `web` n'arrive pas à résoudre le nom de Supabase : vérifiez le DNS du VPS (`resolvectl status`) |
 | « Quota de … analyses par jour atteint » | quota sur votre clé serveur (`LLM_QUOTA_JOUR`), par compte autorisé, remis à zéro à minuit UTC. L'utilisateur peut aussi saisir sa propre clé |
 | « Renseignez votre clé API dans « Clé LLM » » | l'utilisateur n'a pas de clé à lui et son e-mail n'est pas dans `LLM_SERVER_KEY_EMAILS` : il la saisit via le bouton « Clé LLM » |
