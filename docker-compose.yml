@@ -15,9 +15,9 @@ services:
       - server/.env
     expose:
       - "3000"
-    # Saved scenarios are JSON files on disk (services/scenarioStore.ts), not
-    # rows in a database. Without this volume every `up -d` replaces the
-    # container and takes the user's saved scenarios with it.
+    # Scenarios now live in the Supabase Postgres (DATABASE_URL in
+    # server/.env). This volume only holds the JSON files saved before that,
+    # read once by the import script (DEPLOY.md); drop it once imported.
     volumes:
       - scenarios:/app/server/data
 
@@ -31,10 +31,10 @@ services:
       - server
     ports:
       - "80:80"
-    # Mot de passe du site, jamais commite (voir DEPLOY.md, etape 3c). Sans
-    # lui, le conteneur web refuse de demarrer.
-    volumes:
-      - ./web/htpasswd:/etc/nginx/auth/htpasswd:ro
+    # SUPABASE_URL, pour relayer /supabase/auth/v1 (voir DEPLOY.md). Sans
+    # elle, le conteneur web refuse de demarrer.
+    env_file:
+      - web/.env
 
 volumes:
   scenarios:

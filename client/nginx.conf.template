@@ -1,10 +1,12 @@
+# Modèle rendu au démarrage par l'image nginx officielle (envsubst) : seules
+# les variables ${SUPABASE_URL} et ${NGINX_LOCAL_RESOLVERS} sont remplacées
+# (NGINX_ENVSUBST_FILTER, voir client/Dockerfile) ; toutes les autres $variables
+# sont celles de nginx.
+
 # ─── Limites de débit, par adresse IP ───────────────────────────────────────
-# Appliquées AVANT le mot de passe (phase preaccess de nginx) : elles freinent
-# aussi les tentatives de deviner le mot de passe.
-#
 # Derrière Caddy (HTTPS), toutes les requêtes arrivent de la même adresse : les
-# limites deviennent globales plutôt que par visiteur. Pour un usage personnel,
-# c'est sans conséquence.
+# limites deviennent globales plutôt que par visiteur. Les quotas qui comptent
+# vraiment (analyses LLM, scénarios) sont tenus par le serveur, par compte.
 
 # Tout le site : large, pour ne jamais gêner un usage normal.
 limit_req_zone $binary_remote_addr zone=global:10m rate=20r/s;
@@ -25,6 +27,10 @@ map $request_method $cle_ecriture {
 }
 limit_req_zone $cle_ecriture zone=ecriture:10m rate=30r/m;
 
+# Connexion, inscription, mot de passe oublié : freine qui essaierait de
+# deviner un mot de passe. Supabase a ses propres limites en plus.
+limit_req_zone $binary_remote_addr zone=auth:10m rate=30r/m;
+
 limit_req_status 429;
 
 server {
@@ -40,12 +46,9 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
-    # ─── Mot de passe ───────────────────────────────────────────────────────
-    # Tout le site est protégé. Le fichier est monté depuis le VPS (voir
-    # DEPLOY.md) et vérifié au démarrage par 40-verifier-mot-de-passe.sh : sans
-    # lui, le conteneur refuse de démarrer plutôt que d'ouvrir le site à tous.
-    auth_basic "Patrimonia";
-    auth_basic_user_file /etc/nginx/auth/htpasswd;
+    # Pas de mot de passe ici : chaque route /api vérifie elle-même le jeton
+    # Supabase (server/src/plugins/auth.ts). La page et ses fichiers statiques
+    # sont publics, ils ne contiennent aucune donnée.
 
     limit_req zone=global burst=40 nodelay;
 
@@ -57,10 +60,37 @@ server {
     # niveau supérieur dès qu'une location déclare les siens.
     include /etc/nginx/conf.d/security-headers.inc;
 
-    # Sonde de disponibilité, sans mot de passe : elle ne révèle rien.
+    # Sonde de disponibilité : elle ne révèle rien.
     location = /api/health {
-        auth_basic off;
         proxy_pass http://server:3000;
+    }
+
+    # ─── Relais vers Supabase (authentification seulement) ──────────────────
+    # Le navigateur ne parle qu'à ce domaine : un proxy d'entreprise qui
+    # bloquerait supabase.co ne bloque pas la connexion, et la CSP reste
+    # connect-src 'self'. Seule l'API d'authentification est relayée.
+    #
+    # L'adresse passe par une variable pour que nginx la résolve à chaque
+    # expiration du DNS (valid=60s) et pas une seule fois au démarrage :
+    # Supabase est derrière un CDN dont les IP changent.
+    location /supabase/auth/v1/ {
+        limit_req zone=auth burst=20 nodelay;
+        limit_req zone=global burst=40 nodelay;
+
+        resolver ${NGINX_LOCAL_RESOLVERS} valid=60s ipv6=off;
+        set $supabase ${SUPABASE_URL};
+        rewrite ^/supabase(/auth/v1/.*)$ $1 break;
+        proxy_pass $supabase;
+
+        proxy_http_version 1.1;
+        proxy_ssl_server_name on;
+        # Host par défaut = celui de proxy_pass, ce qu'attend Supabase. Ne
+        # rien transmettre de l'adresse du visiteur : Supabase ne ferait pas
+        # confiance à un X-Forwarded-For venu d'ailleurs que de son CDN.
+        proxy_set_header Cookie "";
+        proxy_read_timeout 30s;
+
+        include /etc/nginx/conf.d/security-headers.inc;
     }
 
     location = /api/listings/analyze {

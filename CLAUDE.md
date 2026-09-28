@@ -10,18 +10,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **Frontend:** React 18+ (Vite), Tailwind CSS + Shadcn/UI, Zustand (state), TanStack React Query (server state), Recharts (charts), React-Hook-Form + Zod (forms)
 - **Backend:** Node.js + Fastify, TypeScript
-- **Database:** PostgreSQL with Prisma ORM
+- **Database:** PostgreSQL (the Supabase project's) with Prisma 7 ORM (`@prisma/adapter-pg`)
 - **Math:** `decimal.js` for ALL financial calculations — never use native JS floats
 - **Testing:** Vitest (TDD approach, especially for the engine)
-- **Auth:** JWT with Argon2id hashing
+- **Auth:** Supabase Auth (e-mail + password). The server never sees a password: it verifies the Supabase JWT against the project's JWKS (`server/src/plugins/auth.ts`)
 
 ## Build & Development Commands
 
 ```bash
 # Backend (server/)
 cd server && npm install
-npx prisma generate        # Generate Prisma client
-npx prisma migrate dev     # Run DB migrations
+npx prisma generate        # Generate Prisma client (also run by build/dev/test)
+npx prisma migrate dev     # Create a migration after editing schema.prisma
+npm run db:deploy          # Apply migrations (a plain Postgres needs prisma/test/supabase-auth-stub.sql first)
 npm run dev                # Start Fastify dev server
 
 # Frontend (client/)
@@ -29,7 +30,7 @@ cd client && npm install
 npm run dev                # Start Vite dev server
 
 # Testing
-cd server && npx vitest              # Run all engine tests
+cd server && npx vitest              # Run all tests (DB tests skipped without DATABASE_URL)
 cd server && npx vitest run <file>   # Run a single test file
 cd server && npx vitest --watch      # Watch mode
 ```
@@ -106,10 +107,18 @@ The engine is the heart of the app — pure TypeScript functions, fully tested, 
 - `GET /api/costs/presets` — Cost presets for every management mode × structure type, so the client pre-fills its form from the engine instead of duplicating the table
 - `POST /api/frontalier/run` — Geneva TOU vs impot a la source for one year (`FrontalierRequestSchema` in `shared/frontalier.ts`)
 - `POST /api/frontalier/documents` — multipart upload (PDF/JPEG/PNG/WebP, 10 × 10 MB); Claude reads each file into amounts tagged with their form field (`services/llm/documentExtractor.ts`, Anthropic only). Files stay in memory, never on disk; the client applies nothing until the user validates each field.
-- `GET /api/simulations/:id` — Retrieve saved scenario *(not implemented yet)*
-- `POST /api/simulations` — Save scenario state *(not implemented yet)*
+- `GET /api/simulations`, `GET|PUT|DELETE /api/simulations/:id`, `POST /api/simulations` — saved scenarios of the logged-in user
+- `GET /api/config` — public: the Supabase anon key, read by the client at start-up
 
-The server does **not** use Prisma yet: nothing under `server/src/` imports `PrismaClient`, so no database is needed to run the app. `schema.prisma` is kept as a mirror of the shared Zod schemas for when persistence lands.
+## Authentication & persistence
+
+- Every `/api/*` route needs `Authorization: Bearer <Supabase access token>`, except `/api/health` and `/api/config`. The hook sets `request.user = { id, email }`; the server refuses to start without `SUPABASE_URL`.
+- Scenarios live in the `scenarios` table (`server/src/services/scenarioStore.ts`), `data` an opaque JSON (`shared/scenario.ts`). Every query filters on `userId`: that filter IS the access control, since the server connects as `postgres` and bypasses RLS. Someone else's scenario is a 404, never a 403. `MAX_SCENARIOS` is per user.
+- The migration enables RLS and revokes everything from `anon`/`authenticated`: the Supabase Data API cannot reach the tables, only our server. Keep that for any new table.
+- Sign-up is open, so paid LLM calls (`/api/listings/analyze`, `/api/frontalier/documents`) go through a daily per-user quota (`services/llmQuota.ts`, `LLM_QUOTA_JOUR`).
+- The browser never talks to supabase.co: `supabase-js` points at `<origin>/supabase`, relayed to the project by nginx (`client/nginx.conf.template`) and by Vite in dev. Only `/auth/v1` is relayed. The e-mail links land on `/auth/confirmer` with a `token_hash` (`features/auth/ConfirmPage.tsx`).
+- Client calls to `/api` go through `apiFetch` (`client/src/lib/api.ts`), which attaches the token.
+- DB tests (`describe.skipIf(!hasDb)`) create their own users in `auth.users` and delete only those: test files run in parallel on one database.
 
 ## UI Language
 
@@ -125,7 +134,6 @@ The entire UI must be in **French** — all labels, buttons, tooltips, error mes
 - **Swiss social charge exemption:** User is affiliated to Swiss social security — exempt from CSG/CRDS, only pays prelevement de solidarite (7.5% instead of 17.2%/18.2%). This is a configurable `SocialChargeRegime` flag (`STANDARD` or `SWISS_EXEMPT`) that affects all PS calculations (IR foncier, PFU, dividends, capital gains).
 - **Indexation is deliberately asymmetric:** rents, charges and running costs are indexed on `(1 + rate)^(year - 1)`, so year 1 is quoted at the figures the user typed. The property value compounds from year 1 and is therefore an end-of-year valuation. The two sit a year apart on purpose.
 - **Currencies:** the whole app is in EUR except the frontalier module, which is in CHF; its French inputs carry an `Eur` suffix and are converted by the ENGINE with `tauxChangeEurChf`, never by the client.
-- All monetary fields in Prisma use `Decimal(20,2)`.
 - Structures support parent-child hierarchy (Holding → SCI) with ownership shares.
 - All API inputs must be validated with Zod schemas.
 
