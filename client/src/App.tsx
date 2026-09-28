@@ -99,19 +99,20 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm border-b sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Logo size={44} className="shrink-0" />
-            <div>
+        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <Logo size={40} className="shrink-0" />
+            <div className="min-w-0">
               <h1 className="text-2xl font-bold text-gray-900">Patrimonia</h1>
-              <p className="text-sm text-gray-500">
+              {/* Only where there is room: it wrapped over five lines on a laptop. */}
+              <p className="hidden 2xl:block text-sm text-gray-500 whitespace-nowrap">
                 Simulateur patrimonial — structures locatives, fiscalite et transmission
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <div className="flex gap-1 p-1 bg-gray-100 rounded-lg overflow-x-auto">
               {MODES.map((m) => (
                 <button
                   key={m.key}
@@ -131,7 +132,7 @@ function App() {
                 <button
                   onClick={handleRun}
                   disabled={isPending || !validParts}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium whitespace-nowrap hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium whitespace-nowrap hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {isPending ? 'Calcul en cours...' : 'Comparer les montages'}
                 </button>

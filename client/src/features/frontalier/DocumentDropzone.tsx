@@ -9,6 +9,7 @@ import {
   type QuiPersonne,
 } from '@/store/frontalierStore';
 import { Titre, inputClass } from './ui';
+import { LlmRequis, useLlmDisponible } from '@/features/parametres';
 
 const LIBELLES_TYPES: Record<DocumentType, string> = {
   CERTIFICAT_SALAIRE: 'Certificat de salaire',
@@ -47,9 +48,11 @@ export function DocumentDropzone() {
   const [lectures, setLectures] = useState<Lecture[]>([]);
   const [survol, setSurvol] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  // No Anthropic key available: nothing is sent, the zone says why instead.
+  const actif = useLlmDisponible('document');
 
   const envoyer = (fichiers: File[]) => {
-    if (fichiers.length === 0) return;
+    if (!actif || fichiers.length === 0) return;
     extraction.mutate(fichiers, {
       onSuccess: (resultats) =>
         setLectures((prev) => [
@@ -93,10 +96,13 @@ export function DocumentDropzone() {
         Lire mes justificatifs
       </Titre>
 
+      {!actif && <LlmRequis usage="document" />}
+
       <div
+        aria-disabled={!actif}
         onDragOver={(e) => {
           e.preventDefault();
-          setSurvol(true);
+          if (actif) setSurvol(true);
         }}
         onDragLeave={() => setSurvol(false)}
         onDrop={(e) => {
@@ -104,13 +110,21 @@ export function DocumentDropzone() {
           setSurvol(false);
           envoyer([...e.dataTransfer.files]);
         }}
-        onClick={() => input.current?.click()}
-        className={`cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition-colors ${
-          survol ? 'border-indigo-400 bg-indigo-50' : 'border-gray-300 hover:bg-gray-50'
+        onClick={() => actif && input.current?.click()}
+        className={`rounded-lg border-2 border-dashed p-6 text-center transition-colors ${
+          !actif
+            ? 'cursor-not-allowed border-gray-200 bg-gray-50 opacity-60'
+            : survol
+              ? 'cursor-pointer border-indigo-400 bg-indigo-50'
+              : 'cursor-pointer border-gray-300 hover:bg-gray-50'
         }`}
       >
         <p className="text-sm font-medium text-gray-700">
-          {extraction.isPending ? 'Lecture en cours...' : 'Deposez vos PDF ou photos ici, ou cliquez'}
+          {!actif
+            ? 'Lecture automatique desactivee sans cle API Anthropic'
+            : extraction.isPending
+              ? 'Lecture en cours...'
+              : 'Deposez vos PDF ou photos ici, ou cliquez'}
         </p>
         <p className="text-xs text-gray-400 mt-1">10 fichiers de 10 Mo maximum par envoi</p>
         <input
@@ -119,6 +133,7 @@ export function DocumentDropzone() {
           multiple
           accept="application/pdf,image/jpeg,image/png,image/webp"
           className="hidden"
+          disabled={!actif}
           onChange={(e) => {
             envoyer([...(e.target.files ?? [])]);
             e.target.value = '';

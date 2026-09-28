@@ -4,21 +4,18 @@ import { LlmNonConfigureError, resoudreConfigLlm } from '../services/llmSettings
 import { consommerQuota, QuotaLlmAtteintError } from '../services/llmQuota.js';
 
 /**
- * Before any paid LLM call: which key serves it, and — when it is the
- * server's — booking `appels` calls against the daily quota. A user's own key
- * is theirs to spend: no quota then.
- *
- * Returns null once it has answered the request itself (403 no key, 429).
+ * Which key serves a paid LLM call: the user's own, or the server's for the
+ * allow-listed accounts. Answers 403 itself (and returns null) when there is
+ * none — callers check this BEFORE doing any work, e.g. before receiving
+ * uploaded files.
  */
-export async function preparerLlm(
+export async function resoudreLlm(
   request: FastifyRequest,
   reply: FastifyReply,
   usage: 'annonce' | 'document',
-  appels = 1,
 ): Promise<LlmConfig | null> {
-  let config: LlmConfig;
   try {
-    config = await resoudreConfigLlm(request.user, usage);
+    return await resoudreConfigLlm(request.user, usage);
   } catch (err) {
     if (err instanceof LlmNonConfigureError) {
       await reply.status(403).send({ error: err.message, code: err.code });
@@ -26,17 +23,40 @@ export async function preparerLlm(
     }
     throw err;
   }
+}
 
-  if (config.source === 'serveur') {
-    try {
-      await consommerQuota(request.user.id, appels);
-    } catch (err) {
-      if (err instanceof QuotaLlmAtteintError) {
-        await reply.status(429).send({ error: err.message });
-        return null;
-      }
-      throw err;
+/**
+ * Books `appels` calls against the daily quota when the server's key serves
+ * them; a user's own key is theirs to spend, no quota then. Answers 429 itself
+ * (and returns false) past the quota.
+ */
+export async function reserverQuota(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  config: LlmConfig,
+  appels = 1,
+): Promise<boolean> {
+  if (config.source !== 'serveur') return true;
+  try {
+    await consommerQuota(request.user.id, appels);
+    return true;
+  } catch (err) {
+    if (err instanceof QuotaLlmAtteintError) {
+      await reply.status(429).send({ error: err.message });
+      return false;
     }
+    throw err;
   }
-  return config;
+}
+
+/** Both, for a single call whose cost is known up front. */
+export async function preparerLlm(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  usage: 'annonce' | 'document',
+  appels = 1,
+): Promise<LlmConfig | null> {
+  const config = await resoudreLlm(request, reply, usage);
+  if (!config) return null;
+  return (await reserverQuota(request, reply, config, appels)) ? config : null;
 }

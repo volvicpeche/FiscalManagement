@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { ListingExtraction } from '@shared/listing.js';
 import { useSaisonnierStore } from '@/store/saisonnierStore';
 import { useAnalyzeListing } from '@/hooks/useAnalyzeListing';
+import { LlmRequis, useLlmDisponible } from '@/features/parametres';
 import { formatEur } from '@/lib/profiles';
 
 function toDecimalStr(value: string): string {
@@ -35,6 +36,8 @@ function ListingUrlAnalyzer() {
   const [extraction, setExtraction] = useState<ListingExtraction | null>(null);
   const { updateAsset, updateSaison } = useSaisonnierStore();
   const analyze = useAnalyzeListing();
+  // No LLM key available: both « Analyser » buttons are off, the banner says why.
+  const actif = useLlmDisponible('annonce');
 
   const apply = (data: ListingExtraction) => {
     setExtraction(data);
@@ -66,6 +69,7 @@ function ListingUrlAnalyzer() {
 
   return (
     <div className="space-y-2">
+      {!actif && <LlmRequis usage="annonce" />}
       <label className={labelClass}>URL de l’annonce</label>
       <div className="flex gap-2">
         <input
@@ -78,7 +82,7 @@ function ListingUrlAnalyzer() {
         <button
           type="button"
           onClick={handleAnalyze}
-          disabled={analyze.isPending || !url.trim()}
+          disabled={!actif || analyze.isPending || !url.trim()}
           className="shrink-0 px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {analyze.isPending ? 'Analyse...' : 'Analyser'}
@@ -131,7 +135,7 @@ function ListingUrlAnalyzer() {
             <button
               type="button"
               onClick={handleAnalyzeTexte}
-              disabled={analyze.isPending || texte.trim().length < 200}
+              disabled={!actif || analyze.isPending || texte.trim().length < 200}
               className="shrink-0 px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded-md hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {analyze.isPending ? 'Analyse...' : 'Analyser le texte'}
