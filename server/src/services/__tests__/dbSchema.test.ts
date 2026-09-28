@@ -11,13 +11,13 @@ describe.skipIf(!hasDb)('schema `tax` (Postgres)', () => {
     const rows = await db().$queryRaw<{ table_name: string }[]>`
       SELECT table_name FROM information_schema.tables
       WHERE table_schema = ${DB_SCHEMA} ORDER BY table_name`;
-    expect(rows.map((r) => r.table_name)).toEqual(['_prisma_migrations', 'llm_usage', 'scenarios']);
+    expect(rows.map((r) => r.table_name)).toEqual(['_prisma_migrations', 'llm_settings', 'llm_usage', 'scenarios']);
   });
 
   it('should create nothing in public', async () => {
     const rows = await db().$queryRaw<{ table_name: string }[]>`
       SELECT table_name FROM information_schema.tables
-      WHERE table_schema = 'public' AND table_name IN ('_prisma_migrations', 'scenarios', 'llm_usage')`;
+      WHERE table_schema = 'public' AND table_name IN ('_prisma_migrations', 'scenarios', 'llm_usage', 'llm_settings')`;
     expect(rows).toEqual([]);
   });
 

@@ -8,6 +8,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import * as zv4 from 'zod/v4';
 import { ListingExtractionSchema, type ListingExtraction } from '@shared/listing.js';
 import { EXTRACTION_SYSTEM_PROMPT, buildUserPrompt } from './prompt.js';
+import type { LlmConfig } from './config.js';
 
 const ListingExtractionSchemaV4 = zv4.object({
   label: zv4.string().nullable(),
@@ -35,9 +36,9 @@ const ListingExtractionSchemaV4 = zv4.object({
   }),
 });
 
-export async function extractListingViaAnthropic(text: string): Promise<ListingExtraction> {
-  const client = new Anthropic();
-  const model = process.env.ANTHROPIC_MODEL || 'claude-opus-5';
+export async function extractListingViaAnthropic(text: string, config: LlmConfig): Promise<ListingExtraction> {
+  const client = new Anthropic({ apiKey: config.apiKey });
+  const model = config.model;
 
   const response = await client.messages.parse({
     model,

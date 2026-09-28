@@ -55,19 +55,22 @@ describe('htmlToText', () => {
   });
 });
 
+// Never called: the length check fails first.
+const CONFIG = { provider: 'anthropic', apiKey: 'sk-test', model: 'claude-opus-5', source: 'utilisateur' } as const;
+
 describe('analyzeListingText', () => {
   it('should reject a paste that is too short to analyse', async () => {
-    await expect(analyzeListingText('Joli mas en Provence')).rejects.toThrow(/trop court/);
+    await expect(analyzeListingText('Joli mas en Provence', CONFIG)).rejects.toThrow(/trop court/);
   });
 
   it('should say how short the paste was and what the minimum is', async () => {
-    await expect(analyzeListingText('abc')).rejects.toThrow(
+    await expect(analyzeListingText('abc', CONFIG)).rejects.toThrow(
       new RegExp(`3 caracteres, minimum ${MIN_TEXT_CHARS}`),
     );
   });
 
   it('should count the trimmed length, not the surrounding whitespace', async () => {
-    await expect(analyzeListingText('   x   '.padEnd(400, ' '))).rejects.toThrow(
+    await expect(analyzeListingText('   x   '.padEnd(400, ' '), CONFIG)).rejects.toThrow(
       /1 caracteres/,
     );
   });

@@ -6,6 +6,7 @@ import { listingRoutes } from './routes/listings.js';
 import { scenarioRoutes } from './routes/scenarios.js';
 import { frontalierRoutes } from './routes/frontalier.js';
 import { configRoutes } from './routes/config.js';
+import { llmSettingsRoutes } from './routes/llmSettings.js';
 import { closeBrowser } from './services/browserFetch.js';
 import { closeDb } from './services/db.js';
 import { authPlugin } from './plugins/auth.js';
@@ -31,6 +32,7 @@ await server.register(authPlugin, {
 });
 
 await server.register(configRoutes);
+await server.register(llmSettingsRoutes);
 
 await server.register(simulationRoutes);
 await server.register(listingRoutes);

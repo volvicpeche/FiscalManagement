@@ -1,5 +1,5 @@
 import type { ListingExtraction } from '@shared/listing.js';
-import { extractListingViaLlm } from './llm/index.js';
+import { extractListingViaLlm, type LlmConfig } from './llm/index.js';
 import { fetchListingTextViaBrowser, browserFallbackEnabled } from './browserFetch.js';
 import { AdresseRefuseeError, assertUrlPublique, fetchPublic } from './netGuard.js';
 
@@ -154,15 +154,15 @@ async function fetchListingWithFallback(url: URL): Promise<string> {
 
 /**
  * Fetches a listing URL and extracts its features + a rough seasonal-rental
- * estimate via whichever LLM provider is configured (LLM_PROVIDER env var —
- * see server/.env.example and services/llm/index.ts).
+ * estimate with the LLM of `config` (the user's key, or the server's for
+ * allow-listed accounts — services/llmSettings.ts).
  */
-export async function analyzeListing(rawUrl: string): Promise<ListingExtraction> {
+export async function analyzeListing(rawUrl: string, config: LlmConfig): Promise<ListingExtraction> {
   const url = assertPublicHttpUrl(rawUrl);
   // The string check above is cheap but blind to DNS: resolve and check too.
   await assertUrlPublique(url);
   const text = await fetchListingWithFallback(url);
-  return extractListingViaLlm(text);
+  return extractListingViaLlm(text, config);
 }
 
 /**
@@ -171,7 +171,7 @@ export async function analyzeListing(rawUrl: string): Promise<ListingExtraction>
  * The last resort, once both the plain fetch and the browser have been
  * refused — and the only route at all when LISTING_BROWSER_FALLBACK is off.
  */
-export async function analyzeListingText(rawText: string): Promise<ListingExtraction> {
+export async function analyzeListingText(rawText: string, config: LlmConfig): Promise<ListingExtraction> {
   const text = rawText.trim().slice(0, MAX_TEXT_CHARS);
 
   if (text.length < MIN_TEXT_CHARS) {
@@ -181,5 +181,5 @@ export async function analyzeListingText(rawText: string): Promise<ListingExtrac
     );
   }
 
-  return extractListingViaLlm(text);
+  return extractListingViaLlm(text, config);
 }
