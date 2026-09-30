@@ -219,8 +219,8 @@ export function FrontalierResultats({ result: r }: { result: FrontalierResult })
       )}
 
       <p className="text-xs text-gray-400">
-        Simulation indicative sur les baremes officiels 2026 (RCEPF, AFC, tar26GE). Elle ne remplace pas la taxation de
-        l’AFC-GE ; plusieurs regles d’application restent a confirmer, notamment l’imposition communale d’un
+        Simulation indicative sur les baremes officiels {r.annee} du canton de {r.nomCanton} et de l’AFC.
+        Elle ne remplace pas la taxation de l’{r.autorite} ; plusieurs regles d’application restent a confirmer, notamment l’imposition communale d’un
         non-resident et la prise en compte des biens a l’etranger.
       </p>
     </div>

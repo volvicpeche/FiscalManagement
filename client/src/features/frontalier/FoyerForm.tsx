@@ -1,9 +1,9 @@
-import type { CommuneGe, EtatCivilGe } from '@shared/frontalier.js';
+import type { CantonTravail, CommuneGe, EtatCivilGe } from '@shared/frontalier.js';
 import { useFrontalierStore } from '@/store/frontalierStore';
-import { LIBELLES_COMMUNES, SourceBadge, Titre, inputClass, labelClass } from './ui';
+import { CANTONS_TRAVAIL, LIBELLES_COMMUNES, SourceBadge, Titre, inputClass, labelClass } from './ui';
 
 export function FoyerForm() {
-  const { etatCivil, communeTravail, tauxChangeEurChf, enfants, sources, updateFoyer, setEnfants } =
+  const { etatCivil, canton, communeTravail, tauxChangeEurChf, enfants, sources, updateFoyer, setEnfants } =
     useFrontalierStore();
 
   const majEnfant = (i: number, p: Partial<(typeof enfants)[number]>) =>
@@ -15,6 +15,45 @@ export function FoyerForm() {
 
       <div className="grid grid-cols-2 gap-4">
         <div>
+          <label className={labelClass}>Canton de travail</label>
+          <select
+            className={inputClass}
+            value={canton}
+            onChange={(e) => updateFoyer({ canton: e.target.value as CantonTravail })}
+          >
+            {Object.entries(CANTONS_TRAVAIL).map(([k, c]) => (
+              <option key={k} value={k} disabled={!c.disponible}>
+                {c.nom}
+                {c.disponible ? '' : ' — bientot'}
+              </option>
+            ))}
+          </select>
+        </div>
+        {canton === 'GE' && (
+          <div>
+            <label className={labelClass}>Commune de travail</label>
+            <select
+              className={inputClass}
+              value={communeTravail}
+              onChange={(e) => updateFoyer({ communeTravail: e.target.value as CommuneGe })}
+            >
+              {Object.entries(LIBELLES_COMMUNES).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+      <p className="text-xs text-gray-400">
+        Vaud, Bale, Berne, Neuchatel, Valais, Soleure et Jura relevent de l’accord de 1983 : le frontalier y est
+        impose en France, il n’y a pas de TOU a comparer. Zurich arrive des que ses baremes 2026 officiels seront
+        integres.
+      </p>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
           <label className={labelClass}>Etat civil</label>
           <select
             className={inputClass}
@@ -23,20 +62,6 @@ export function FoyerForm() {
           >
             <option value="CELIBATAIRE">Celibataire / PACS</option>
             <option value="MARIE">Marie(e)</option>
-          </select>
-        </div>
-        <div>
-          <label className={labelClass}>Commune de travail</label>
-          <select
-            className={inputClass}
-            value={communeTravail}
-            onChange={(e) => updateFoyer({ communeTravail: e.target.value as CommuneGe })}
-          >
-            {Object.entries(LIBELLES_COMMUNES).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
           </select>
         </div>
       </div>

@@ -24,7 +24,7 @@ export function DeductionsForm() {
   const { deductions, sources, updateDeductions } = useFrontalierStore();
   return (
     <div className="space-y-4">
-      <Titre aide="Un quasi-resident obtient toutes les deductions d’un resident genevois.">Deductions du foyer</Titre>
+      <Titre aide="Un quasi-resident obtient toutes les deductions d’un resident du canton.">Deductions du foyer</Titre>
       <div className="grid grid-cols-2 gap-4">
         {CHAMPS.map(({ cle, label, aide }) => (
           <Montant

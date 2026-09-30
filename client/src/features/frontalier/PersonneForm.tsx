@@ -20,7 +20,7 @@ export function PersonneForm({ qui }: { qui: QuiPersonne }) {
       <Titre
         aide={
           qui === 'contribuable'
-            ? 'Celui ou celle qui demande la TOU, impose a la source a Geneve.'
+            ? 'Celui ou celle qui demande la TOU, impose a la source dans son canton de travail.'
             : 'Son revenu entre dans le test des 90 % et dans le taux, ou qu’il soit gagne.'
         }
       >

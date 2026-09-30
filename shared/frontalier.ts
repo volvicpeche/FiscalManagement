@@ -1,8 +1,13 @@
 import { z } from 'zod';
 
 /**
- * Frontalier Geneve — taxation ordinaire ulterieure (TOU) au statut de
+ * Frontalier en Suisse — taxation ordinaire ulterieure (TOU) au statut de
  * quasi-resident, comparee a l'impot a la source effectivement retenu.
+ *
+ * Only the cantons that tax frontaliers at source open the TOU: Geneva, and
+ * Zurich among the others. Vaud, Basel, Bern, Neuchatel... fall under the
+ * 1983 agreement: the frontalier is taxed in France, there is nothing to
+ * compare.
  *
  * Unlike the rest of the app, amounts here are in CHF unless the field name
  * says EUR: French income is converted with `tauxChangeEurChf` by the engine,
@@ -23,6 +28,13 @@ const zero = () => montant.default('0.00');
  */
 export const EtatCivilGe = z.enum(['CELIBATAIRE', 'MARIE']);
 export type EtatCivilGe = z.infer<typeof EtatCivilGe>;
+
+/**
+ * Canton du lieu de travail. Zurich est prevu mais pas encore calcule : ses
+ * baremes 2026 officiels restent a integrer (engine/frontalier/zurich.ts).
+ */
+export const CantonTravail = z.enum(['GE', 'ZH']);
+export type CantonTravail = z.infer<typeof CantonTravail>;
 
 /** Ou la personne exerce son activite lucrative principale. */
 export const LieuActivite = z.enum(['SUISSE', 'FRANCE', 'AUCUNE']);
@@ -156,6 +168,8 @@ export const FrontalierRequestSchema = z
   .object({
     annee: z.literal(2026),
     etatCivil: EtatCivilGe,
+    canton: CantonTravail.default('GE'),
+    /** Commune genevoise du lieu de travail, lue seulement quand `canton` vaut GE. */
     communeTravail: CommuneGe.default('GENEVE'),
     contribuable: PersonneFrontalierSchema,
     conjoint: PersonneFrontalierSchema.optional(),
@@ -207,6 +221,10 @@ export interface CalculImpot {
   total: string;
 }
 
+/**
+ * Impot cantonal et communal. The split follows the Geneva return; another
+ * canton fills what it has (no LDIRPP reduction outside Geneva: zero).
+ */
 export interface CalculICC extends CalculImpot {
   impotBase: string;
   reductionLdirpp: string;
@@ -261,6 +279,11 @@ export interface DetailBienFrance {
 
 export interface FrontalierResult {
   annee: number;
+  canton: CantonTravail;
+  /** Nom du canton, pour les libelles (« Geneve »). */
+  nomCanton: string;
+  /** Administration a qui adresser la demande de TOU (« AFC-GE »). */
+  autorite: string;
   test90: Test90Result;
   deductions: LigneDeduction[];
   icc: CalculICC;

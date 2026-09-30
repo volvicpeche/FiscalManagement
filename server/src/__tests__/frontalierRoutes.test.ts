@@ -53,6 +53,20 @@ describe('POST /api/frontalier/run', () => {
     const body = res.json();
     expect(body.test90.eligible).toBe(true);
     expect(Number(body.totalTou)).toBeGreaterThan(0);
+    expect(body.canton).toBe('GE');
+    expect(body.autorite).toBe('AFC-GE');
+  });
+
+  it('should refuse Zurich with 422 until its official figures are in the engine', async () => {
+    const res = await server.inject({ method: 'POST', url: '/api/frontalier/run', payload: { ...requete, canton: 'ZH' } });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().code).toBe('CANTON_INDISPONIBLE');
+    expect(res.json().error).toMatch(/Zurich/);
+  });
+
+  it('should refuse a canton outside the list with 400', async () => {
+    const res = await server.inject({ method: 'POST', url: '/api/frontalier/run', payload: { ...requete, canton: 'VD' } });
+    expect(res.statusCode).toBe(400);
   });
 
   it('should reject a married household without a spouse, in French', async () => {
