@@ -78,3 +78,32 @@ describe('frontalierStore — canton de travail', () => {
     expect(store().canton).toBe('GE');
   });
 });
+
+describe('frontalierStore — profil du parcours', () => {
+  it('should start a list with an empty line when the answer becomes yes', () => {
+    store().updateProfil({ enfants: true, revenusFrance: true });
+    expect(store().enfants).toHaveLength(1);
+    expect(store().biensFrance).toHaveLength(1);
+  });
+
+  it('should leave children and French income out of the request on a no, and keep them', () => {
+    store().updateProfil({ enfants: true, revenusFrance: true });
+    store().updateFoyer({ autresRevenusEtrangersEur: '1000.00' });
+    store().updateProfil({ enfants: false, revenusFrance: false });
+
+    const req = buildFrontalierRequest(store());
+    expect(req.enfants).toEqual([]);
+    expect(req.biensFrance).toEqual([]);
+    expect(req.autresRevenusEtrangersEur).toBe('0.00');
+    expect(store().enfants).toHaveLength(1);
+    expect(store().biensFrance).toHaveLength(1);
+
+    store().updateProfil({ revenusFrance: true });
+    expect(buildFrontalierRequest(store()).biensFrance).toHaveLength(1);
+  });
+
+  it('should derive the profile of a scenario saved before the wizard', () => {
+    store().hydrate({ enfants: [{ age: 3, fraisGarde: '0.00' }], biensFrance: [], autresRevenusEtrangersEur: '500.00' });
+    expect(store().profil).toEqual({ enfants: true, revenusFrance: true });
+  });
+});
