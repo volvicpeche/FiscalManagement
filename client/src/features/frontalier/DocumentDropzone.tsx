@@ -8,23 +8,9 @@ import {
   useFrontalierStore,
   type QuiPersonne,
 } from '@/store/frontalierStore';
-import { Titre, inputClass } from './ui';
+import { inputClass } from './ui';
 import { LlmRequis, useLlmDisponible } from '@/features/parametres';
-
-const LIBELLES_TYPES: Record<DocumentType, string> = {
-  CERTIFICAT_SALAIRE: 'Certificat de salaire',
-  ATTESTATION_3A: 'Attestation 3e pilier A',
-  ATTESTATION_LPP_RACHAT: 'Rachat LPP',
-  ASSURANCE_MALADIE: 'Assurance maladie',
-  ASSURANCE_VIE: 'Assurance-vie',
-  INTERETS_DETTE: 'Interets de dette',
-  CHARGES_COPRO: 'Charges de copropriete',
-  TAXE_FONCIERE: 'Taxe fonciere',
-  FACTURE_TRAVAUX: 'Facture de travaux',
-  ATTESTATION_QUITTANCE_IS: 'Attestation impot a la source',
-  FRAIS_GARDE: 'Frais de garde',
-  AUTRE: 'Document non reconnu',
-};
+import { ETAPES, ETAPE_DU_DOCUMENT, LIBELLES_DOCUMENTS } from './parcours';
 
 /** A certificate or an annual statement replaces; a receipt among several adds up. */
 const REMPLACE: DocumentType[] = ['CERTIFICAT_SALAIRE', 'ATTESTATION_QUITTANCE_IS'];
@@ -42,7 +28,14 @@ interface Lecture {
 
 let prochainId = 0;
 
-export function DocumentDropzone() {
+/**
+ * Drop zone of one wizard step. `attendus` only says what to drop here: a
+ * document of another kind is still read and applied — `appliquerDocument`
+ * sends each figure where it belongs — the card just says where it goes.
+ * `personne` is the step's earner; outside a personal step, the model's
+ * guess decides.
+ */
+export function DocumentDropzone({ attendus, personne }: { attendus: DocumentType[]; personne?: QuiPersonne }) {
   const store = useFrontalierStore();
   const extraction = useExtractDocuments();
   const [lectures, setLectures] = useState<Lecture[]>([]);
@@ -62,7 +55,8 @@ export function DocumentDropzone() {
               id: prochainId++,
               res,
               retenus: new Set(e ? e.champs.map((_, i) => i) : []),
-              personne: e?.personne === 'CONJOINT' && store.etatCivil === 'MARIE' ? 'conjoint' : 'contribuable',
+              personne:
+                personne ?? (e?.personne === 'CONJOINT' && store.etatCivil === 'MARIE' ? 'conjoint' : 'contribuable'),
               bien: store.biensFrance.length > 0 ? 0 : -1,
               cumuler: e ? !REMPLACE.includes(e.type) : true,
               etat: 'a_valider',
@@ -92,9 +86,13 @@ export function DocumentDropzone() {
 
   return (
     <div className="space-y-4">
-      <Titre aide="Certificat de salaire, 3e pilier, assurances, interets, charges de copro, taxe fonciere, travaux...">
-        Lire mes justificatifs
-      </Titre>
+      <div>
+        <p className="text-sm font-semibold text-gray-900">Deposer mes justificatifs</p>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Attendus ici : {attendus.map((t) => LIBELLES_DOCUMENTS[t]).join(', ')}. Les montants lus sont a valider
+          avant de rejoindre le formulaire.
+        </p>
+      </div>
 
       {!actif && <LlmRequis usage="document" />}
 
@@ -155,6 +153,7 @@ export function DocumentDropzone() {
         <CarteLecture
           key={l.id}
           lecture={l}
+          attendus={attendus}
           marie={store.etatCivil === 'MARIE'}
           biens={store.biensFrance.map((b, i) => b.label || `Bien ${i + 1}`)}
           onChange={(patch) => maj(l.id, patch)}
@@ -167,12 +166,14 @@ export function DocumentDropzone() {
 
 function CarteLecture({
   lecture: l,
+  attendus,
   marie,
   biens,
   onChange,
   onAppliquer,
 }: {
   lecture: Lecture;
+  attendus: DocumentType[];
   marie: boolean;
   biens: string[];
   onChange: (patch: Partial<Lecture>) => void;
@@ -210,6 +211,7 @@ function CarteLecture({
     );
   }
 
+  const etapeAilleurs = attendus.includes(e.type) ? undefined : ETAPES.find((x) => x.id === ETAPE_DU_DOCUMENT[e.type]);
   const aPersonnel = e.champs.some((c) => cibleEstPersonnelle(c.cible)) || !!e.codeTarifIS;
   const aBien = e.champs.some((c) => cibleEstBien(c.cible));
   const basculer = (i: number) => {
@@ -224,11 +226,16 @@ function CarteLecture({
       <div>
         {entete}
         <p className="text-xs text-gray-500">
-          {LIBELLES_TYPES[e.type]}
+          {LIBELLES_DOCUMENTS[e.type]}
           {e.titulaire ? ` — ${e.titulaire}` : ''}
           {e.annee ? ` — ${e.annee}` : ''}
           {e.codeTarifIS ? ` — bareme ${e.codeTarifIS}` : ''}
         </p>
+        {etapeAilleurs && (
+          <p className="text-xs text-indigo-700 mt-1">
+            Ce document releve de l’etape « {etapeAilleurs.titre} » : ses montants y seront ranges.
+          </p>
+        )}
         {e.annee && e.annee !== 2026 && (
           <p className="text-xs text-amber-700 mt-1">Document de {e.annee}, la simulation porte sur 2026.</p>
         )}

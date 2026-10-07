@@ -1,6 +1,6 @@
 import type { BienFrance } from '@shared/frontalier.js';
 import { useFrontalierStore, type CategorieTravaux, type LigneTravaux } from '@/store/frontalierStore';
-import { SourceBadge, Titre, inputClass } from './ui';
+import { SourceBadge, Titre, formatEur, inputClass } from './ui';
 
 const CATEGORIES: Record<CategorieTravaux, { label: string; aide: string }> = {
   ENTRETIEN: {
@@ -16,9 +16,6 @@ const CATEGORIES: Record<CategorieTravaux, { label: string; aide: string }> = {
     aide: 'Ce qui ajoute ou ameliore : piece ou salle d’eau nouvelle, agrandissement, nette montee en gamme.',
   },
 };
-
-const formatEur = (n: number) =>
-  new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
 
 /** ICC forfait: owner-occupied homes only, on the rental value. */
 function forfaitIcc(b: BienFrance): number | null {

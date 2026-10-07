@@ -1,9 +1,9 @@
-import type { CantonTravail, CommuneGe, EtatCivilGe } from '@shared/frontalier.js';
+import type { CommuneGe } from '@shared/frontalier.js';
 import { useFrontalierStore } from '@/store/frontalierStore';
-import { CANTONS_TRAVAIL, LIBELLES_COMMUNES, SourceBadge, Titre, inputClass, labelClass } from './ui';
+import { LIBELLES_COMMUNES, SourceBadge, Titre, inputClass, labelClass } from './ui';
 
 export function FoyerForm() {
-  const { etatCivil, canton, communeTravail, tauxChangeEurChf, enfants, sources, updateFoyer, setEnfants } =
+  const { canton, communeTravail, tauxChangeEurChf, enfants, profil, sources, updateFoyer, setEnfants } =
     useFrontalierStore();
 
   const majEnfant = (i: number, p: Partial<(typeof enfants)[number]>) =>
@@ -11,116 +11,78 @@ export function FoyerForm() {
 
   return (
     <div className="space-y-4">
-      <Titre aide="Le test des 90 % et le bareme portent sur tout le foyer, conjoint compris.">Foyer</Titre>
+      <Titre aide="Le test des 90 % et le bareme portent sur tout le foyer, conjoint compris.">Lieu de travail et foyer</Titre>
 
-      <div className="grid grid-cols-2 gap-4">
+      {canton === 'GE' && (
         <div>
-          <label className={labelClass}>Canton de travail</label>
+          <label className={labelClass}>Commune de travail</label>
           <select
             className={inputClass}
-            value={canton}
-            onChange={(e) => updateFoyer({ canton: e.target.value as CantonTravail })}
+            value={communeTravail}
+            onChange={(e) => updateFoyer({ communeTravail: e.target.value as CommuneGe })}
           >
-            {Object.entries(CANTONS_TRAVAIL).map(([k, c]) => (
-              <option key={k} value={k} disabled={!c.disponible}>
-                {c.nom}
-                {c.disponible ? '' : ' — bientot'}
+            {Object.entries(LIBELLES_COMMUNES).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
               </option>
             ))}
           </select>
+          <p className="text-xs text-gray-400 mt-1">Ses centimes additionnels s’appliquent, pas ceux de votre domicile.</p>
         </div>
-        {canton === 'GE' && (
-          <div>
-            <label className={labelClass}>Commune de travail</label>
-            <select
-              className={inputClass}
-              value={communeTravail}
-              onChange={(e) => updateFoyer({ communeTravail: e.target.value as CommuneGe })}
-            >
-              {Object.entries(LIBELLES_COMMUNES).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-      </div>
-      <p className="text-xs text-gray-400">
-        Vaud, Bale, Berne, Neuchatel, Valais, Soleure et Jura relevent de l’accord de 1983 : le frontalier y est
-        impose en France, il n’y a pas de TOU a comparer. Zurich arrive des que ses baremes 2026 officiels seront
-        integres.
-      </p>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className={labelClass}>Etat civil</label>
-          <select
-            className={inputClass}
-            value={etatCivil}
-            onChange={(e) => updateFoyer({ etatCivil: e.target.value as EtatCivilGe })}
-          >
-            <option value="CELIBATAIRE">Celibataire / PACS</option>
-            <option value="MARIE">Marie(e)</option>
-          </select>
-        </div>
-      </div>
-      {etatCivil === 'CELIBATAIRE' && (
-        <p className="text-xs text-gray-400">
-          Un PACS n’est pas un partenariat enregistre suisse : chaque partenaire fait sa propre demande.
-        </p>
       )}
 
-      <div>
-        <div className="flex items-center justify-between">
-          <label className={labelClass}>Enfants a charge</label>
-          <button
-            type="button"
-            className="text-xs text-blue-600 hover:underline"
-            onClick={() => setEnfants([...enfants, { age: 5, fraisGarde: '0.00' }])}
-          >
-            + Ajouter
-          </button>
-        </div>
-        {enfants.length === 0 && <p className="text-xs text-gray-400">Aucun enfant.</p>}
-        {enfants.map((e, i) => (
-          <div key={i} className="grid grid-cols-[4rem_1fr_auto] gap-2 items-end mt-2">
-            <div>
-              <label className="block text-xs text-gray-500">Age</label>
-              <input
-                type="number"
-                min={0}
-                max={40}
-                className={inputClass}
-                value={e.age}
-                onChange={(ev) => majEnfant(i, { age: parseInt(ev.target.value) || 0 })}
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500">
-                Frais de garde (CHF/an) <SourceBadge fichier={sources[`enfants.${i}.fraisGarde`]} />
-              </label>
-              <input
-                type="number"
-                min={0}
-                step={500}
-                disabled={e.age >= 14}
-                className={`${inputClass} disabled:bg-gray-100`}
-                value={parseFloat(e.fraisGarde) || 0}
-                onChange={(ev) => majEnfant(i, { fraisGarde: (parseFloat(ev.target.value) || 0).toFixed(2) })}
-              />
-            </div>
+      {profil.enfants && (
+        <div>
+          <div className="flex items-center justify-between">
+            <label className={labelClass}>Enfants a charge</label>
             <button
               type="button"
-              className="px-2 py-2 text-sm text-gray-400 hover:text-red-600"
-              onClick={() => setEnfants(enfants.filter((_, j) => j !== i))}
-              title="Retirer"
+              className="text-xs text-blue-600 hover:underline"
+              onClick={() => setEnfants([...enfants, { age: 5, fraisGarde: '0.00' }])}
             >
-              ✕
+              + Ajouter
             </button>
           </div>
-        ))}
-      </div>
+          {enfants.length === 0 && <p className="text-xs text-gray-400">Aucun enfant.</p>}
+          {enfants.map((e, i) => (
+            <div key={i} className="grid grid-cols-[4rem_1fr_auto] gap-2 items-end mt-2">
+              <div>
+                <label className="block text-xs text-gray-500">Age</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={40}
+                  className={inputClass}
+                  value={e.age}
+                  onChange={(ev) => majEnfant(i, { age: parseInt(ev.target.value) || 0 })}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500">
+                  Frais de garde (CHF/an) <SourceBadge fichier={sources[`enfants.${i}.fraisGarde`]} />
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step={500}
+                  disabled={e.age >= 14}
+                  className={`${inputClass} disabled:bg-gray-100`}
+                  value={parseFloat(e.fraisGarde) || 0}
+                  onChange={(ev) => majEnfant(i, { fraisGarde: (parseFloat(ev.target.value) || 0).toFixed(2) })}
+                />
+              </div>
+              <button
+                type="button"
+                className="px-2 py-2 text-sm text-gray-400 hover:text-red-600"
+                onClick={() => setEnfants(enfants.filter((_, j) => j !== i))}
+                title="Retirer"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div>
         <label className={labelClass}>Cours EUR → CHF</label>

@@ -12,6 +12,7 @@ import type {
   FrontalierResult,
   PersonneFrontalier,
 } from '@shared/frontalier.js';
+import { ETAPES, type EtapeId } from '@/features/frontalier/parcours';
 
 /**
  * Inputs of the Geneva frontalier tab.
@@ -31,6 +32,17 @@ import type {
  */
 
 export type QuiPersonne = 'contribuable' | 'conjoint';
+
+/**
+ * Answers of the wizard's first step that the inputs cannot tell by
+ * themselves. A "no" hides the step and leaves its lines out of the request
+ * without deleting them, like the works switch.
+ */
+export interface ProfilFrontalier {
+  enfants: boolean;
+  /** Property in France (main home included) or other income outside Switzerland. */
+  revenusFrance: boolean;
+}
 
 export type CategorieTravaux = 'ENTRETIEN' | 'ENERGIE' | 'PLUS_VALUE';
 
@@ -140,6 +152,7 @@ export interface FrontalierInputs {
   autresRevenusEtrangersEur: string;
   travauxActifs: boolean;
   travaux: LigneTravaux[];
+  profil: ProfilFrontalier;
   sources: Record<string, string>;
 }
 
@@ -156,6 +169,7 @@ const DEFAULTS: FrontalierInputs = {
   autresRevenusEtrangersEur: '0.00',
   travauxActifs: false,
   travaux: [],
+  profil: { enfants: false, revenusFrance: false },
   sources: {},
 };
 
@@ -168,6 +182,14 @@ function sansSources(sources: Record<string, string>, prefix: string, keys: stri
 
 interface FrontalierStore extends FrontalierInputs {
   result: FrontalierResult | null;
+  /** Wizard position; not part of a saved scenario. */
+  etape: EtapeId;
+  etapesVues: EtapeId[];
+  setEtape: (e: EtapeId) => void;
+  /** Marks every step as seen, e.g. after loading a complete scenario. */
+  toutVoir: () => void;
+  /** A "yes" with nothing typed yet adds an empty line to start from. */
+  updateProfil: (p: Partial<ProfilFrontalier>) => void;
 
   updateFoyer: (p: Partial<Pick<FrontalierInputs, 'etatCivil' | 'canton' | 'communeTravail' | 'tauxChangeEurChf' | 'autresRevenusEtrangersEur'>>) => void;
   updatePersonne: (qui: QuiPersonne, p: Partial<PersonneFrontalier>) => void;
@@ -260,6 +282,20 @@ export function cibleEstPersonnelle(c: ChampCible): boolean {
 export const useFrontalierStore = create<FrontalierStore>((set, get) => ({
   ...DEFAULTS,
   result: null,
+  etape: 'profil',
+  etapesVues: ['profil'],
+
+  setEtape: (etape) =>
+    set((s) => ({ etape, etapesVues: s.etapesVues.includes(etape) ? s.etapesVues : [...s.etapesVues, etape] })),
+
+  toutVoir: () => set({ etapesVues: ETAPES.map((e) => e.id) }),
+
+  updateProfil: (p) =>
+    set((s) => ({
+      profil: { ...s.profil, ...p },
+      enfants: p.enfants && s.enfants.length === 0 ? [{ age: 5, fraisGarde: '0.00' }] : s.enfants,
+      biensFrance: p.revenusFrance && s.biensFrance.length === 0 ? [bienVide()] : s.biensFrance,
+    })),
 
   updateFoyer: (p) => set(p),
 
@@ -281,7 +317,8 @@ export const useFrontalierStore = create<FrontalierStore>((set, get) => ({
       sources: sansSources(s.sources, 'deductions', Object.keys(p)),
     })),
 
-  addBien: () => set((s) => ({ biensFrance: [...s.biensFrance, bienVide()] })),
+  // Adding a property or works answers the profile question by itself.
+  addBien: () => set((s) => ({ biensFrance: [...s.biensFrance, bienVide()], profil: { ...s.profil, revenusFrance: true } })),
 
   updateBien: (i, p) =>
     set((s) => ({
@@ -309,6 +346,7 @@ export const useFrontalierStore = create<FrontalierStore>((set, get) => ({
       const bien = biensFrance.findIndex((b) => b.usage === 'RESIDENCE_PRINCIPALE');
       return {
         biensFrance,
+        profil: { ...s.profil, revenusFrance: true },
         travauxActifs: true,
         travaux: [
           ...s.travaux,
@@ -337,6 +375,7 @@ export const useFrontalierStore = create<FrontalierStore>((set, get) => ({
       enfants: s.enfants.map((e) => ({ ...e })),
       travaux: [...s.travaux],
       travauxActifs: s.travauxActifs,
+      profil: { ...s.profil },
       sources: { ...s.sources },
     };
 
@@ -346,6 +385,7 @@ export const useFrontalierStore = create<FrontalierStore>((set, get) => ({
       next.biensFrance.push({ ...bienVide(), label: fileName.replace(/\.[^.]+$/, '') });
       indexBien = next.biensFrance.length - 1;
     }
+    if (champs.some((c) => cibleEstBien(c.cible))) next.profil.revenusFrance = true;
 
     for (const champ of champs) {
       const cible = CIBLES[champ.cible];
@@ -420,6 +460,11 @@ export const useFrontalierStore = create<FrontalierStore>((set, get) => ({
       travaux,
       travauxActifs: data.travauxActifs ?? travaux.length > 0,
       autresRevenusEtrangersEur: data.autresRevenusEtrangersEur ?? s.autresRevenusEtrangersEur,
+      // Scenarios saved before the wizard: the answers follow from what was typed.
+      profil: data.profil ?? {
+        enfants: (data.enfants ?? []).length > 0,
+        revenusFrance: (data.biensFrance ?? []).length > 0 || parseFloat(data.autresRevenusEtrangersEur ?? '0') > 0,
+      },
       sources: data.sources ?? {},
       // A loaded scenario has not been run yet.
       result: null,
@@ -441,12 +486,14 @@ export function selectInputs(s: FrontalierInputs): FrontalierInputs {
     autresRevenusEtrangersEur: s.autresRevenusEtrangersEur,
     travauxActifs: s.travauxActifs,
     travaux: s.travaux,
+    profil: s.profil,
     sources: s.sources,
   };
 }
 
 /** Per-property works totals, or nothing at all when the switch is off. */
 function biensAvecTravaux(s: FrontalierInputs): BienFrance[] {
+  if (!s.profil.revenusFrance) return [];
   return s.biensFrance.map((b, i) => {
     const totaux = { travauxEntretienEur: 0, travauxEnergieEur: 0, travauxPlusValueEur: 0 };
     if (s.travauxActifs) {
@@ -472,9 +519,9 @@ export function buildFrontalierRequest(s: FrontalierInputs): FrontalierRequestIn
     tauxChangeEurChf: s.tauxChangeEurChf,
     contribuable: s.contribuable,
     conjoint: s.etatCivil === 'MARIE' ? s.conjoint : undefined,
-    enfants: s.enfants,
+    enfants: s.profil.enfants ? s.enfants : [],
     deductions: s.deductions,
     biensFrance: biensAvecTravaux(s),
-    autresRevenusEtrangersEur: s.autresRevenusEtrangersEur,
+    autresRevenusEtrangersEur: s.profil.revenusFrance ? s.autresRevenusEtrangersEur : '0.00',
   };
 }

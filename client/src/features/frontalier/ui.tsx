@@ -15,6 +15,10 @@ export function formatChf(value: string | number, digits = 0): string {
   }).format(num);
 }
 
+export function formatEur(value: number): string {
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value);
+}
+
 export function formatPct(ratio: number, digits = 1): string {
   return `${(ratio * 100).toFixed(digits).replace('.', ',')} %`;
 }
