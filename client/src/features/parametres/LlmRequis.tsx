@@ -10,7 +10,7 @@ type Usage = 'annonce' | 'document';
  */
 export function useLlmDisponible(usage: Usage): boolean {
   const { data } = useLlmSettings();
-  return data ? data.disponible[usage] : true;
+  return data?.disponible?.[usage] ?? true;
 }
 
 const MESSAGES: Record<Usage, string> = {

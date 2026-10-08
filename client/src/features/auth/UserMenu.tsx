@@ -15,7 +15,9 @@ export function UserMenu() {
   const { data: llm } = useLlmSettings();
   const [menu, setMenu] = useState(false);
   const racine = useRef<HTMLDivElement>(null);
-  const sansCle = llm ? !llm.disponible.annonce : false;
+  // Optional chaining: a server older than the client sends no `disponible`,
+  // and this menu sits in the header — a throw here blanks the whole app.
+  const sansCle = llm?.disponible ? !llm.disponible.annonce : false;
   const email = user.email ?? 'Mon compte';
 
   useEffect(() => {
