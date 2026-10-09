@@ -1,8 +1,21 @@
 import type { ReactNode } from 'react';
 import { Logo } from '@/components/Logo';
 
-/** The frame shared by every screen shown before the app itself. */
-export function AuthCard({ titre, children }: { titre: string; children: ReactNode }) {
+/**
+ * The frame shared by every login screen. Full screen with the logo for the
+ * e-mail links; `integre` inside the app shell, which already shows both.
+ */
+export function AuthCard({ titre, children, integre }: { titre: string; children: ReactNode; integre?: boolean }) {
+  if (integre) {
+    return (
+      <div className="mx-auto w-full max-w-md">
+        <div className="bg-white rounded-lg border shadow-sm p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">{titre}</h2>
+          {children}
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
