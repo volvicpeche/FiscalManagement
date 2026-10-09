@@ -277,11 +277,23 @@ function buildAssocieStates(
         ? [implicitAssocie(userProfile, entity.ownershipShare ?? 1)]
         : [];
 
-  return inputs.map((input) => ({
-    input,
-    deficitVintages: [],
-    ccaBalance: d(input.apportCompteCourant),
-  }));
+  // A furnished letting owned directly has no company to lend to: what the
+  // form calls a compte courant is a personal apport like the capital — no
+  // debt, no interest, no repayment, nothing owed at the succession. The total
+  // invested is unchanged (computeFinancement adds both fields).
+  const lmnp = entity.type === 'LMNP';
+
+  return inputs.map((input) => {
+    const effectif = lmnp
+      ? {
+          ...input,
+          apportCapital: d(input.apportCapital).plus(input.apportCompteCourant).toFixed(2),
+          apportCompteCourant: '0.00',
+          tauxInteretCCA: 0,
+        }
+      : input;
+    return { input: effectif, deficitVintages: [], ccaBalance: d(effectif.apportCompteCourant) };
+  });
 }
 
 function flattenStructures(structures: StructureInput[]): { entity: StructureInput; parent?: string }[] {
