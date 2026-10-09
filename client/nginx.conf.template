@@ -141,9 +141,11 @@ server {
         include /etc/nginx/conf.d/security-headers.inc;
     }
 
-    # SPA: any non-API, non-file route falls back to index.html.
+    # SPA: each public page has its own HTML (title, description, preview
+    # tags generated at build time, vite.config.ts); anything else falls back
+    # to index.html.
     location / {
-        try_files $uri $uri/ /index.html;
+        try_files $uri $uri.html $uri/ /index.html;
         include /etc/nginx/conf.d/security-headers.inc;
     }
 }

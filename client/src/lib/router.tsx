@@ -1,4 +1,5 @@
 import { useSyncExternalStore, type AnchorHTMLAttributes, type MouseEvent } from 'react';
+import { CHEMINS, type Route } from './routes';
 
 /**
  * Just enough routing for a handful of pages: the path is the state,
@@ -6,36 +7,7 @@ import { useSyncExternalStore, type AnchorHTMLAttributes, type MouseEvent } from
  * nginx and Vite already fall back to index.html on any path.
  */
 
-export type Route =
-  | 'accueil'
-  | 'credit'
-  | 'rendement'
-  | 'interets'
-  | 'sci'
-  | 'frontalier'
-  | 'saisonnier'
-  | 'aide'
-  | 'connexion'
-  | 'inscription'
-  | 'mentions'
-  | 'confidentialite'
-  | 'confirmation';
-
-export const CHEMINS: Record<Route, string> = {
-  accueil: '/',
-  credit: '/outils/credit',
-  rendement: '/outils/rendement',
-  interets: '/outils/interets-composes',
-  sci: '/simulateurs/sci',
-  frontalier: '/simulateurs/frontalier',
-  saisonnier: '/simulateurs/saisonnier',
-  aide: '/aide',
-  connexion: '/connexion',
-  inscription: '/inscription',
-  mentions: '/mentions-legales',
-  confidentialite: '/confidentialite',
-  confirmation: '/auth/confirmer',
-};
+export { CHEMINS, type Route };
 
 const PAR_CHEMIN = new Map(Object.entries(CHEMINS).map(([route, chemin]) => [chemin, route as Route]));
 

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { naviguer, useRoute, type Route } from '@/lib/router';
 import { ROUTES_PROTEGEES, SIMULATEURS } from '@/lib/navigation';
+import { appliquerMeta } from '@/lib/seo';
 import { ConfirmPage, LoginPage, RequireAuth, useSession } from '@/features/auth';
 import { AccueilPage } from '@/features/accueil';
 import { CreditPage, InteretsPage, RendementPage } from '@/features/outils';
@@ -34,6 +35,8 @@ function Protegee({ route, children }: { route: Route; children: React.ReactNode
 function App() {
   const route = useRoute();
   const { supabase, user, chargement } = useSession();
+
+  useEffect(() => appliquerMeta(route), [route]);
 
   // Remember the last advanced simulator, to reopen it on the next visit.
   useEffect(() => {
