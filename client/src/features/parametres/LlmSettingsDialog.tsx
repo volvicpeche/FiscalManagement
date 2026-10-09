@@ -175,10 +175,10 @@ function Formulaire({ vue, onFermer }: { vue: LlmSettingsView; onFermer: () => v
         <input className={champ} value={model} onChange={(e) => setModel(e.target.value)} placeholder={LLM_DEFAULT_MODELS[provider] ?? ''} />
       </label>
 
-      {provider !== 'anthropic' && (
+      {provider === 'openai_compatible' && (
         <p className="text-xs text-gray-500">
-          La lecture des justificatifs (onglet Frontalier) envoie le document lui-meme au modele : elle ne fonctionne
-          qu'avec une cle Anthropic.
+          La lecture des justificatifs (onglet Frontalier) envoie le document lui-meme au modele : choisissez un modele
+          avec vision. Beaucoup d’API compatibles refusent les PDF ; une photo ou une capture passe alors.
         </p>
       )}
 

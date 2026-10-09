@@ -15,7 +15,7 @@ export function useLlmDisponible(usage: Usage): boolean {
 
 const MESSAGES: Record<Usage, string> = {
   annonce: 'L’analyse automatique utilise votre propre cle API (Anthropic, OpenAI, Gemini…).',
-  document: 'La lecture des justificatifs envoie vos documents a Claude : elle utilise votre propre cle API Anthropic.',
+  document: 'La lecture des justificatifs envoie vos documents au modele : elle utilise votre propre cle API (Anthropic, OpenAI, Gemini…).',
 };
 
 /** Shown in place of a disabled feature: why, and the way to fix it in one click. */

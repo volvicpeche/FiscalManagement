@@ -1,7 +1,7 @@
 import { ListingExtractionSchema, type ListingExtraction } from '@shared/listing.js';
 
 /** Strips a markdown code fence around a JSON blob, if the model added one despite instructions. */
-function stripCodeFence(raw: string): string {
+export function stripCodeFence(raw: string): string {
   const trimmed = raw.trim();
   const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
   return fenced ? fenced[1] : trimmed;

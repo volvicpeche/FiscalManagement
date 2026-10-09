@@ -1,5 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from 'openai';
 // Same v4 mirror trick as anthropicProvider.ts: the SDK helper wants the
 // zod/v4 API, the result is re-validated through the shared schema below.
 import * as zv4 from 'zod/v4';
@@ -9,16 +11,18 @@ import {
   DocumentType,
   type DocumentExtraction,
 } from '@shared/frontalier.js';
-import type { LlmConfig } from './config.js';
+import { fetchApiPublique, type LlmConfig } from './config.js';
+import { stripCodeFence } from './jsonMode.js';
 
 /**
  * Reads a Swiss or French tax document — salary certificate, 3a statement,
  * insurance premiums, loan interest, copro charges... — and returns the
  * amounts the frontalier form needs, each tagged with where it goes.
  *
- * Only Anthropic is wired: the listing extractor supports four providers
- * because it sends text, but this one sends the PDF or the photo itself, and
- * the other providers' document inputs differ enough to need their own code.
+ * The file itself goes to the model — PDF or photo — with the user's own
+ * provider. Anthropic gets a structured output; the others run in JSON mode
+ * with the shape spelled out (DOCUMENT_JSON_SHAPE), and every answer goes
+ * through the same shared schema.
  */
 
 const DocumentExtractionSchemaV4 = zv4.object({
@@ -74,6 +78,18 @@ Regles :
 - N'invente rien : un montant absent n'est pas extrait. Si le document n'est pas un justificatif utile, type AUTRE et champs vide.
 - Signale dans remarques toute ambiguite (annee differente, montant partiel, document illisible).`;
 
+/** For the JSON-mode providers, which get no schema object. */
+export const DOCUMENT_JSON_SHAPE = `Reponds UNIQUEMENT par un objet JSON, sans texte autour, de cette forme :
+{
+  "type": ${DocumentType.options.map((o) => `"${o}"`).join(' | ')},
+  "personne": "CONTRIBUABLE" | "CONJOINT" | "INCONNU",
+  "titulaire": string | null,
+  "annee": number | null,
+  "champs": [{ "cible": ${ChampCible.options.map((o) => `"${o}"`).join(' | ')}, "valeur": number, "devise": "CHF" | "EUR", "source": string }],
+  "codeTarifIS": string | null,
+  "remarques": string
+}`;
+
 const MEDIA_TYPES = {
   'application/pdf': 'document',
   'image/jpeg': 'image',
@@ -87,17 +103,9 @@ export function mediaTypeAccepte(mime: string): mime is MediaTypeAccepte {
   return mime in MEDIA_TYPES;
 }
 
-export async function extractDocument(
-  buffer: Buffer,
-  mime: MediaTypeAccepte,
-  fileName: string,
-  config: LlmConfig,
-): Promise<DocumentExtraction> {
-  if (config.provider !== 'anthropic') {
-    throw new Error('La lecture des justificatifs necessite une cle Anthropic.');
-  }
+const CONSIGNE = (fileName: string) => `Fichier : ${fileName}. Extrais les montants de ce justificatif.`;
 
-  const data = buffer.toString('base64');
+async function viaAnthropic(data: string, mime: MediaTypeAccepte, fileName: string, config: LlmConfig): Promise<unknown> {
   const fichier: Anthropic.ContentBlockParam =
     MEDIA_TYPES[mime] === 'document'
       ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } }
@@ -108,21 +116,104 @@ export async function extractDocument(
     model: config.model,
     max_tokens: 4000,
     system: DOCUMENT_SYSTEM_PROMPT,
-    messages: [
-      {
-        role: 'user',
-        content: [fichier, { type: 'text', text: `Fichier : ${fileName}. Extrais les montants de ce justificatif.` }],
-      },
-    ],
+    messages: [{ role: 'user', content: [fichier, { type: 'text', text: CONSIGNE(fileName) }] }],
     output_config: { format: zodOutputFormat(DocumentExtractionSchemaV4) },
   });
+  if (!response.parsed_output) throw new Error('La lecture du document a echoue (Anthropic)');
+  return response.parsed_output;
+}
 
-  if (!response.parsed_output) {
-    throw new Error('La lecture du document a echoue (Anthropic)');
+/** OpenAI, and any endpoint speaking its chat-completions format. */
+async function viaOpenAi(data: string, mime: MediaTypeAccepte, fileName: string, config: LlmConfig): Promise<unknown> {
+  const compatible = config.provider === 'openai_compatible';
+  if (compatible && !config.baseUrl) throw new Error("URL de l'API compatible OpenAI manquante");
+  const client = new OpenAI({
+    apiKey: config.apiKey,
+    baseURL: compatible ? config.baseUrl : undefined,
+    // A base URL typed by a user is guarded like for the listing analysis.
+    ...(compatible && config.source === 'utilisateur' && { fetch: fetchApiPublique, maxRetries: 0 }),
+  });
+  const url = `data:${mime};base64,${data}`;
+  const fichier: OpenAI.Chat.ChatCompletionContentPart =
+    MEDIA_TYPES[mime] === 'document'
+      ? { type: 'file', file: { filename: fileName, file_data: url } }
+      : { type: 'image_url', image_url: { url } };
+
+  let completion: OpenAI.Chat.ChatCompletion;
+  try {
+    completion = await client.chat.completions.create({
+      model: config.model,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: `${DOCUMENT_SYSTEM_PROMPT}\n\n${DOCUMENT_JSON_SHAPE}` },
+        { role: 'user', content: [fichier, { type: 'text', text: CONSIGNE(fileName) }] },
+      ],
+    });
+  } catch (err) {
+    // Most compatible endpoints read images but not PDF parts, and say so
+    // with a bare 400: point at the way around.
+    if (compatible && (err as { status?: number })?.status === 400) {
+      throw new Error(
+        MEDIA_TYPES[mime] === 'document'
+          ? `Ce modele refuse les PDF. Deposez une photo ou une capture du document, ou utilisez un modele qui lit les PDF.`
+          : `Ce modele refuse les images : choisissez un modele avec vision dans « Cle LLM ».`,
+      );
+    }
+    throw err;
   }
+  const raw = completion.choices[0]?.message?.content;
+  if (!raw) throw new Error('La lecture du document a echoue (reponse vide)');
+  return parseJson(raw);
+}
 
-  // A negative amount is a misread, not a deduction: drop it rather than
-  // failing the whole document.
-  const raw = response.parsed_output;
-  return DocumentExtractionSchema.parse({ ...raw, champs: raw.champs.filter((c) => c.valeur >= 0) });
+async function viaGemini(data: string, mime: MediaTypeAccepte, fileName: string, config: LlmConfig): Promise<unknown> {
+  const model = new GoogleGenerativeAI(config.apiKey).getGenerativeModel({
+    model: config.model,
+    systemInstruction: `${DOCUMENT_SYSTEM_PROMPT}\n\n${DOCUMENT_JSON_SHAPE}`,
+    generationConfig: { responseMimeType: 'application/json' },
+  });
+  const result = await model.generateContent([{ inlineData: { mimeType: mime, data } }, { text: CONSIGNE(fileName) }]);
+  const raw = result.response.text();
+  if (!raw) throw new Error('La lecture du document a echoue (Gemini)');
+  return parseJson(raw);
+}
+
+function parseJson(raw: string): unknown {
+  try {
+    return JSON.parse(stripCodeFence(raw));
+  } catch {
+    throw new Error("Le modele n'a pas renvoye un JSON valide");
+  }
+}
+
+/**
+ * Validates a model's answer. A negative amount is a misread, not a
+ * deduction: it is dropped rather than failing the whole document.
+ */
+export function validerExtraction(brut: unknown): DocumentExtraction {
+  const champs = (brut as { champs?: unknown })?.champs;
+  const filtre = Array.isArray(champs)
+    ? { ...(brut as object), champs: champs.filter((c) => !(typeof c?.valeur === 'number' && c.valeur < 0)) }
+    : brut;
+  const parsed = DocumentExtractionSchema.safeParse(filtre);
+  if (!parsed.success) throw new Error('La reponse du modele ne correspond pas au format attendu');
+  return parsed.data;
+}
+
+export async function extractDocument(
+  buffer: Buffer,
+  mime: MediaTypeAccepte,
+  fileName: string,
+  config: LlmConfig,
+): Promise<DocumentExtraction> {
+  const data = buffer.toString('base64');
+  switch (config.provider) {
+    case 'anthropic':
+      return validerExtraction(await viaAnthropic(data, mime, fileName, config));
+    case 'openai':
+    case 'openai_compatible':
+      return validerExtraction(await viaOpenAi(data, mime, fileName, config));
+    case 'gemini':
+      return validerExtraction(await viaGemini(data, mime, fileName, config));
+  }
 }

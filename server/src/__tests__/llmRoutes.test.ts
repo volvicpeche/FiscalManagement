@@ -60,7 +60,7 @@ describe.skipIf(!hasDb)('routes /api/me/llm (Postgres)', () => {
       payload: `--${boundary}\r\nContent-Disposition: form-data; name="f"; filename="a.pdf"\r\nContent-Type: application/pdf\r\n\r\n%PDF\r\n--${boundary}--\r\n`,
     });
     expect(res.statusCode).toBe(403);
-    expect(res.json().error).toMatch(/Anthropic/);
+    expect(res.json()).toMatchObject({ code: 'LLM_NON_CONFIGURE', error: expect.stringMatching(/justificatifs.*Cle LLM/) });
   });
 
   it('should save, show only the last 4 characters, and delete', async () => {
