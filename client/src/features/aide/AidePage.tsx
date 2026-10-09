@@ -299,6 +299,13 @@ const SECTIONS: Section[] = [
             applique au salaire suisse. Les charges d’un bien en France (copro, travaux, interets)
             abaissent donc ce taux.
           </Terme>
+          <Terme mot="Taux effectif (cote francais)">
+            le miroir de la reserve de progression. Le salaire suisse est exonere en France mais
+            compte pour le taux : l’impot francais vaut l’impot sur le revenu mondial multiplie par la
+            part francaise. Des loyers, un LMNP ou une SCI a l’IR paient donc a peu pres le taux moyen,
+            pas la tranche marginale de 41 %. Saisissez le salaire suisse dans le champ dedie, pas
+            dans les autres revenus.
+          </Terme>
           <Terme mot="ICC et IFD">
             l’impot cantonal et communal (bareme du canton, commune du lieu de travail) et l’impot
             federal direct. La TOU additionne les deux.

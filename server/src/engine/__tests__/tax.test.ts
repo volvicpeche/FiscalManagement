@@ -11,6 +11,8 @@ import {
   computeYearlyDepreciation,
   applyISDeficit,
   computeSurtaxePlusValue,
+  computeIRTauxEffectif,
+  computeDividendBareme,
 } from '../tax.js';
 import { PLAFOND_DEMI_PART, PLAFOND_PARENT_ISOLE } from '../baremes.js';
 
@@ -83,6 +85,34 @@ describe('computeIR — parent isole', () => {
 
     expect(avantage).toBeGreaterThan(PLAFOND_DEMI_PART.toNumber() * 2 - 1);
     expect(avantage).toBeCloseTo(PLAFOND_PARENT_ISOLE.toNumber(), 0);
+  });
+});
+
+describe('computeIRTauxEffectif', () => {
+  const salaireSuisse = new Decimal('120000');
+
+  it('should charge the French share of the tax on the worldwide income', () => {
+    // IR(130 000) for a single person = 37 100,52 ; French share 10 / 130.
+    const ir = computeIRTauxEffectif(new Decimal('10000'), salaireSuisse, 'SINGLE', 0);
+    expect(ir.toNumber()).toBeCloseTo(2853.89, 2);
+  });
+
+  it('should fall back to the plain bareme without exempt income', () => {
+    const revenu = new Decimal('45000');
+    expect(computeIRTauxEffectif(revenu, new Decimal(0), 'MARRIED', 2).toNumber()).toBe(
+      computeIR(revenu, 'MARRIED', 2).toNumber(),
+    );
+  });
+
+  it('should owe nothing in France on exempt income alone', () => {
+    expect(computeIRTauxEffectif(new Decimal(0), salaireSuisse, 'SINGLE', 0).toNumber()).toBe(0);
+  });
+
+  it('should carry the taux effectif into the bareme option of a dividend', () => {
+    // 10 000 of dividend, 6 000 taxable after the 40 % allowance, and the PS.
+    const frontalier = computeDividendBareme(new Decimal('10000'), new Decimal(0), 'SINGLE', 0, 'SWISS_EXEMPT', salaireSuisse);
+    const ir = computeIRTauxEffectif(new Decimal('6000'), salaireSuisse, 'SINGLE', 0);
+    expect(frontalier.toNumber()).toBeCloseTo(ir.toNumber() + 750, 2);
   });
 });
 

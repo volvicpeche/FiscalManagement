@@ -1,6 +1,6 @@
 import Decimal from 'decimal.js';
 import type { AssocieInput } from '@shared/schemas.js';
-import { computeIR, getLmnpSocialChargeRate } from './tax.js';
+import { computeIRFoyer, getLmnpSocialChargeRate } from './tax.js';
 import type { DeficitVintage } from './associes.js';
 import {
   LMNP_DUREE_REPORT_DEFICIT,
@@ -199,8 +199,8 @@ export function computeAssocieLMNP(
   const baseIR = ssi?.deductibles
     ? Decimal.max(new Decimal(0), base.minus(cotisationsSociales))
     : base;
-  const ir = computeIR(autresRevenus.plus(baseIR), associe.maritalStatus, associe.childrenCount).minus(
-    computeIR(autresRevenus, associe.maritalStatus, associe.childrenCount),
+  const ir = computeIRFoyer(autresRevenus.plus(baseIR), associe).minus(
+    computeIRFoyer(autresRevenus, associe),
   );
 
   return { ir, ps, cotisationsSociales, total: ir.plus(ps).plus(cotisationsSociales) };

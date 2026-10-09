@@ -137,6 +137,22 @@ function AssocieCard({ associe, index, expanded, canRemove, onToggle }: CardProp
             </div>
 
             <div className="col-span-2">
+              <label className={labelClass}>Salaire suisse, frontalier (EUR/an)</label>
+              <input
+                type="number"
+                step={1000}
+                min={0}
+                className={inputClass}
+                value={parseFloat(associe.revenusExoneres ?? '0')}
+                onChange={(e) => set({ revenusExoneres: toDecimalStr(e.target.value) })}
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Net imposable, converti en euros. Impose en Suisse, il ne va pas dans les autres
+                revenus : il fixe seulement le taux effectif applique aux revenus francais.
+              </p>
+            </div>
+
+            <div className="col-span-2">
               <label className={labelClass}>Prelevements sociaux</label>
               <select
                 className={inputClass}

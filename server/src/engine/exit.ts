@@ -3,7 +3,7 @@ import type { AssocieInput, SocialChargeRegime } from '@shared/schemas.js';
 import {
   computeCapitalGainIS,
   computeCapitalGainIR,
-  computeIR,
+  computeIRFoyer,
   computePFU,
   getSocialChargeRate,
 } from './tax.js';
@@ -235,11 +235,9 @@ export function computeExitLMP(
 
   // Short-term: added to the operator's income, so taxed differentially.
   const autresRevenus = new Decimal(associe.autresRevenus);
-  const irCourtTerme = computeIR(
-    autresRevenus.plus(courtTerme),
-    associe.maritalStatus,
-    associe.childrenCount,
-  ).minus(computeIR(autresRevenus, associe.maritalStatus, associe.childrenCount));
+  const irCourtTerme = computeIRFoyer(autresRevenus.plus(courtTerme), associe).minus(
+    computeIRFoyer(autresRevenus, associe),
+  );
   const tnsCourtTerme = courtTerme.mul(tauxCotisationsTNS);
 
   // Long-term: flat 12,8 % plus social charges.

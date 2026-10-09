@@ -255,6 +255,7 @@ function implicitAssocie(userProfile: UserProfile, ownershipShare: number): Asso
     maritalStatus: userProfile.maritalStatus,
     childrenCount: userProfile.childrenCount,
     autresRevenus: userProfile.autresRevenus ?? '0.00',
+    revenusExoneres: userProfile.revenusExoneres ?? '0.00',
     socialChargeRegime: userProfile.socialChargeRegime ?? 'STANDARD',
     apportCapital: '0.00',
     apportCompteCourant: '0.00',
@@ -1004,6 +1005,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
                 benef.maritalStatus,
                 benef.childrenCount,
                 regime,
+                benef.revenusExoneres ?? '0.00',
               );
               const bestTax = Decimal.min(pfuTax, baremeTax);
               const net = part.minus(bestTax);

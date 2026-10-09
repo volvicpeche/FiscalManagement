@@ -211,6 +211,60 @@ export function computeIR(
   return grossTax;
 }
 
+// ─── Taux effectif (revenus exoneres retenus pour le taux) ───────────────────
+
+/**
+ * IR due in France when the household also earns income exempt in France but
+ * retained for the rate — the Swiss salary of a frontalier working in Geneva
+ * (art. 25 A of the Franco-Swiss convention: a tax credit equal to the French
+ * tax on that salary). The tax is computed on the worldwide income, and only
+ * the French share of it is due: IR(F + E) × F / (F + E).
+ *
+ * Adding French income therefore costs close to the AVERAGE rate of the
+ * worldwide income, not the marginal one. Treating the Swiss salary as French
+ * income (the plain differential) taxed a frontalier's rents at 41 % instead
+ * of roughly 28 % at 120 000 EUR of salary.
+ *
+ * @aVerifier The decote is computed on the worldwide income here, where it is
+ * nil for any real frontalier salary; whether it should then apply to the
+ * reduced French tax is not modelled. It would only matter for a French tax
+ * under about 2 000 EUR.
+ */
+export function computeIRTauxEffectif(
+  revenuFrancais: Decimal,
+  revenusExoneres: Decimal,
+  maritalStatus: MaritalStatus,
+  childrenCount: number,
+): Decimal {
+  if (revenusExoneres.lte(0)) return computeIR(revenuFrancais, maritalStatus, childrenCount);
+  if (revenuFrancais.lte(0)) return new Decimal(0);
+
+  const mondial = revenuFrancais.plus(revenusExoneres);
+  return computeIR(mondial, maritalStatus, childrenCount).mul(revenuFrancais).div(mondial);
+}
+
+/** The tax household an IR computation needs, exempt income included. */
+export interface FoyerIR {
+  maritalStatus: MaritalStatus;
+  childrenCount: number;
+  /** Income exempt in France but retained for the rate (EUR). */
+  revenusExoneres?: Decimal.Value;
+}
+
+/**
+ * IR of a household on its French taxable income. Every per-associe
+ * DIFFERENTIAL in the engine goes through here, so that the taux effectif of
+ * a frontalier applies to SCI, LMNP, LMP and dividend income alike.
+ */
+export function computeIRFoyer(revenuFrancais: Decimal, foyer: FoyerIR): Decimal {
+  return computeIRTauxEffectif(
+    revenuFrancais,
+    new Decimal(foyer.revenusExoneres ?? 0),
+    foyer.maritalStatus,
+    foyer.childrenCount,
+  );
+}
+
 // ─── PFU (Flat Tax on Dividends) ─────────────────────────────────────────────
 
 /**
@@ -225,6 +279,9 @@ export function computePFU(grossDividend: Decimal, regime: SocialChargeRegime): 
 /**
  * Computes dividend tax under Bareme option.
  * 40% abatement on gross, then IR bareme + PS on full gross.
+ *
+ * @param revenusExoneres - Income exempt in France but retained for the rate
+ *   (taux effectif). The flat tax ignores it; the bareme does not.
  */
 export function computeDividendBareme(
   grossDividend: Decimal,
@@ -232,6 +289,7 @@ export function computeDividendBareme(
   maritalStatus: MaritalStatus,
   childrenCount: number,
   regime: SocialChargeRegime,
+  revenusExoneres: Decimal.Value = 0,
 ): Decimal {
   const psRate = getPfuSocialChargeRate(regime);
   const ps = grossDividend.mul(psRate);
@@ -241,8 +299,9 @@ export function computeDividendBareme(
   const totalIncome = otherIncome.plus(taxableDiv);
 
   // IR on total income vs. IR on other income only
-  const irTotal = computeIR(totalIncome, maritalStatus, childrenCount);
-  const irBase = computeIR(otherIncome, maritalStatus, childrenCount);
+  const foyer: FoyerIR = { maritalStatus, childrenCount, revenusExoneres };
+  const irTotal = computeIRFoyer(totalIncome, foyer);
+  const irBase = computeIRFoyer(otherIncome, foyer);
   const irOnDiv = irTotal.minus(irBase);
 
   return irOnDiv.plus(ps);
