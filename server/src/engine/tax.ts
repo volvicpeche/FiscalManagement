@@ -6,6 +6,8 @@ import {
   PLAFOND_PARENT_ISOLE,
   DECOTE_SEUIL_CELIBATAIRE,
   DECOTE_SEUIL_COUPLE,
+  DECOTE_FORFAIT_CELIBATAIRE,
+  DECOTE_FORFAIT_COUPLE,
   DECOTE_TAUX,
   IS_SEUIL_TAUX_REDUIT,
   IS_TAUX_REDUIT,
@@ -185,12 +187,15 @@ export function computeIR(
     grossTax = taxWithQF;
   }
 
-  // Decote
+  // Decote: the FORFAIT minus 45.25 % of the gross tax, below the threshold.
+  // Subtracting the threshold itself wiped out the tax of modest households
+  // and made it jump at the threshold.
   const isCouple = maritalStatus !== 'SINGLE';
   const decoteThreshold = isCouple ? DECOTE_SEUIL_COUPLE : DECOTE_SEUIL_CELIBATAIRE;
+  const decoteForfait = isCouple ? DECOTE_FORFAIT_COUPLE : DECOTE_FORFAIT_CELIBATAIRE;
 
   if (grossTax.lt(decoteThreshold)) {
-    const decote = decoteThreshold.minus(grossTax.mul(DECOTE_TAUX));
+    const decote = Decimal.max(new Decimal(0), decoteForfait.minus(grossTax.mul(DECOTE_TAUX)));
     grossTax = Decimal.max(new Decimal(0), grossTax.minus(decote));
   }
 
