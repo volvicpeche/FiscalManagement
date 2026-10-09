@@ -63,6 +63,8 @@ const ICONES: Record<Route, ReactNode> = {
   aide: null,
   connexion: null,
   inscription: null,
+  mentions: null,
+  confidentialite: null,
   confirmation: null,
 };
 

@@ -4,6 +4,7 @@ import { useFermeture } from './useFermeture';
 import { Lien, useRoute, type Route } from '@/lib/router';
 import { OUTILS, SIMULATEURS, type EntreeNav } from '@/lib/navigation';
 import { UserMenu, useSession } from '@/features/auth';
+import { GITHUB_DEPOT } from '@/features/legal';
 
 const lienPlat = (actif: boolean) =>
   `px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors ${
@@ -160,6 +161,23 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
 
       <main className="mx-auto max-w-[1800px] px-4 py-6">{children}</main>
+
+      <footer className="border-t bg-white print:hidden">
+        <div className="mx-auto flex max-w-[1800px] flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-5 text-sm text-gray-500">
+          <p>Patrimonia — simulations indicatives, pas un conseil.</p>
+          <nav className="flex flex-wrap gap-x-5 gap-y-1">
+            <Lien vers="mentions" className="hover:text-gray-900">
+              Mentions legales
+            </Lien>
+            <Lien vers="confidentialite" className="hover:text-gray-900">
+              Confidentialite
+            </Lien>
+            <a href={GITHUB_DEPOT} target="_blank" rel="noopener noreferrer" className="hover:text-gray-900">
+              Code source
+            </a>
+          </nav>
+        </div>
+      </footer>
     </div>
   );
 }
