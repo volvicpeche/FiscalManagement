@@ -6,7 +6,7 @@ import { getSupabase } from './supabase';
  * A drop-in replacement: each hook keeps its own error handling. getSession()
  * refreshes an expired token before returning it. A 401 means the session is
  * gone for good (revoked, refresh failed): signing out sends the user back to
- * the login screen (AuthGate).
+ * the home page (AuthProvider reloads on SIGNED_OUT).
  */
 export async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
   const supabase = await getSupabase();

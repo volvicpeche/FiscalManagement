@@ -63,6 +63,34 @@ function Comparaison({
 
 const SECTIONS: Section[] = [
   {
+    id: 'outils',
+    titre: 'Les outils rapides',
+    contenu: (
+      <div className="space-y-3">
+        <p className="text-sm text-gray-700 leading-relaxed">
+          Trois calculettes, utilisables sans compte. Elles calculent dans votre navigateur : rien n’est envoye au
+          serveur, et vos saisies restent sur cet appareil.
+        </p>
+        <Terme mot="Credit immobilier">
+          la mensualite et le cout total d’un pret a mensualites constantes, l’assurance etant calculee sur le
+          capital emprunte, comme le font la plupart des banques. L’onglet « Combien emprunter ? » part de vos
+          revenus : 35 % d’endettement au plus, assurance comprise, sur 25 ans au plus (norme HCSF). Le TAEG
+          n’est pas calcule.
+        </Terme>
+        <Terme mot="Rendement locatif">
+          le rendement brut (loyer sur prix, le chiffre des annonces), le rendement net de charges et de vacance
+          sur le cout total, et le cash-flow mensuel une fois le credit paye. Tout est avant impot : la fiscalite
+          depend du montage, et c’est le role du simulateur SCI / Holding.
+        </Terme>
+        <Terme mot="Interets composes">
+          un capital et des versements de fin de mois. En capitalisation mensuelle, le taux est divise par 12
+          chaque mois ; en annuelle, les interets sont credites une fois par an, chaque versement rapportant au
+          prorata des mois passes sur le compte, comme un livret.
+        </Terme>
+      </div>
+    ),
+  },
+  {
     id: 'sci',
     titre: 'Qu’est-ce qu’une SCI ?',
     contenu: (
@@ -382,9 +410,9 @@ const SECTIONS: Section[] = [
         </p>
         <ul className="text-sm text-gray-700 space-y-2 list-disc pl-5">
           <li>
-            <strong>La revente n’est pas modelisee.</strong> Le TRI utilise la valeur du patrimoine
-            au terme comme si elle etait encaissable telle quelle. L’impot sur la plus-value de
-            sortie — precisement la ou l’IS coute cher — n’est pas deduit.
+            <strong>La revente est supposee au terme, a la valeur projetee.</strong> L’impot de
+            sortie est bien chiffre (« TRI net de revente »), mais le prix de vente reel, la
+            negociation et les frais d’agence restent des hypotheses.
           </li>
           <li>
             <strong>Les couts de structure sont indicatifs.</strong> Remplacez-les par vos propres

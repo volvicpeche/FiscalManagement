@@ -75,7 +75,7 @@ export function LoginPage({
     try {
       const adresse = email.trim();
       if (onglet === 'connexion') {
-        // Success needs no handling here: AuthGate hears the new session.
+        // Success needs no handling here: AuthProvider hears the new session.
         const { error } = await supabase.auth.signInWithPassword({ email: adresse, password: motDePasse });
         if (error) throw error;
       } else if (onglet === 'inscription') {

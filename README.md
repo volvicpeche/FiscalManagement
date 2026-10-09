@@ -1,6 +1,9 @@
 # Patrimonia
 
-Simulateur patrimonial et fiscal — structures locatives (SCI/Holding) et location saisonniere (LMP), conforme au droit fiscal francais 2026. Voir `CLAUDE.md` pour l'architecture detaillee.
+Simulateur patrimonial et fiscal, conforme au droit fiscal francais 2026. Voir `CLAUDE.md` pour l'architecture detaillee.
+
+- **Outils rapides, sans compte** : credit immobilier (mensualite, cout, capacite d'emprunt), rendement locatif, interets composes. Calcules dans le navigateur, sans appel au serveur.
+- **Simulateurs avances, avec un compte** : SCI/Holding (IR, IS, holding, LMNP compares sur 30 ans), frontalier Suisse (TOU contre impot a la source, pas a pas), location saisonniere (LMNP/LMP). Scenarios enregistres par utilisateur.
 
 ## Installation
 
@@ -18,7 +21,7 @@ cp server/.env.example server/.env
 
 | Variable | Requise | Usage |
 | --- | --- | --- |
-| `LLM_PROVIDER` | Non (defaut `anthropic`) | Alimente le bouton « Analyser » de l'onglet *Location saisonniere* (extraction d'une annonce + estimation saisonniere). Sans cle valide pour le fournisseur choisi, ce bouton renvoie une erreur mais le reste de l'app (comparateur SCI/Holding, saisie manuelle des saisons) fonctionne normalement — rien d'autre dans l'app n'appelle un LLM. |
+| `LLM_PROVIDER` | Non (defaut `anthropic`) | Fournisseur de la cle LLM du serveur (ci-dessous), qui ne sert qu'aux comptes de `LLM_SERVER_KEY_EMAILS`. Deux fonctions appellent un LLM : l'analyse d'annonce (*Location saisonniere*) et la lecture des justificatifs (*Frontalier Suisse*). Sans cle, elles sont grisees ; tout le reste fonctionne. |
 | `SUPABASE_URL` | **Oui** | Projet Supabase : comptes utilisateurs. Sans elle, le serveur refuse de demarrer. |
 | `SUPABASE_ANON_KEY` | **Oui** | Cle **publishable** du projet (`sb_publishable_…`, ou a defaut l'ancienne cle `anon`), transmise au navigateur pour la page de connexion. Jamais la cle `secret`. |
 | `SUPABASE_JWT_SECRET` | Rarement | Ancien secret JWT, seulement si le bilan de demarrage le demande (voir `DEPLOY.md`, etape 2 bis). |
@@ -27,7 +30,7 @@ cp server/.env.example server/.env
 | `LLM_SERVER_KEY_EMAILS` | Non | Comptes autorises a utiliser la cle LLM du serveur (ci-dessous) quand ils n'ont pas la leur. Vide : personne. |
 | `LLM_QUOTA_JOUR`, `MAX_SCENARIOS` | Non | Analyses par jour sur la cle du serveur, et nombre de scenarios, par utilisateur. |
 
-**Chaque utilisateur utilise sa propre cle LLM**, saisie dans l'application (bouton « Cle LLM ») : Anthropic, OpenAI, Gemini ou une API compatible OpenAI. La lecture des justificatifs (onglet Frontalier) demande une cle Anthropic.
+**Chaque utilisateur utilise sa propre cle LLM**, saisie dans l'application (bouton « Cle LLM ») : Anthropic, OpenAI, Gemini ou une API compatible OpenAI. La meme cle sert a l'analyse d'annonce et a la lecture des justificatifs (onglet Frontalier) ; avec une API compatible OpenAI, choisir un modele avec vision.
 
 La cle du serveur, ci-dessous, ne sert qu'aux comptes de `LLM_SERVER_KEY_EMAILS`. `LLM_PROVIDER` choisit le fournisseur, chacun avec sa propre cle/modele dans `server/.env.example`.
 

@@ -409,9 +409,10 @@ Vérifiez depuis votre PC :
 curl http://<IP_DU_VPS>/api/health     # → {"status":"ok"}
 ```
 
-puis ouvrez `http://<IP_DU_VPS>/` dans le navigateur : la page de connexion
-s'affiche. Créez votre compte (onglet **Créer un compte**), cliquez sur le
-lien reçu par e-mail, connectez-vous.
+puis ouvrez `http://<IP_DU_VPS>/` dans le navigateur : la page d'accueil
+s'affiche, et les outils rapides fonctionnent déjà sans compte. Créez votre
+compte (bouton **Créer un compte**, en haut à droite), cliquez sur le lien reçu
+par e-mail, connectez-vous : les simulateurs avancés se débloquent.
 
 Si vous aviez des scénarios enregistrés avant le passage à Supabase, importez-les
 maintenant (« Importer les anciens scénarios », plus bas).
@@ -581,7 +582,7 @@ curl -sI https://www.<DOMAINE>/ | head -3  # → 301 vers https://<DOMAINE>/
 ```
 
 Puis ouvrez `https://<DOMAINE>/` : cadenas dans la barre d'adresse, puis
-page de connexion de l'application.
+page d'accueil de l'application.
 
 Dans Supabase (**Authentication → URL Configuration → Redirect URLs**),
 ajoutez `https://<DOMAINE>/auth/confirmer**` si vous aviez commencé en HTTP.
