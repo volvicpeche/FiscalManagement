@@ -55,7 +55,7 @@ export function Assistant() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex items-start gap-3">
         <BarreEtapes
           etapes={visibles}
           courante={courante.id}
@@ -63,9 +63,12 @@ export function Assistant() {
           avecAlertes={(id) => alertes(id, store).length > 0}
           onSelect={aller}
         />
-        <details className="shrink-0 print:hidden sm:w-72">
-          <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-900">Mes scenarios</summary>
-          <div className="mt-2 rounded-lg border bg-white p-4">
+        {/* Opens over the page: reserving its width squeezed the step bar. */}
+        <details className="relative shrink-0 print:hidden">
+          <summary className="cursor-pointer whitespace-nowrap py-1 text-sm text-gray-600 hover:text-gray-900">
+            Mes scenarios
+          </summary>
+          <div className="absolute right-0 z-10 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-lg border bg-white p-4 shadow-lg">
             <ScenarioManager
               kind="frontalier"
               getData={() => ({ ...selectInputs(store) })}

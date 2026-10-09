@@ -19,11 +19,11 @@ export function BarreEtapes({
 }) {
   const index = etapes.findIndex((e) => e.id === courante);
   return (
-    <nav aria-label="Etapes" className="min-w-0 print:hidden">
+    <nav aria-label="Etapes" className="min-w-0 flex-1 print:hidden">
       <p className="text-xs text-gray-500 sm:hidden">
         Etape {index + 1} sur {etapes.length}
       </p>
-      <ol className="mt-1 flex gap-1 overflow-x-auto pb-1 sm:mt-0">
+      <ol className="mt-1 flex gap-1 overflow-x-auto pb-1 sm:mt-0 sm:flex-wrap sm:overflow-visible sm:pb-0">
         {etapes.map((e, i) => {
           const actif = e.id === courante;
           const vue = vues.includes(e.id);
