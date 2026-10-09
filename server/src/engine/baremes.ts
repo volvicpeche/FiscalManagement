@@ -7,42 +7,50 @@ import Decimal from 'decimal.js';
  * tax.ts and succession.ts, which made it impossible to tell at a glance
  * which vintage the engine was actually running.
  *
- * ⚠️ ANNEE D'IMPOSITION EN VIGUEUR CI-DESSOUS : 2024 (revenus 2023).
+ * ANNEE D'IMPOSITION EN VIGUEUR CI-DESSOUS : 2026 (revenus 2025).
  *
- * The barème below is internally consistent — brackets, decote and quotient
- * ceilings all belong to the same year — but it is NOT the 2026 one the
- * project documentation claims. Updating it means changing `ANNEE_BAREME`
- * and the values in this file only; nothing else in the engine hard-codes a
- * rate. The figures to bring back from the BOFiP are marked `@aVerifier`.
+ * IR : loi de finances pour 2026, art. 4 (revalorisation de 0,9 %), repris
+ * par l'actualite BOFiP du 7 avril 2026 (BOI-IR-LIQ-20-10). Updating the
+ * vintage means changing `ANNEE_BAREME` and the values in this file only;
+ * nothing else in the engine hard-codes a rate. Figures not read in an
+ * official text are marked `@aVerifier`.
  */
 
 /** Vintage the values below belong to. Bump it with the values, never alone. */
-export const ANNEE_BAREME = 2024;
+export const ANNEE_BAREME = 2026;
 
 // ─── IR — bareme progressif ──────────────────────────────────────────────────
 
-/** @aVerifier Seuils de tranches, revenus 2023 / imposition 2024. */
+/** Seuils de tranches, revenus 2025 / imposition 2026 (art. 197 CGI). */
 export const IR_BRACKETS: { threshold: Decimal; rate: Decimal }[] = [
-  { threshold: new Decimal('11294'), rate: new Decimal('0') },
-  { threshold: new Decimal('28797'), rate: new Decimal('0.11') },
-  { threshold: new Decimal('82341'), rate: new Decimal('0.30') },
-  { threshold: new Decimal('177106'), rate: new Decimal('0.41') },
+  { threshold: new Decimal('11600'), rate: new Decimal('0') },
+  { threshold: new Decimal('29579'), rate: new Decimal('0.11') },
+  { threshold: new Decimal('84577'), rate: new Decimal('0.30') },
+  { threshold: new Decimal('181917'), rate: new Decimal('0.41') },
   { threshold: new Decimal('Infinity'), rate: new Decimal('0.45') },
 ];
 
-/** @aVerifier Plafond de l'avantage procure par chaque demi-part ordinaire. */
-export const PLAFOND_DEMI_PART = new Decimal('1759');
+/** Plafond de l'avantage procure par chaque demi-part ordinaire. */
+export const PLAFOND_DEMI_PART = new Decimal('1807');
 
 /**
- * @aVerifier Plafond de la part entiere accordee au parent isole pour son
- * premier enfant (case T). Il est nettement plus eleve que le plafond
- * ordinaire, et s'applique a la part entiere, pas a chaque demi-part.
+ * Plafond de la part entiere accordee au parent isole pour son premier
+ * enfant (case T). Il est nettement plus eleve que le plafond ordinaire, et
+ * s'applique a la part entiere, pas a chaque demi-part.
  */
-export const PLAFOND_PARENT_ISOLE = new Decimal('4149');
+export const PLAFOND_PARENT_ISOLE = new Decimal('4262');
 
-/** @aVerifier Seuils de la decote. */
-export const DECOTE_SEUIL_CELIBATAIRE = new Decimal('1929');
-export const DECOTE_SEUIL_COUPLE = new Decimal('3191');
+/**
+ * Decote (art. 197, 4 CGI) : elle s'applique quand l'impot brut est inferieur
+ * au seuil, et vaut le FORFAIT moins 45,25 % de l'impot brut. Le forfait est
+ * le seuil multiplie par le taux, si bien que la decote s'annule exactement au
+ * seuil : retrancher le seuil lui-meme, comme le faisait le moteur, effacait
+ * l'impot des foyers modestes et creait une marche a la sortie de la decote.
+ */
+export const DECOTE_SEUIL_CELIBATAIRE = new Decimal('1982');
+export const DECOTE_SEUIL_COUPLE = new Decimal('3277');
+export const DECOTE_FORFAIT_CELIBATAIRE = new Decimal('897');
+export const DECOTE_FORFAIT_COUPLE = new Decimal('1483');
 export const DECOTE_TAUX = new Decimal('0.4525');
 
 // ─── IS ──────────────────────────────────────────────────────────────────────
@@ -58,24 +66,36 @@ export const IS_DEFICIT_PART_VARIABLE = new Decimal('0.5');
 // ─── Prelevements sociaux ────────────────────────────────────────────────────
 
 /**
- * Revenus du patrimoine : CSG + CRDS + prelevement de solidarite.
+ * CSG + CRDS + prelevement de solidarite au taux historique : revenus
+ * fonciers (location nue) et plus-values immobilieres des particuliers, que
+ * la LFSS 2026 a laisses hors de la hausse de CSG.
  *
  * Un affilie a un regime de securite sociale etranger (Suisse, EEE) est
- * exonere de CSG et de CRDS et ne paie que le prelevement de solidarite.
+ * exonere de CSG et de CRDS et ne paie que le prelevement de solidarite,
+ * que la hausse de CSG ne touche pas.
  */
 export const PS_PATRIMOINE = new Decimal('0.172');
 export const PS_SOLIDARITE_SEULE = new Decimal('0.075');
 
 /**
- * Taux retenu dans le cadre du PFU.
- *
- * @aVerifier Hypothese du projet : 18,6 %, soit un PFU total de 31,4 %, en
- * anticipation d'une hausse de CSG. Le droit en vigueur applique 17,2 % aux
- * dividendes comme aux revenus fonciers. Tant que l'hypothese tient, les deux
- * taux different volontairement.
+ * Revenus du capital touches par la hausse de CSG de 1,4 point de la LFSS
+ * 2026 : 18,6 %. Produits de placement (dividendes, interets, dont ceux des
+ * comptes courants) a compter du 1er janvier 2026, revenus de location meublee
+ * non professionnelle (BIC) des l'imposition des revenus 2025. Restent a
+ * 17,2 % : revenus fonciers, plus-values immobilieres, assurance-vie, epargne
+ * logement.
  */
-export const PS_PFU = new Decimal('0.186');
+export const PS_REVENUS_CAPITAL = new Decimal('0.186');
+
+/** Taux retenu dans le PFU : 12,8 % + 18,6 %, soit 31,4 %. */
+export const PS_PFU = PS_REVENUS_CAPITAL;
 export const PFU_TAUX_IR = new Decimal('0.128');
+
+/**
+ * Revenus LMNP soumis aux prelevements sociaux (hors affiliation SSI d'un
+ * meuble de tourisme au-dela de 23 000 EUR de recettes).
+ */
+export const PS_LMNP = PS_REVENUS_CAPITAL;
 
 // ─── Plus-values immobilieres ────────────────────────────────────────────────
 

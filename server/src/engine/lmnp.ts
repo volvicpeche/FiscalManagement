@@ -1,6 +1,6 @@
 import Decimal from 'decimal.js';
 import type { AssocieInput } from '@shared/schemas.js';
-import { computeIR, getSocialChargeRate } from './tax.js';
+import { computeIRFoyer, getLmnpSocialChargeRate } from './tax.js';
 import type { DeficitVintage } from './associes.js';
 import {
   LMNP_DUREE_REPORT_DEFICIT,
@@ -23,7 +23,8 @@ import {
  *    an LMP or a deficit foncier: it only offsets non-professional BIC over the
  *    next ten years.
  *  - The social levy is the prelevements sociaux on capital income, not TNS
- *    contributions.
+ *    contributions — 18,6 % since the 2025 income, where foncier income
+ *    stays at 17,2 % (LFSS 2026).
  *  - Or the micro-BIC: a flat allowance on the gross receipts, no charge, no
  *    depreciation, no deficit.
  */
@@ -193,13 +194,13 @@ export function computeAssocieLMNP(
   const cotisationsSociales = ssi
     ? Decimal.max(base.mul(ssi.taux), ssi.minimum)
     : new Decimal(0);
-  const ps = ssi ? new Decimal(0) : base.mul(getSocialChargeRate(associe.socialChargeRegime));
+  const ps = ssi ? new Decimal(0) : base.mul(getLmnpSocialChargeRate(associe.socialChargeRegime));
 
   const baseIR = ssi?.deductibles
     ? Decimal.max(new Decimal(0), base.minus(cotisationsSociales))
     : base;
-  const ir = computeIR(autresRevenus.plus(baseIR), associe.maritalStatus, associe.childrenCount).minus(
-    computeIR(autresRevenus, associe.maritalStatus, associe.childrenCount),
+  const ir = computeIRFoyer(autresRevenus.plus(baseIR), associe).minus(
+    computeIRFoyer(autresRevenus, associe),
   );
 
   return { ir, ps, cotisationsSociales, total: ir.plus(ps).plus(cotisationsSociales) };

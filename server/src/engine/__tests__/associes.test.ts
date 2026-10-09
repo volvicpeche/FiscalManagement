@@ -137,6 +137,20 @@ describe('applyDeficitFoncier', () => {
 });
 
 describe('computeAssocieIR — differential taxation', () => {
+  it('should tax a frontalier\'s quote-part at the taux effectif', () => {
+    // Swiss salary exempt in France but retained for the rate: the foncier
+    // income bears the average rate of the worldwide income (~28,5 %), not
+    // the 41 % its marginal euros would cost a French salary.
+    const deficit = {
+      revenuFoncierNet: new Decimal('10000'),
+      imputationRevenuGlobal: new Decimal(0),
+      vintages: [],
+    };
+    const frontalier = computeAssocieIR(associe({ revenusExoneres: '120000.00' }), deficit);
+    expect(frontalier.ir.toNumber()).toBeCloseTo(2853.89, 2);
+    expect(frontalier.ps.toNumber()).toBeCloseTo(1720, 2);
+  });
+
   it('should tax the quote-part at the marginal rate set by other income', () => {
     // Same 10k quote-part, two very different households.
     const modeste = computeAssocieIR(associe({ autresRevenus: '15000.00' }), plainResult('10000'));

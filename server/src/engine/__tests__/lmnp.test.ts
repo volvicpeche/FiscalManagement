@@ -110,8 +110,24 @@ describe('computeMicroBIC', () => {
 });
 
 describe('computeAssocieLMNP', () => {
+  it('should tax a frontalier at the taux effectif, not at the Swiss salary\'s marginal rate', () => {
+    // 120 000 EUR of Swiss salary, exempt in France but retained for the rate.
+    // IR(130 000) = 37 100,52, of which the French tenth-and-a-bit is due:
+    // 37 100,52 x 10 000 / 130 000 = 2 853,89 — the average rate, ~28,5 %.
+    const frontalier = computeAssocieLMNP(
+      associe({ autresRevenus: '0.00', revenusExoneres: '120000.00' }),
+      d(10000),
+    );
+    expect(frontalier.ir.toNumber()).toBeCloseTo(2853.89, 2);
+
+    // Entering the same salary as French income charges the marginal 41 %.
+    const commeSiFrancais = computeAssocieLMNP(associe({ autresRevenus: '120000.00' }), d(10000));
+    expect(commeSiFrancais.ir.toNumber()).toBeCloseTo(4100, 2);
+  });
+
   it('should levy the prelevements sociaux on capital income, not TNS contributions', () => {
-    expect(computeAssocieLMNP(associe(), d(10000)).ps.toNumber()).toBeCloseTo(1720, 2);
+    // 18,6 % depuis les revenus 2025 (LFSS 2026), contre 17,2 % pour le foncier.
+    expect(computeAssocieLMNP(associe(), d(10000)).ps.toNumber()).toBeCloseTo(1860, 2);
     expect(
       computeAssocieLMNP(associe({ socialChargeRegime: 'SWISS_EXEMPT' }), d(10000)).ps.toNumber(),
     ).toBeCloseTo(750, 2);

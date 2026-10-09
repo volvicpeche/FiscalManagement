@@ -61,9 +61,42 @@ describe('computeExitIS', () => {
   });
 
   it('should charge nothing when sold below book value', () => {
-    const r = computeExitIS(base({ prixVente: new Decimal('100000') }));
+    // The 245 000 the associes put in beyond the capital comes back first.
+    const r = computeExitIS(
+      base({ prixVente: new Decimal('100000'), comptesCourants: new Decimal('245000') }),
+    );
     expect(r.impot.toNumber()).toBe(0);
     expect(r.plusValueBrute.toNumber()).toBe(0);
+  });
+
+  it('should put the cash the company kept into the boni', () => {
+    // Profits taxed at IS but never distributed still pay the flat tax when
+    // the company is wound up.
+    const sans = computeExitIS(base());
+    const avec = computeExitIS(base({ tresorerie: new Decimal('50000') }));
+    expect(avec.boniLiquidation.minus(sans.boniLiquidation).toNumber()).toBe(50000);
+    expect(avec.impotAssocies.minus(sans.impotAssocies).toNumber()).toBeCloseTo(50000 * 0.314, 2);
+  });
+
+  it('should repay the comptes courants before measuring the boni', () => {
+    const sans = computeExitIS(base());
+    const avec = computeExitIS(base({ comptesCourants: new Decimal('70000') }));
+    expect(sans.boniLiquidation.minus(avec.boniLiquidation).toNumber()).toBe(70000);
+    expect(avec.impotSociete.toNumber()).toBe(sans.impotSociete.toNumber());
+  });
+
+  it('should tax retained profits even when the building shows no gain', () => {
+    // 100 000 + 200 000 of cash − 245 000 owed − 1 000 of capital = 54 000.
+    const r = computeExitIS(
+      base({
+        prixVente: new Decimal('100000'),
+        tresorerie: new Decimal('200000'),
+        comptesCourants: new Decimal('245000'),
+      }),
+    );
+    expect(r.impotSociete.toNumber()).toBe(0);
+    expect(r.boniLiquidation.toNumber()).toBe(54000);
+    expect(r.impot.toNumber()).toBeCloseTo(54000 * 0.314, 2);
   });
 
   it('should deduct the tax and the outstanding debt from the proceeds', () => {

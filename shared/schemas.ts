@@ -105,6 +105,8 @@ export const UserProfileSchema = z.object({
    * it the bareme option is compared at a zero income and always wins.
    */
   autresRevenus: decimalString.default('0.00'),
+  /** Income exempt in France but retained for the rate — see `AssocieSchema`. */
+  revenusExoneres: decimalString.optional(),
 });
 export type UserProfile = z.infer<typeof UserProfileSchema>;
 
@@ -126,6 +128,14 @@ export const AssocieSchema = z.object({
   childrenCount: z.number().int().min(0).default(0),
   /** Other taxable income — sets the marginal bracket the quote-part lands in. */
   autresRevenus: decimalString.default('0.00'),
+  /**
+   * Income exempt in France but retained for the rate (taux effectif), in EUR
+   * and net taxable: the Swiss salary of a frontalier working in Geneva, taxed
+   * in Switzerland. It is NOT in `autresRevenus`. With it, the French tax is
+   * the tax on the worldwide income times the French share, so a quote-part
+   * is taxed near the AVERAGE rate, not at the marginal one.
+   */
+  revenusExoneres: decimalString.optional(),
   socialChargeRegime: SocialChargeRegime.default('STANDARD'),
 
   // Contributions

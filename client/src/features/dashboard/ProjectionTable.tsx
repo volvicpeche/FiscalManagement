@@ -51,7 +51,7 @@ function associeTotals(result: SimulationResult): AssocieTotals[] {
 const ASSOCIE_COLS: { label: string; get: (a: AssocieTotals) => number; cost?: boolean; quoi: string }[] = [
   { label: 'Quote-part', get: (a) => a.quotePart, quoi: "Part du resultat attribuee a cet associe, au prorata de ses parts. Reste a zero a l'IS : c'est la societe qui est imposee." },
   { label: 'IR', get: (a) => a.irTax, cost: true, quoi: "Impot du a cause de la societe, en differentiel sur son propre foyer. Deux associes a parts egales ne paient pas la meme chose." },
-  { label: 'PS', get: (a) => a.psTax, cost: true, quoi: 'Prelevements sociaux sur sa quote-part positive : 17,2 %, ou 7,5 % pour un affilie suisse.' },
+  { label: 'PS', get: (a) => a.psTax, cost: true, quoi: 'Prelevements sociaux sur sa quote-part positive : 17,2 % en location nue, 18,6 % en LMNP, ou 7,5 % pour un affilie suisse.' },
   { label: 'Interets CCA', get: (a) => a.ccaInterest, quoi: 'Interets percus sur son compte courant. Deductibles pour la societe, imposes chez lui au PFU.' },
   { label: 'CCA rembourse', get: (a) => a.ccaRepayment, quoi: "Capital de compte courant recupere sur l'horizon, sans aucune imposition." },
   { label: 'CCA restant', get: (a) => a.ccaBalance, quoi: "Solde encore du a la fin. Il entre dans sa succession a sa valeur nominale, sans decote." },

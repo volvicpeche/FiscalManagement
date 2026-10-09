@@ -1,6 +1,6 @@
 import Decimal from 'decimal.js';
 import type { AssocieInput } from '@shared/schemas.js';
-import { computeIR, getSocialChargeRate } from './tax.js';
+import { computeIRFoyer, getSocialChargeRate } from './tax.js';
 
 /**
  * Per-associe taxation of an SCI at IR.
@@ -134,8 +134,8 @@ export function computeAssocieIR(
     revenuFoncierNet,
   );
 
-  const irAvec = computeIR(revenuAvecSCI, associe.maritalStatus, associe.childrenCount);
-  const irSans = computeIR(revenuSansSCI, associe.maritalStatus, associe.childrenCount);
+  const irAvec = computeIRFoyer(revenuAvecSCI, associe);
+  const irSans = computeIRFoyer(revenuSansSCI, associe);
   const ir = irAvec.minus(irSans);
 
   const psRate = getSocialChargeRate(associe.socialChargeRegime);
@@ -190,8 +190,8 @@ export function computeAssocieLMP(
   const resultatImposable = quotePart.minus(cotisationsSociales);
   const revenuAvecLMP = Decimal.max(new Decimal(0), autresRevenus.plus(resultatImposable));
 
-  const irAvec = computeIR(revenuAvecLMP, associe.maritalStatus, associe.childrenCount);
-  const irSans = computeIR(autresRevenus, associe.maritalStatus, associe.childrenCount);
+  const irAvec = computeIRFoyer(revenuAvecLMP, associe);
+  const irSans = computeIRFoyer(autresRevenus, associe);
   const ir = irAvec.minus(irSans);
 
   return { ir, cotisationsSociales, total: ir.plus(cotisationsSociales) };

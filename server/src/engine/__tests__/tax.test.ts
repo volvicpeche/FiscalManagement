@@ -11,7 +11,10 @@ import {
   computeYearlyDepreciation,
   applyISDeficit,
   computeSurtaxePlusValue,
+  computeIRTauxEffectif,
+  computeDividendBareme,
 } from '../tax.js';
+import { PLAFOND_DEMI_PART, PLAFOND_PARENT_ISOLE } from '../baremes.js';
 
 describe('computeIS', () => {
   it('should return 0 for negative profit', () => {
@@ -80,8 +83,64 @@ describe('computeIR — parent isole', () => {
     const sansEnfant = computeIR(revenu, 'SINGLE', 0);
     const avantage = sansEnfant.minus(avecEnfant).toNumber();
 
-    expect(avantage).toBeGreaterThan(1759 * 2 - 1);
-    expect(avantage).toBeCloseTo(4149, 0);
+    expect(avantage).toBeGreaterThan(PLAFOND_DEMI_PART.toNumber() * 2 - 1);
+    expect(avantage).toBeCloseTo(PLAFOND_PARENT_ISOLE.toNumber(), 0);
+  });
+});
+
+describe('computeIRTauxEffectif', () => {
+  const salaireSuisse = new Decimal('120000');
+
+  it('should charge the French share of the tax on the worldwide income', () => {
+    // IR(130 000) for a single person = 37 100,52 ; French share 10 / 130.
+    const ir = computeIRTauxEffectif(new Decimal('10000'), salaireSuisse, 'SINGLE', 0);
+    expect(ir.toNumber()).toBeCloseTo(2853.89, 2);
+  });
+
+  it('should fall back to the plain bareme without exempt income', () => {
+    const revenu = new Decimal('45000');
+    expect(computeIRTauxEffectif(revenu, new Decimal(0), 'MARRIED', 2).toNumber()).toBe(
+      computeIR(revenu, 'MARRIED', 2).toNumber(),
+    );
+  });
+
+  it('should owe nothing in France on exempt income alone', () => {
+    expect(computeIRTauxEffectif(new Decimal(0), salaireSuisse, 'SINGLE', 0).toNumber()).toBe(0);
+  });
+
+  it('should carry the taux effectif into the bareme option of a dividend', () => {
+    // 10 000 of dividend, 6 000 taxable after the 40 % allowance, and the PS.
+    const frontalier = computeDividendBareme(new Decimal('10000'), new Decimal(0), 'SINGLE', 0, 'SWISS_EXEMPT', salaireSuisse);
+    const ir = computeIRTauxEffectif(new Decimal('6000'), salaireSuisse, 'SINGLE', 0);
+    expect(frontalier.toNumber()).toBeCloseTo(ir.toNumber() + 750, 2);
+  });
+});
+
+describe('computeIR — decote (bareme 2026)', () => {
+  it('should subtract the forfait, not the threshold, for a single person', () => {
+    // Impot brut : (20 000 − 11 600) × 11 % = 924.
+    // Decote : 897 − 45,25 % × 924 = 478,89. Impot net : 445,11.
+    expect(computeIR(new Decimal('20000'), 'SINGLE', 0).toNumber()).toBeCloseTo(445.11, 2);
+    // Impot brut 1 474, decote 230,015 : 1 243,985.
+    expect(computeIR(new Decimal('25000'), 'SINGLE', 0).toNumber()).toBeCloseTo(1243.985, 3);
+  });
+
+  it('should use the couple forfait for a married couple', () => {
+    // 2 parts : 2 × (20 000 − 11 600) × 11 % = 1 848 ; decote 1 483 − 836,22
+    // = 646,78. Impot net : 1 201,22.
+    expect(computeIR(new Decimal('40000'), 'MARRIED', 0).toNumber()).toBeCloseTo(1201.22, 2);
+  });
+
+  it('should not jump at the end of the decote', () => {
+    // Around an impot brut of 1 982 the decote has faded to nothing: a few
+    // euros more income can only add a few euros of tax.
+    let precedent = computeIR(new Decimal('29400'), 'SINGLE', 0).toNumber();
+    for (let r = 29410; r <= 29800; r += 10) {
+      const impot = computeIR(new Decimal(r), 'SINGLE', 0).toNumber();
+      expect(impot).toBeGreaterThanOrEqual(precedent);
+      expect(impot - precedent).toBeLessThan(10);
+      precedent = impot;
+    }
   });
 });
 
@@ -93,12 +152,12 @@ describe('computeIR', () => {
 
   it('should compute tax for a single person at 50k', () => {
     const tax = computeIR(new Decimal('50000'), 'SINGLE', 0);
-    // Bracket 1: 11294 * 0% = 0
-    // Bracket 2: (28797-11294) * 11% = 1925.33
-    // Bracket 3: (50000-28797) * 30% = 6360.90
-    // Total ~ 8286.23
-    expect(tax.toNumber()).toBeGreaterThan(8000);
-    expect(tax.toNumber()).toBeLessThan(8500);
+    // Bareme 2026 :
+    // Bracket 1: 11600 * 0% = 0
+    // Bracket 2: (29579-11600) * 11% = 1977.69
+    // Bracket 3: (50000-29579) * 30% = 6126.30
+    // Total 8103.99
+    expect(tax.toNumber()).toBeCloseTo(8103.99, 2);
   });
 
   it('should reduce tax for married couple vs single (same income)', () => {

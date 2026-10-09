@@ -239,7 +239,7 @@ export const COLUMNS: Column[] = [
     label: 'PS associes',
     flux: 'SORTIES',
     cumulable: true,
-    quoi: 'Prelevements sociaux sur la quote-part positive : 17,2 %, ou 7,5 % pour un affilie suisse.',
+    quoi: 'Prelevements sociaux sur la quote-part positive : 17,2 % en location nue, 18,6 % en LMNP, ou 7,5 % pour un affilie suisse.',
   },
   {
     key: 'ifi',

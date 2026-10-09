@@ -3,7 +3,7 @@ import type { AssocieInput, SocialChargeRegime } from '@shared/schemas.js';
 import {
   computeCapitalGainIS,
   computeCapitalGainIR,
-  computeIR,
+  computeIRFoyer,
   computePFU,
   getSocialChargeRate,
 } from './tax.js';
@@ -44,7 +44,10 @@ export interface ExitResult {
    * bill sits here.
    */
   impotAssocies: Decimal;
-  /** Sale proceeds after corporate tax and debt, less the capital returned. */
+  /**
+   * Sale proceeds after corporate tax and debt, plus the cash the companies
+   * kept, less the comptes courants and the capital returned.
+   */
   boniLiquidation: Decimal;
   /** The two floors added up — what leaving actually costs. */
   impot: Decimal;
@@ -68,6 +71,21 @@ export interface ExitParams {
   regimeSocial: SocialChargeRegime;
   /** Share capital, handed back to the associes free of tax on a winding-up. */
   capitalSocial: Decimal;
+  /**
+   * IS only: cash still held by the companies at the horizon. It is made of
+   * profits already taxed at IS but never distributed, so it is part of the
+   * boni and pays the flat tax on the way out. Leaving it out flattered the
+   * IS whenever the company kept its cash.
+   */
+  tresorerie?: Decimal;
+  /**
+   * IS only: what the companies still owe the associes at the horizon —
+   * comptes courants not yet repaid, and the part of the apport they never
+   * declared (it still came out of their pocket). Repaid before the boni is
+   * measured, free of tax. Leaving it in taxed the associes' own money as if
+   * it were profit.
+   */
+  comptesCourants?: Decimal;
 }
 
 const PFU_IR_RATE = new Decimal('0.128');
@@ -96,16 +114,25 @@ function empty(regime: ExitRegime, p: ExitParams): ExitResult {
 export function computeExitIS(p: ExitParams): ExitResult {
   const vnc = p.baseAmortissable.minus(p.cumulAmortissements);
   const { taxableGain, tax } = computeCapitalGainIS(p.prixVente, vnc);
-
-  if (taxableGain.lte(0)) return empty('IS', p);
+  const tresorerie = p.tresorerie ?? new Decimal(0);
+  const comptesCourants = p.comptesCourants ?? new Decimal(0);
 
   // Second floor. The corporate tax leaves the money inside the company; the
-  // associes still have to take it home. Winding the SCI up returns their
-  // share capital free of tax and taxes the rest — the boni de liquidation —
-  // as a distribution. Reporting only the corporate tax made the IS look
-  // cheaper to leave than the IR, which settles in one go and is final.
-  const produitApresIS = p.prixVente.minus(tax).minus(p.detteResiduelle);
+  // associes still have to take it home. Winding the SCI up hands back the
+  // comptes courants and the share capital free of tax, and taxes the rest —
+  // the boni de liquidation, retained cash included — as a distribution.
+  // Reporting only the corporate tax made the IS look cheaper to leave than
+  // the IR, which settles in one go and is final. The boni exists even when
+  // the building itself shows no gain, as long as the company kept profits.
+  const produitApresIS = p.prixVente
+    .minus(tax)
+    .minus(p.detteResiduelle)
+    .plus(tresorerie)
+    .minus(comptesCourants);
   const boni = Decimal.max(new Decimal(0), produitApresIS.minus(p.capitalSocial));
+
+  if (taxableGain.lte(0) && boni.lte(0)) return empty('IS', p);
+
   const impotAssocies = computePFU(boni, p.regimeSocial);
   const impot = tax.plus(impotAssocies);
 
@@ -208,11 +235,9 @@ export function computeExitLMP(
 
   // Short-term: added to the operator's income, so taxed differentially.
   const autresRevenus = new Decimal(associe.autresRevenus);
-  const irCourtTerme = computeIR(
-    autresRevenus.plus(courtTerme),
-    associe.maritalStatus,
-    associe.childrenCount,
-  ).minus(computeIR(autresRevenus, associe.maritalStatus, associe.childrenCount));
+  const irCourtTerme = computeIRFoyer(autresRevenus.plus(courtTerme), associe).minus(
+    computeIRFoyer(autresRevenus, associe),
+  );
   const tnsCourtTerme = courtTerme.mul(tauxCotisationsTNS);
 
   // Long-term: flat 12,8 % plus social charges.

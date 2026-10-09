@@ -152,6 +152,22 @@ export function SaisonnierProprietaireForm() {
         </div>
 
         <div className="col-span-2">
+          <label className={labelClass}>Salaire suisse, frontalier (EUR/an)</label>
+          <input
+            type="number"
+            step={1000}
+            min={0}
+            className={inputClass}
+            value={parseFloat(proprietaire.revenusExoneres ?? '0')}
+            onChange={(e) => updateProprietaire({ revenusExoneres: toDecimalStr(e.target.value) })}
+          />
+          <p className="text-xs text-gray-400 mt-1">
+            Net imposable, converti en euros. Impose en Suisse, il ne va pas dans les autres revenus :
+            il fixe seulement le taux effectif applique aux loyers.
+          </p>
+        </div>
+
+        <div className="col-span-2">
           <label className={labelClass}>
             {statut === 'LMNP' ? 'Prelevements sociaux' : 'Prelevements sociaux (revenus hors LMP)'}
           </label>
@@ -162,7 +178,7 @@ export function SaisonnierProprietaireForm() {
               updateProprietaire({ socialChargeRegime: e.target.value as AssocieInput['socialChargeRegime'] })
             }
           >
-            <option value="STANDARD">Standard (17,2 %)</option>
+            <option value="STANDARD">{statut === 'LMNP' ? 'Standard (18,6 %)' : 'Standard (17,2 % foncier, 18,6 % placements)'}</option>
             <option value="SWISS_EXEMPT">Affilie suisse (7,5 %)</option>
           </select>
         </div>

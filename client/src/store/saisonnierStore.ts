@@ -198,6 +198,7 @@ export function buildSaisonnierRequest(state: {
       childrenCount: state.proprietaire.childrenCount,
       socialChargeRegime: state.proprietaire.socialChargeRegime,
       autresRevenus: state.proprietaire.autresRevenus,
+      revenusExoneres: state.proprietaire.revenusExoneres,
     },
     structures: [
       {
