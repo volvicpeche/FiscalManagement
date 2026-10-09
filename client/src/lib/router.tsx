@@ -17,6 +17,8 @@ export type Route =
   | 'aide'
   | 'connexion'
   | 'inscription'
+  | 'mentions'
+  | 'confidentialite'
   | 'confirmation';
 
 export const CHEMINS: Record<Route, string> = {
@@ -30,6 +32,8 @@ export const CHEMINS: Record<Route, string> = {
   aide: '/aide',
   connexion: '/connexion',
   inscription: '/inscription',
+  mentions: '/mentions-legales',
+  confidentialite: '/confidentialite',
   confirmation: '/auth/confirmer',
 };
 

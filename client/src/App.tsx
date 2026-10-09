@@ -9,6 +9,7 @@ import { SciPage } from '@/features/sci';
 import { FrontalierPage } from '@/features/frontalier';
 import { SaisonnierPage } from '@/features/saisonnier';
 import { AidePage } from '@/features/aide';
+import { ConfidentialitePage, MentionsLegalesPage } from '@/features/legal';
 
 const CLE_DERNIERE = 'patrimonia.dernierSimulateur';
 
@@ -75,6 +76,8 @@ function App() {
       {route === 'rendement' && <RendementPage />}
       {route === 'interets' && <InteretsPage />}
       {route === 'aide' && <AidePage />}
+      {route === 'mentions' && <MentionsLegalesPage />}
+      {route === 'confidentialite' && <ConfidentialitePage />}
       {(route === 'connexion' || route === 'inscription') &&
         (supabase ? (
           <div className="py-4">

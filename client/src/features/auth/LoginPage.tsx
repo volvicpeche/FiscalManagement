@@ -148,6 +148,14 @@ export function LoginPage({
               autoComplete="new-password"
             />
             <p className="text-xs text-gray-500 -mt-1 mb-3">Au moins 10 caracteres.</p>
+            {/* A new tab: following the link must not wipe what was typed. */}
+            <p className="text-xs text-gray-500 mb-3">
+              Ce que nous faisons de vos donnees :{' '}
+              <a href="/confidentialite" target="_blank" rel="noopener" className="text-blue-700 hover:underline">
+                politique de confidentialite
+              </a>
+              .
+            </p>
           </>
         )}
 
