@@ -1,242 +1,104 @@
-import { useState } from 'react';
-import type { ScenarioProfile } from '@shared/schemas.js';
-import type { SharedInputs } from '@/store/scenarioStore';
-import {
-  useScenarioStore,
-  selectSharedInputs,
-  buildScenario,
-  partsAreValid,
-  hasAnyResult,
-} from '@/store/scenarioStore';
-import { useSimulation } from '@/hooks/useSimulation';
-import { PROFILE_ORDER } from '@/lib/profiles';
-import {
-  UserProfileForm,
-  AssociesForm,
-  AssetForm,
-  LoanForm,
-  CostsForm,
-  SuccessionForm,
-  ParamsForm,
-} from '@/features/scenario';
-import {
-  KpiCards,
-  CashFlowChart,
-  EquityChart,
-  TaxBreakdownChart,
-  CostsChart,
-  SuccessionCard,
-  ProjectionTable,
-  FinancementCard,
-  BilanCard,
-} from '@/features/dashboard';
-import { SaisonnierPage } from '@/features/saisonnier';
+import { useEffect, useRef } from 'react';
+import { AppShell } from '@/components/AppShell';
+import { naviguer, useRoute, type Route } from '@/lib/router';
+import { ROUTES_PROTEGEES, SIMULATEURS } from '@/lib/navigation';
+import { ConfirmPage, LoginPage, RequireAuth, useSession } from '@/features/auth';
+import { AccueilPage } from '@/features/accueil';
+import { CreditPage, InteretsPage, RendementPage } from '@/features/outils';
+import { SciPage } from '@/features/sci';
 import { FrontalierPage } from '@/features/frontalier';
+import { SaisonnierPage } from '@/features/saisonnier';
 import { AidePage } from '@/features/aide';
-import { SidebarLayout } from '@/components/SidebarLayout';
-import { Logo } from '@/components/Logo';
-import { ScenarioManager } from '@/features/scenarios';
-import { UserMenu } from '@/features/auth';
 
-function Panel({ children }: { children: React.ReactNode }) {
-  return <div className="bg-white rounded-lg border p-4">{children}</div>;
+const CLE_DERNIERE = 'patrimonia.dernierSimulateur';
+
+function lireDerniere(): Route | null {
+  try {
+    const r = localStorage.getItem(CLE_DERNIERE) as Route | null;
+    return r && ROUTES_PROTEGEES.has(r) ? r : null;
+  } catch {
+    return null;
+  }
 }
 
-const TABS = [
-  { key: 'synthese', label: 'Synthese' },
-  { key: 'tableau', label: 'Tableau previsionnel' },
-] as const;
-
-type TabKey = (typeof TABS)[number]['key'];
-
-const MODES = [
-  { key: 'frontalier', label: 'Frontalier Suisse' },
-  { key: 'sci', label: 'SCI / Holding' },
-  { key: 'saisonnier', label: 'Location saisonniere' },
-  { key: 'aide', label: 'Aide' },
-] as const;
-
-type ModeKey = (typeof MODES)[number]['key'];
+function Protegee({ route, children }: { route: Route; children: React.ReactNode }) {
+  const s = SIMULATEURS.find((x) => x.route === route)!;
+  return (
+    <RequireAuth titre={s.titre} apport={s.resume}>
+      {children}
+    </RequireAuth>
+  );
+}
 
 function App() {
-  const [mode, setMode] = useState<ModeKey>('sci');
-  const store = useScenarioStore();
-  const { associes, results, setResult } = store;
-  const [tab, setTab] = useState<TabKey>('synthese');
+  const route = useRoute();
+  const { supabase, user, chargement } = useSession();
 
-  // One mutation per profile so they run in parallel and report independently.
-  const simulations: Record<ScenarioProfile, ReturnType<typeof useSimulation>> = {
-    SCI_IR: useSimulation(),
-    SCI_IS_SEULE: useSimulation(),
-    SCI_IS_HOLDING: useSimulation(),
-    LMNP_REEL: useSimulation(),
-    LMNP_MICRO: useSimulation(),
-  };
-
-  const isPending = PROFILE_ORDER.some((p) => simulations[p].isPending);
-  const error = PROFILE_ORDER.map((p) => simulations[p].error).find(Boolean);
-  const validParts = partsAreValid(associes);
-
-  // The projection table opens with the panel folded because it needs the
-  // width, but the choice stays the user's from then on.
-  const [panelOpen, setPanelOpen] = useState(true);
-  const showForms = panelOpen || !hasAnyResult(results);
-
-  const selectTab = (key: TabKey) => {
-    setTab(key);
-    setPanelOpen(key === 'synthese');
-  };
-
-  const handleRun = () => {
-    const shared = selectSharedInputs(store);
-    for (const profile of PROFILE_ORDER) {
-      simulations[profile].mutate(buildScenario(profile, shared), {
-        onSuccess: (data) => setResult(profile, data),
-      });
+  // Remember the last advanced simulator, to reopen it on the next visit.
+  useEffect(() => {
+    if (!user || !ROUTES_PROTEGEES.has(route)) return;
+    try {
+      localStorage.setItem(CLE_DERNIERE, route);
+    } catch {
+      /* private browsing: nothing to remember */
     }
-  };
+  }, [route, user]);
+
+  // Arriving on the home page logged in: back to where the user left off.
+  // Once per page load — the « Accueil » link must still show the home page.
+  const arrivee = useRef(true);
+  useEffect(() => {
+    if (chargement || !arrivee.current) return;
+    arrivee.current = false;
+    if (user && route === 'accueil') {
+      const derniere = lireDerniere();
+      if (derniere) naviguer(derniere, { remplacer: true });
+    }
+  }, [chargement, user, route]);
+
+  // The login pages have nothing to show to someone already logged in.
+  useEffect(() => {
+    if (user && (route === 'connexion' || route === 'inscription')) {
+      naviguer(lireDerniere() ?? 'accueil', { remplacer: true });
+    }
+  }, [user, route]);
+
+  if (route === 'confirmation') {
+    if (!supabase) return <div className="min-h-screen bg-gray-50" aria-busy="true" />;
+    return <ConfirmPage supabase={supabase} onTermine={() => naviguer('accueil', { remplacer: true })} />;
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm border-b sticky top-0 z-10">
-        <div className="max-w-[1800px] mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <div className="flex items-center gap-3 min-w-0">
-            <Logo size={40} className="shrink-0" />
-            <div className="min-w-0">
-              <h1 className="text-2xl font-bold text-gray-900">Patrimonia</h1>
-              {/* Only where there is room: it wrapped over five lines on a laptop. */}
-              <p className="hidden 2xl:block text-sm text-gray-500 whitespace-nowrap">
-                Simulateur patrimonial — structures locatives, fiscalite et transmission
-              </p>
-            </div>
+    <AppShell>
+      {route === 'accueil' && <AccueilPage />}
+      {route === 'credit' && <CreditPage />}
+      {route === 'rendement' && <RendementPage />}
+      {route === 'interets' && <InteretsPage />}
+      {route === 'aide' && <AidePage />}
+      {(route === 'connexion' || route === 'inscription') &&
+        (supabase ? (
+          <div className="py-4">
+            <LoginPage key={route} supabase={supabase} integre ongletInitial={route === 'connexion' ? 'connexion' : 'inscription'} />
           </div>
-
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            <div className="flex gap-1 p-1 bg-gray-100 rounded-lg overflow-x-auto">
-              {MODES.map((m) => (
-                <button
-                  key={m.key}
-                  type="button"
-                  onClick={() => setMode(m.key)}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors ${
-                    mode === m.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-
-            <UserMenu />
-          </div>
-        </div>
-      </header>
-
-      {mode === 'aide' ? (
-        <main className="mx-auto px-4 py-6 max-w-[1800px]">
-          <AidePage />
-        </main>
-      ) : mode === 'frontalier' ? (
-        <main className="mx-auto px-4 py-6 max-w-[1800px]">
-          <FrontalierPage />
-        </main>
-      ) : mode === 'saisonnier' ? (
-        <main className="mx-auto px-4 py-6 max-w-[1800px]">
-          <SaisonnierPage />
-        </main>
-      ) : (
-        <main className="mx-auto px-4 py-6 max-w-[1800px]">
-          {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-              Erreur: {error.message}
-            </div>
-          )}
-
-          <SidebarLayout
-            open={showForms}
-            onToggle={() => setPanelOpen(!panelOpen)}
-            sidebar={
-              <>
-                <Panel>
-                  <ScenarioManager
-                    kind="sci"
-                    getData={() => selectSharedInputs(store) as unknown as Record<string, unknown>}
-                    onLoad={(data) => store.hydrate(data as Partial<SharedInputs>)}
-                  />
-                </Panel>
-                <Panel><AssociesForm /></Panel>
-                <Panel><AssetForm /></Panel>
-                <Panel><LoanForm /></Panel>
-                <Panel><CostsForm /></Panel>
-                <Panel><SuccessionForm /></Panel>
-                <Panel><UserProfileForm /></Panel>
-                <Panel><ParamsForm /></Panel>
-              </>
-            }
-          >
-            <div className="space-y-6">
-              <div className="space-y-1">
-                <button
-                  onClick={handleRun}
-                  disabled={isPending || !validParts}
-                  className="w-full px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {isPending ? 'Calcul en cours...' : 'Comparer les montages'}
-                </button>
-                {!validParts && (
-                  <p className="text-xs text-red-600 text-center">
-                    La repartition des parts doit totaliser 100 %.
-                  </p>
-                )}
-              </div>
-
-              {hasAnyResult(results) ? (
-                <>
-                  <div className="flex gap-1 border-b border-gray-200">
-                    {TABS.map((t) => (
-                      <button
-                        key={t.key}
-                        type="button"
-                        onClick={() => selectTab(t.key)}
-                        className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                          tab === t.key
-                            ? 'text-blue-700 border-blue-600'
-                            : 'text-gray-400 border-transparent hover:text-gray-600'
-                        }`}
-                      >
-                        {t.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {tab === 'synthese' ? (
-                    <>
-                      <KpiCards results={results} />
-                      <CashFlowChart results={results} />
-                      <CostsChart results={results} />
-                      <SuccessionCard results={results} />
-                      <EquityChart results={results} />
-                      <TaxBreakdownChart results={results} />
-                    </>
-                  ) : (
-                    <ProjectionTable results={results} />
-                  )}
-                </>
-              ) : (
-                <div className="bg-white rounded-lg border p-12 text-center text-gray-400">
-                  <p className="text-lg">
-                    Cliquez sur « Comparer les montages » pour lancer la simulation
-                  </p>
-                  <p className="text-sm mt-2">
-                    SCI a l’IR · SCI a l’IS · Holding + SCI a l’IS, sur {store.params.horizonYears} ans
-                  </p>
-                </div>
-              )}
-            </div>
-          </SidebarLayout>
-        </main>
+        ) : (
+          <div className="min-h-[50vh]" aria-busy="true" />
+        ))}
+      {route === 'sci' && (
+        <Protegee route="sci">
+          <SciPage />
+        </Protegee>
       )}
-    </div>
+      {route === 'frontalier' && (
+        <Protegee route="frontalier">
+          <FrontalierPage />
+        </Protegee>
+      )}
+      {route === 'saisonnier' && (
+        <Protegee route="saisonnier">
+          <SaisonnierPage />
+        </Protegee>
+      )}
+    </AppShell>
   );
 }
 

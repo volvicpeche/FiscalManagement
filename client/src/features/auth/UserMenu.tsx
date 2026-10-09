@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
+import { useFermeture } from '@/components/useFermeture';
 import { LlmSettingsDialog, useLlmDialog } from '@/features/parametres';
 import { useLlmSettings } from '@/hooks/useLlmSettings';
 import { useAuth } from './AuthContext';
@@ -20,19 +21,7 @@ export function UserMenu() {
   const sansCle = llm?.disponible ? !llm.disponible.annonce : false;
   const email = user.email ?? 'Mon compte';
 
-  useEffect(() => {
-    if (!menu) return;
-    const dehors = (e: MouseEvent) => {
-      if (!racine.current?.contains(e.target as Node)) setMenu(false);
-    };
-    const echap = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(false);
-    document.addEventListener('mousedown', dehors);
-    document.addEventListener('keydown', echap);
-    return () => {
-      document.removeEventListener('mousedown', dehors);
-      document.removeEventListener('keydown', echap);
-    };
-  }, [menu]);
+  useFermeture(racine, menu, () => setMenu(false));
 
   const item = 'block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50';
 

@@ -25,8 +25,18 @@ const TITRES: Record<Onglet, string> = {
 export const URL_CONFIRMATION = (type: 'signup' | 'recovery') =>
   `${window.location.origin}/auth/confirmer?type=${type}`;
 
-export function LoginPage({ supabase }: { supabase: SupabaseClient }) {
-  const [onglet, setOnglet] = useState<Onglet>('connexion');
+export type OngletConnexion = Onglet;
+
+export function LoginPage({
+  supabase,
+  integre,
+  ongletInitial = 'connexion',
+}: {
+  supabase: SupabaseClient;
+  integre?: boolean;
+  ongletInitial?: Onglet;
+}) {
+  const [onglet, setOnglet] = useState<Onglet>(ongletInitial);
   const [email, setEmail] = useState('');
   const [motDePasse, setMotDePasse] = useState('');
   const [confirmation, setConfirmation] = useState('');
@@ -97,7 +107,7 @@ export function LoginPage({ supabase }: { supabase: SupabaseClient }) {
   };
 
   return (
-    <AuthCard titre={TITRES[onglet]}>
+    <AuthCard titre={TITRES[onglet]} integre={integre}>
       <div className="flex gap-1 p-1 bg-gray-100 rounded-lg mb-5">
         {ONGLETS.map((o) => (
           <button

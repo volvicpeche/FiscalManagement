@@ -1,0 +1,1 @@
+export { AccueilPage } from './AccueilPage';
