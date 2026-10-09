@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { mensualite } from '@shared/outils/credit.js';
 import { Lien } from '@/lib/router';
-import { OUTILS, SIMULATEURS } from '@/lib/navigation';
+import { OUTILS, SIMULATEURS, lireDernierSimulateur } from '@/lib/navigation';
 import type { Route } from '@/lib/router';
 import { useSession } from '@/features/auth';
 import { useOutilsStore } from '@/store/outilsStore';
@@ -238,7 +238,7 @@ export function AccueilPage() {
               {/* Nothing until the session is known: neither wording should flash for the wrong person. */}
               {!chargement && (
                 <Lien
-                  vers={user ? 'sci' : 'inscription'}
+                  vers={user ? (lireDernierSimulateur() ?? 'sci') : 'inscription'}
                   className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white ring-1 ring-inset ring-white/40 hover:bg-white/10"
                 >
                   {user ? 'Mes simulateurs' : 'Creer un compte gratuit'}

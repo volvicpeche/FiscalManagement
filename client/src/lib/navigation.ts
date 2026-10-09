@@ -34,3 +34,23 @@ export const SIMULATEURS: EntreeNav[] = [
 ];
 
 export const ROUTES_PROTEGEES = new Set<Route>(SIMULATEURS.map((s) => s.route));
+
+const CLE_DERNIER = 'patrimonia.dernierSimulateur';
+
+/** Last advanced simulator opened in this browser, if any. */
+export function lireDernierSimulateur(): Route | null {
+  try {
+    const r = localStorage.getItem(CLE_DERNIER) as Route | null;
+    return r && ROUTES_PROTEGEES.has(r) ? r : null;
+  } catch {
+    return null;
+  }
+}
+
+export function memoriserDernierSimulateur(route: Route) {
+  try {
+    localStorage.setItem(CLE_DERNIER, route);
+  } catch {
+    /* private browsing: nothing to remember */
+  }
+}

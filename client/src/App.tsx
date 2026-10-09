@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { naviguer, useRoute, type Route } from '@/lib/router';
-import { ROUTES_PROTEGEES, SIMULATEURS } from '@/lib/navigation';
+import { ROUTES_PROTEGEES, SIMULATEURS, lireDernierSimulateur, memoriserDernierSimulateur } from '@/lib/navigation';
 import { appliquerMeta } from '@/lib/seo';
 import { ConfirmPage, LoginPage, RequireAuth, useSession } from '@/features/auth';
 import { AccueilPage } from '@/features/accueil';
@@ -11,17 +11,6 @@ import { FrontalierPage } from '@/features/frontalier';
 import { SaisonnierPage } from '@/features/saisonnier';
 import { AidePage } from '@/features/aide';
 import { ConfidentialitePage, MentionsLegalesPage } from '@/features/legal';
-
-const CLE_DERNIERE = 'patrimonia.dernierSimulateur';
-
-function lireDerniere(): Route | null {
-  try {
-    const r = localStorage.getItem(CLE_DERNIERE) as Route | null;
-    return r && ROUTES_PROTEGEES.has(r) ? r : null;
-  } catch {
-    return null;
-  }
-}
 
 function Protegee({ route, children }: { route: Route; children: React.ReactNode }) {
   const s = SIMULATEURS.find((x) => x.route === route)!;
@@ -34,36 +23,20 @@ function Protegee({ route, children }: { route: Route; children: React.ReactNode
 
 function App() {
   const route = useRoute();
-  const { supabase, user, chargement } = useSession();
+  const { supabase, user } = useSession();
 
   useEffect(() => appliquerMeta(route), [route]);
 
-  // Remember the last advanced simulator, to reopen it on the next visit.
+  // Remembered for the home page's « Mes simulateurs » button. Never used to
+  // redirect on load: a refresh must stay on the page being refreshed.
   useEffect(() => {
-    if (!user || !ROUTES_PROTEGEES.has(route)) return;
-    try {
-      localStorage.setItem(CLE_DERNIERE, route);
-    } catch {
-      /* private browsing: nothing to remember */
-    }
+    if (user && ROUTES_PROTEGEES.has(route)) memoriserDernierSimulateur(route);
   }, [route, user]);
-
-  // Arriving on the home page logged in: back to where the user left off.
-  // Once per page load — the « Accueil » link must still show the home page.
-  const arrivee = useRef(true);
-  useEffect(() => {
-    if (chargement || !arrivee.current) return;
-    arrivee.current = false;
-    if (user && route === 'accueil') {
-      const derniere = lireDerniere();
-      if (derniere) naviguer(derniere, { remplacer: true });
-    }
-  }, [chargement, user, route]);
 
   // The login pages have nothing to show to someone already logged in.
   useEffect(() => {
     if (user && (route === 'connexion' || route === 'inscription')) {
-      naviguer(lireDerniere() ?? 'accueil', { remplacer: true });
+      naviguer(lireDernierSimulateur() ?? 'accueil', { remplacer: true });
     }
   }, [user, route]);
 
