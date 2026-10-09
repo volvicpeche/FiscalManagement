@@ -81,14 +81,43 @@ const eur = (v: number) =>
 // ─── Mini calculator ─────────────────────────────────────────────────────────
 
 /** Something to touch before reading anything: amount and duration in, payment out. */
+/** A rate typed in percent, kept as long as it parses. */
+function ChampTaux({ label, value, onChange, step, aide }: { label: string; value: number; onChange: (v: number) => void; step: number; aide?: string }) {
+  return (
+    <label title={aide}>
+      <span className="block text-sm text-gray-600">{label}</span>
+      <span className="mt-1 flex items-center gap-1">
+        <input
+          type="number"
+          min={0}
+          max={15}
+          step={step}
+          value={value}
+          onChange={(e) => {
+            const v = parseFloat(e.target.value);
+            if (Number.isFinite(v) && v >= 0) onChange(v);
+          }}
+          className="w-20 rounded-md border border-gray-200 bg-white px-2 py-1 text-sm text-gray-900"
+        />
+        <span className="text-sm text-gray-500">%</span>
+      </span>
+    </label>
+  );
+}
+
 function MiniCredit() {
-  const tauxDefaut = useOutilsStore((s) => s.credit.taux);
+  const defauts = useOutilsStore((s) => s.credit);
   const [montant, setMontant] = useState(200000);
   const [annees, setAnnees] = useState(20);
-  const [taux, setTaux] = useState(tauxDefaut);
+  const [taux, setTaux] = useState(defauts.taux);
+  // Insurance included, as banks and comparators quote it: a payment without
+  // it looked hundreds of euros cheaper than everywhere else.
+  const [tauxAssurance, setTauxAssurance] = useState(defauts.tauxAssurance);
 
-  const m = useMemo(() => mensualite(montant, taux / 100, annees * 12), [montant, taux, annees]);
-  const interets = Math.max(0, m.toNumber() * annees * 12 - montant);
+  const mois = annees * 12;
+  const credit = useMemo(() => mensualite(montant, taux / 100, mois).toNumber(), [montant, taux, mois]);
+  const assurance = (montant * tauxAssurance) / 100 / 12;
+  const coutTotal = Math.max(0, credit * mois - montant) + assurance * mois;
 
   return (
     <div className="rounded-2xl border border-white/60 bg-white/95 p-5 text-gray-900 shadow-xl shadow-indigo-900/20 sm:p-6">
@@ -126,34 +155,26 @@ function MiniCredit() {
             ))}
           </div>
         </div>
-        <label>
-          <span className="block text-sm text-gray-600">Taux</span>
-          <span className="mt-1 flex items-center gap-1">
-            <input
-              type="number"
-              min={0}
-              max={15}
-              step={0.05}
-              value={taux}
-              onChange={(e) => {
-                const v = parseFloat(e.target.value);
-                if (Number.isFinite(v) && v >= 0) setTaux(v);
-              }}
-              className="w-20 rounded-md border border-gray-200 bg-white px-2 py-1 text-sm text-gray-900"
-            />
-            <span className="text-sm text-gray-500">%</span>
-          </span>
-        </label>
+        <ChampTaux label="Taux" value={taux} onChange={setTaux} step={0.05} />
+        <ChampTaux
+          label="Assurance"
+          value={tauxAssurance}
+          onChange={setTauxAssurance}
+          step={0.01}
+          aide="Taux annuel sur le capital emprunte : de 0,10 % a 0,50 % selon l’age."
+        />
       </div>
 
       <div className="mt-5 border-t pt-4">
-        <p className="text-xs text-gray-500">Mensualite hors assurance</p>
-        <p className="text-4xl font-bold tabular-nums tracking-tight text-gray-900">{eur(m.toNumber())}</p>
-        <p className="mt-1 text-xs text-gray-500">dont {eur(interets)} d’interets sur la duree du pret</p>
+        <p className="text-xs text-gray-500">Mensualite, assurance comprise</p>
+        <p className="text-4xl font-bold tabular-nums tracking-tight text-gray-900">{eur(credit + assurance)}</p>
+        <p className="mt-1 text-xs text-gray-500">
+          {eur(credit)} de credit + {eur(assurance)} d’assurance · cout total {eur(coutTotal)}
+        </p>
       </div>
 
       <Lien vers="credit" className="mt-4 inline-flex text-sm font-medium text-indigo-700 hover:text-indigo-900">
-        Frais de notaire, assurance, capacite d’emprunt →
+        Frais de notaire, comparatif, capacite d’emprunt →
       </Lien>
     </div>
   );
