@@ -2,6 +2,7 @@
   "name": "patrimonia",
   "version": "0.1.0",
   "private": true,
+  "license": "PolyForm-Noncommercial-1.0.0",
   "description": "Patrimonia - Wealth & Tax Simulation Engine",
   "workspaces": [
     "client",

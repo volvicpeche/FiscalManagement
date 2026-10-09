@@ -60,6 +60,15 @@ export function MentionsLegalesPage() {
         </p>
       </Section>
 
+      <Section titre="Propriete intellectuelle">
+        <p>
+          Le code source est publie sous licence{' '}
+          <A href="https://polyformproject.org/licenses/noncommercial/1.0.0">PolyForm Noncommercial 1.0.0</A> : il peut
+          etre lu, utilise, modifie et partage a des fins non commerciales. Toute exploitation commerciale, notamment
+          sous forme de produit ou de service payant, est interdite sans accord ecrit de l’editeur.
+        </p>
+      </Section>
+
       <Section titre="Hebergement">
         <p>
           <strong>Site et serveur</strong> : OVH SAS, 2 rue Kellermann, 59100 Roubaix, France — ovhcloud.com.

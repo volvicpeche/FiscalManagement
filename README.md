@@ -64,3 +64,9 @@ npm run dev:client   # SPA Vite sur http://localhost:5173
 ```bash
 npm test             # suite du serveur ; les tests de base de donnees sont ignores sans DATABASE_URL
 ```
+
+## Licence
+
+Code publie sous **[PolyForm Noncommercial 1.0.0](LICENSE.md)** : vous pouvez le lire, l'utiliser, le modifier et le partager pour tout usage **non commercial** (usage personnel, etude, association, enseignement, recherche...). Toute utilisation commerciale — notamment en faire un produit ou un service payant — est interdite sans accord ecrit de l'auteur.
+
+Ce n'est pas une licence open source au sens de l'OSI : le code est ouvert a la lecture et a la contribution, pas a la revente.
