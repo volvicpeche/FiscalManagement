@@ -13,8 +13,8 @@ import { Lien } from '@/lib/router';
 export const GITHUB_PROFIL = 'https://github.com/volvicpeche';
 export const GITHUB_DEPOT = 'https://github.com/volvicpeche/FiscalManagement';
 
-// @aVerifier: the region of the Supabase project (Project Settings → General).
-const REGION_SUPABASE = 'Union europeenne (Paris, AWS eu-west-3)';
+// Region of the Supabase project (Project Settings → General): change it here if the project moves.
+const REGION_SUPABASE = 'Union europeenne (Francfort, AWS eu-central-1)';
 
 const MISE_A_JOUR = 'octobre 2026';
 
