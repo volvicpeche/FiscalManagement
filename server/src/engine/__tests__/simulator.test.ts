@@ -2099,6 +2099,67 @@ describe('runSimulation — le cout reel de sortir de l\'IS', () => {
     expect(parseFloat(s.impotSociete)).toBe(0);
     expect(parseFloat(s.impotAssocies)).toBe(parseFloat(s.impot));
   });
+
+  // 246 000 of acquisition, 180 000 borrowed: the operation needs 66 000.
+  const sciIS = (over: { cca?: string; ccaRepaymentRate?: number } = {}) =>
+    runSimulation({
+      ...baseRequest,
+      structures: [
+        {
+          ...baseRequest.structures[0],
+          costs: NO_COSTS,
+          associes: [
+            associe({
+              nom: 'Moi',
+              partsPercent: 1,
+              apportCapital: '1000.00',
+              apportCompteCourant: over.cca ?? '0.00',
+            }),
+          ],
+          assets: [{ ...baseRequest.structures[0].assets[0], annualRent: '20000.00' }],
+        },
+      ],
+      params: {
+        ...baseRequest.params,
+        horizonYears: 25,
+        ccaRepaymentRate: over.ccaRepaymentRate ?? 0,
+      },
+    });
+
+  it('should wind up the company with its cash and its debts to the associes', () => {
+    // Regression: the boni ignored the cash the SCI kept, so twenty-five
+    // years of retained profits left the company without the flat tax.
+    const r = sciIS();
+    const s = r.summary.sortie;
+    const fin = r.yearlyData[r.yearlyData.length - 1].entities['SCI Alpha'];
+    const ecart = Math.max(0, parseFloat(r.summary.financement.ecart));
+
+    expect(parseFloat(fin.tresorerie)).toBeGreaterThan(0);
+    expect(parseFloat(s.boniLiquidation)).toBeCloseTo(
+      parseFloat(s.prixVente) -
+        parseFloat(s.impotSociete) -
+        parseFloat(s.detteResiduelle) +
+        parseFloat(fin.tresorerie) -
+        parseFloat(fin.ccaSolde) -
+        ecart -
+        1000,
+      0,
+    );
+  });
+
+  it('should not tax the apport as a boni, declared as a compte courant or not', () => {
+    const nonDeclare = parseFloat(sciIS().summary.sortie.impot);
+    const enCompteCourant = parseFloat(sciIS({ cca: '65000.00' }).summary.sortie.impot);
+    expect(enCompteCourant).toBeCloseTo(nonDeclare, 0);
+  });
+
+  it('should cost the same to leave whether the compte courant was repaid or not', () => {
+    // Regression: an unpaid compte courant was taxed as boni, so keeping it
+    // in the company until the sale cost the flat tax on the associe's own money.
+    const garde = parseFloat(sciIS({ cca: '65000.00', ccaRepaymentRate: 0 }).summary.sortie.impot);
+    const rembourse = parseFloat(sciIS({ cca: '65000.00', ccaRepaymentRate: 1 }).summary.sortie.impot);
+    expect(garde).toBeCloseTo(rembourse, 0);
+  });
 });
 
 describe('runSimulation — quote-part de terrain', () => {

@@ -1194,9 +1194,24 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       cumulAmortissements: d(0), detteResiduelle: d(0),
       dureeDetention: horizon,
       regimeSocial: userProfile.socialChargeRegime ?? ('STANDARD' as const),
-      // Share capital comes back to the associes untaxed on a winding-up.
-      capitalSocial: holders.reduce(
+      // Winding up the whole group: share capital and comptes courants come
+      // back to the associes untaxed, the cash every company kept goes into
+      // the boni. Taken across all entities so that a holding's capital and
+      // the dividends it piled up are counted too. Only the IS exit reads the
+      // last three: at IR the cash is already the associes' after tax.
+      capitalSocial: [...entityStates.values()].reduce(
         (acc, s) => acc.plus(s.associes.reduce((a, x) => a.plus(x.input.apportCapital), d(0))),
+        d(0),
+      ),
+      tresorerie: [...entityStates.values()].reduce((acc, s) => acc.plus(s.accumulatedCash), d(0)),
+      // Comptes courants still owed, plus the apport the associes did not
+      // declare: the model debits it from them all the same (financement.ts),
+      // so it comes back like a compte courant that was never repaid.
+      comptesCourants: [...entityStates.values()].reduce(
+        (acc, s) =>
+          acc
+            .plus(s.associes.reduce((a, x) => a.plus(x.ccaBalance), d(0)))
+            .plus(Decimal.max(d(0), s.financement.ecart)),
         d(0),
       ),
     },
