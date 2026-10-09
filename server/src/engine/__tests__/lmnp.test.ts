@@ -111,7 +111,8 @@ describe('computeMicroBIC', () => {
 
 describe('computeAssocieLMNP', () => {
   it('should levy the prelevements sociaux on capital income, not TNS contributions', () => {
-    expect(computeAssocieLMNP(associe(), d(10000)).ps.toNumber()).toBeCloseTo(1720, 2);
+    // 18,6 % depuis les revenus 2025 (LFSS 2026), contre 17,2 % pour le foncier.
+    expect(computeAssocieLMNP(associe(), d(10000)).ps.toNumber()).toBeCloseTo(1860, 2);
     expect(
       computeAssocieLMNP(associe({ socialChargeRegime: 'SWISS_EXEMPT' }), d(10000)).ps.toNumber(),
     ).toBeCloseTo(750, 2);

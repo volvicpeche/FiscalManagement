@@ -46,7 +46,7 @@ export function UserProfileForm() {
             value={profile.socialChargeRegime}
             onChange={(e) => updateUserProfile({ socialChargeRegime: e.target.value as 'STANDARD' | 'SWISS_EXEMPT' })}
           >
-            <option value="STANDARD">Standard (CSG + CRDS + PS = 17.2%)</option>
+            <option value="STANDARD">Standard (17,2 % foncier, 18,6 % LMNP et dividendes)</option>
             <option value="SWISS_EXEMPT">Affilie suisse (PS solidarite uniquement = 7.5%)</option>
           </select>
         </div>

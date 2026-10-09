@@ -145,7 +145,7 @@ function AssocieCard({ associe, index, expanded, canRemove, onToggle }: CardProp
                   set({ socialChargeRegime: e.target.value as AssocieInput['socialChargeRegime'] })
                 }
               >
-                <option value="STANDARD">Standard (17,2 %)</option>
+                <option value="STANDARD">Standard (17,2 % foncier, 18,6 % LMNP et dividendes)</option>
                 <option value="SWISS_EXEMPT">Affilie suisse (7,5 %)</option>
               </select>
             </div>

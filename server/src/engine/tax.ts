@@ -17,6 +17,7 @@ import {
   PS_PATRIMOINE,
   PS_SOLIDARITE_SEULE,
   PS_PFU,
+  PS_LMNP,
   PFU_TAUX_IR,
   PV_TAUX_IR,
   IFI_SEUIL_ENTREE,
@@ -39,12 +40,20 @@ export function getSocialChargeRate(regime: SocialChargeRegime): Decimal {
 }
 
 /**
- * PS rate applied inside the PFU. Deliberately higher than the rate above:
- * see the note on PS_PFU in baremes.ts — it is a forward assumption of the
- * project, not the rate in force.
+ * PS rate on dividends and interest (inside the PFU or at the bareme). Higher
+ * than the rate above since the LFSS 2026 raised the CSG on capital income
+ * but left foncier income and real-estate gains out.
  */
 export function getPfuSocialChargeRate(regime: SocialChargeRegime): Decimal {
   return regime === 'SWISS_EXEMPT' ? PS_SOLIDARITE_SEULE : PS_PFU;
+}
+
+/**
+ * PS rate on an LMNP's BIC result: 18,6 % since the 2025 income (LFSS 2026),
+ * unlike the foncier income of an unfurnished letting, still at 17,2 %.
+ */
+export function getLmnpSocialChargeRate(regime: SocialChargeRegime): Decimal {
+  return regime === 'SWISS_EXEMPT' ? PS_SOLIDARITE_SEULE : PS_LMNP;
 }
 
 // ─── IS (Corporate Tax) ─────────────────────────────────────────────────────

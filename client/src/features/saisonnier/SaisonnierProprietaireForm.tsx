@@ -162,7 +162,7 @@ export function SaisonnierProprietaireForm() {
               updateProprietaire({ socialChargeRegime: e.target.value as AssocieInput['socialChargeRegime'] })
             }
           >
-            <option value="STANDARD">Standard (17,2 %)</option>
+            <option value="STANDARD">{statut === 'LMNP' ? 'Standard (18,6 %)' : 'Standard (17,2 % foncier, 18,6 % placements)'}</option>
             <option value="SWISS_EXEMPT">Affilie suisse (7,5 %)</option>
           </select>
         </div>

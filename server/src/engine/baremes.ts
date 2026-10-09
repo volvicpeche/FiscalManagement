@@ -66,24 +66,36 @@ export const IS_DEFICIT_PART_VARIABLE = new Decimal('0.5');
 // ─── Prelevements sociaux ────────────────────────────────────────────────────
 
 /**
- * Revenus du patrimoine : CSG + CRDS + prelevement de solidarite.
+ * CSG + CRDS + prelevement de solidarite au taux historique : revenus
+ * fonciers (location nue) et plus-values immobilieres des particuliers, que
+ * la LFSS 2026 a laisses hors de la hausse de CSG.
  *
  * Un affilie a un regime de securite sociale etranger (Suisse, EEE) est
- * exonere de CSG et de CRDS et ne paie que le prelevement de solidarite.
+ * exonere de CSG et de CRDS et ne paie que le prelevement de solidarite,
+ * que la hausse de CSG ne touche pas.
  */
 export const PS_PATRIMOINE = new Decimal('0.172');
 export const PS_SOLIDARITE_SEULE = new Decimal('0.075');
 
 /**
- * Taux retenu dans le cadre du PFU.
- *
- * @aVerifier Hypothese du projet : 18,6 %, soit un PFU total de 31,4 %, en
- * anticipation d'une hausse de CSG. Le droit en vigueur applique 17,2 % aux
- * dividendes comme aux revenus fonciers. Tant que l'hypothese tient, les deux
- * taux different volontairement.
+ * Revenus du capital touches par la hausse de CSG de 1,4 point de la LFSS
+ * 2026 : 18,6 %. Produits de placement (dividendes, interets, dont ceux des
+ * comptes courants) a compter du 1er janvier 2026, revenus de location meublee
+ * non professionnelle (BIC) des l'imposition des revenus 2025. Restent a
+ * 17,2 % : revenus fonciers, plus-values immobilieres, assurance-vie, epargne
+ * logement.
  */
-export const PS_PFU = new Decimal('0.186');
+export const PS_REVENUS_CAPITAL = new Decimal('0.186');
+
+/** Taux retenu dans le PFU : 12,8 % + 18,6 %, soit 31,4 %. */
+export const PS_PFU = PS_REVENUS_CAPITAL;
 export const PFU_TAUX_IR = new Decimal('0.128');
+
+/**
+ * Revenus LMNP soumis aux prelevements sociaux (hors affiliation SSI d'un
+ * meuble de tourisme au-dela de 23 000 EUR de recettes).
+ */
+export const PS_LMNP = PS_REVENUS_CAPITAL;
 
 // ─── Plus-values immobilieres ────────────────────────────────────────────────
 

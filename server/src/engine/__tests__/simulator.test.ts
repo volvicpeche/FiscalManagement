@@ -638,7 +638,7 @@ describe('runSimulation — LMNP', () => {
     const quotePart = parseFloat(y30.associes['Florian'].quotePart);
     expect(quotePart).toBeGreaterThan(0);
     expect(y30.entities['LMNP'].lmnp?.affiliationSSI).toBe(false);
-    expect(parseFloat(y30.associes['Florian'].psTax)).toBeCloseTo(quotePart * 0.172, 0);
+    expect(parseFloat(y30.associes['Florian'].psTax)).toBeCloseTo(quotePart * 0.186, 0);
   });
 
   it('should switch to SSI contributions above 23 000 EUR for a meuble de tourisme', () => {
