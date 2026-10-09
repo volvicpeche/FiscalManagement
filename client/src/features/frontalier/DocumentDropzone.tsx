@@ -41,7 +41,7 @@ export function DocumentDropzone({ attendus, personne }: { attendus: DocumentTyp
   const [lectures, setLectures] = useState<Lecture[]>([]);
   const [survol, setSurvol] = useState(false);
   const input = useRef<HTMLInputElement>(null);
-  // No Anthropic key available: nothing is sent, the zone says why instead.
+  // No LLM key available: nothing is sent, the zone says why instead.
   const actif = useLlmDisponible('document');
 
   const envoyer = (fichiers: File[]) => {
@@ -119,7 +119,7 @@ export function DocumentDropzone({ attendus, personne }: { attendus: DocumentTyp
       >
         <p className="text-sm font-medium text-gray-700">
           {!actif
-            ? 'Lecture automatique desactivee sans cle API Anthropic'
+            ? 'Lecture automatique desactivee sans cle API'
             : extraction.isPending
               ? 'Lecture en cours...'
               : 'Deposez vos PDF ou photos ici, ou cliquez'}
@@ -139,7 +139,7 @@ export function DocumentDropzone({ attendus, personne }: { attendus: DocumentTyp
         />
       </div>
       <p className="text-xs text-gray-400">
-        Les fichiers sont transmis a l’API Claude (Anthropic) pour lecture, puis oublies : le serveur ne les
+        Les fichiers sont transmis au fournisseur de votre cle API (« Cle LLM ») pour lecture, puis oublies : le serveur ne les
         enregistre pas. Seuls les montants que vous validez rejoignent le formulaire.
       </p>
 

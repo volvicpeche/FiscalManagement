@@ -82,20 +82,15 @@ describe.skipIf(!hasDb)('llmSettings (Postgres)', () => {
   it('should tell the client which features a key would serve', async () => {
     expect((await lireParametresLlm(alice)).disponible).toEqual({ annonce: false, document: false });
     await enregistrerParametresLlm(alice, { provider: 'openai', apiKey: 'sk-proj-abcdefgh1234' });
-    expect((await lireParametresLlm(alice)).disponible).toEqual({ annonce: true, document: false });
-    await enregistrerParametresLlm(alice, { provider: 'anthropic', apiKey: 'sk-ant-api03-zzzz9876' });
     expect((await lireParametresLlm(alice)).disponible).toEqual({ annonce: true, document: true });
-    // Allow-listed, no key of their own: the server's Anthropic key serves both.
+    // Allow-listed, no key of their own: the server's key serves both.
     expect((await lireParametresLlm(bob)).disponible).toEqual({ annonce: true, document: true });
   });
 
-  it('should need Anthropic to read documents', async () => {
+  it("should read documents with the user's own key, whatever the provider", async () => {
+    await expect(resoudreConfigLlm(alice, 'document')).rejects.toBeInstanceOf(LlmNonConfigureError);
     await enregistrerParametresLlm(alice, { provider: 'openai', apiKey: 'sk-proj-abcdefgh1234' });
-    await expect(resoudreConfigLlm(alice, 'document')).rejects.toThrow(/Anthropic/);
-
-    // An allow-listed user with an OpenAI key falls back on the server's Anthropic key.
-    await enregistrerParametresLlm(bob, { provider: 'openai', apiKey: 'sk-proj-abcdefgh1234' });
-    expect(await resoudreConfigLlm(bob, 'document')).toMatchObject({ provider: 'anthropic', source: 'serveur' });
+    expect(await resoudreConfigLlm(alice, 'document')).toMatchObject({ provider: 'openai', source: 'utilisateur' });
   });
 
   it('should ask for the key again when LLM_KEYS_SECRET changed', async () => {

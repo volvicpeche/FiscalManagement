@@ -45,9 +45,11 @@ export async function lireParametresLlm(user: AuthUser): Promise<LlmSettingsView
   const perso = provider?.success ? provider.data : null;
   const serveur = cleServeurAutorisee(user) ? configServeur() : null;
   return {
+    // Every provider reads documents too (documentExtractor.ts): both features
+    // share the same key.
     disponible: {
       annonce: perso !== null || serveur !== null,
-      document: perso === 'anthropic' || serveur?.provider === 'anthropic',
+      document: perso !== null || serveur !== null,
     },
     configuree: Boolean(row && provider?.success),
     provider: provider?.success ? provider.data : null,
@@ -116,8 +118,7 @@ export async function supprimerParametresLlm(userId: string): Promise<void> {
  * 2. otherwise the server's key, for allow-listed accounts only;
  * 3. otherwise LlmNonConfigureError.
  *
- * Reading tax documents needs Anthropic (it sends the PDF itself): a user
- * whose own key is another provider's falls back on rule 2 for that one.
+ * Both usages take the same key: every provider reads documents.
  */
 export async function resoudreConfigLlm(
   user: AuthUser,
@@ -126,7 +127,7 @@ export async function resoudreConfigLlm(
   const row = await db().llmSettings.findUnique({ where: { userId: user.id } });
   const provider = row ? LlmProviderSchema.safeParse(row.provider) : null;
 
-  if (row && provider?.success && (usage === 'annonce' || provider.data === 'anthropic')) {
+  if (row && provider?.success) {
     let apiKey: string;
     try {
       apiKey = dechiffrer(row.cleChiffree, user.id);
@@ -143,12 +144,12 @@ export async function resoudreConfigLlm(
 
   if (cleServeurAutorisee(user)) {
     const serveur = configServeur();
-    if (serveur && (usage === 'annonce' || serveur.provider === 'anthropic')) return serveur;
+    if (serveur) return serveur;
   }
 
   throw new LlmNonConfigureError(
     usage === 'document'
-      ? 'La lecture des justificatifs necessite une cle Anthropic : renseignez-la dans « Cle LLM », en haut de la page.'
+      ? 'La lecture des justificatifs utilise votre propre cle API : renseignez-la dans « Cle LLM », en haut de la page.'
       : undefined,
   );
 }
