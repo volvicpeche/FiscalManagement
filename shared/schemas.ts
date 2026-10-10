@@ -29,6 +29,10 @@ export type SocialChargeRegime = z.infer<typeof SocialChargeRegime>;
 export const RegimeLMNP = z.enum(['REEL', 'MICRO_BIC']);
 export type RegimeLMNP = z.infer<typeof RegimeLMNP>;
 
+/** Unfurnished letting held directly: actual charges, or the micro-foncier flat allowance. */
+export const RegimeFoncier = z.enum(['REEL', 'MICRO_FONCIER']);
+export type RegimeFoncier = z.infer<typeof RegimeFoncier>;
+
 /**
  * The structural setups the UI compares side by side: three SCI setups, and
  * direct ownership as a long-term LMNP under each of its two regimes.
@@ -39,6 +43,8 @@ export const ScenarioProfile = z.enum([
   'SCI_IR',
   'LMNP_REEL',
   'LMNP_MICRO',
+  'NU_MICRO',
+  'NU_REEL',
 ]);
 export type ScenarioProfile = z.infer<typeof ScenarioProfile>;
 
@@ -272,6 +278,12 @@ export const StructureSchema = z.object({
    * to 30 %. Irrelevant for a long-term furnished letting.
    */
   meubleTourismeClasse: z.boolean().optional(),
+  /**
+   * INDIVIDUAL only — micro-foncier or reel, REEL when absent. The micro
+   * applies only while each owner's share of the gross rents stays within its
+   * ceiling; above it the reel is compulsory that year.
+   */
+  regimeFoncier: RegimeFoncier.optional(),
 });
 export type StructureInput = z.infer<typeof StructureSchema>;
 
@@ -408,6 +420,16 @@ export const EntityYearSchema = z.object({
   ccaSolde: z.string(),
   /** Gross dividend taken out of the company — to a parent, or to the associes. */
   dividendeVerse: z.string(),
+
+  /** INDIVIDUAL opting for the micro-foncier only — whether it applied this year. */
+  foncier: z
+    .object({
+      /** MICRO_FONCIER when every owner stayed within the ceiling, REEL otherwise. */
+      regime: RegimeFoncier,
+      /** Micro-foncier allowance granted this year, all owners together. */
+      abattementMicro: z.string(),
+    })
+    .optional(),
 
   /** LMNP only — the carry-forwards behind a taxable result stuck at zero. */
   lmnp: z

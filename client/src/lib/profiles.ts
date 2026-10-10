@@ -1,13 +1,28 @@
 import type { ScenarioProfile, StructureType } from '@shared/schemas.js';
 
-/** Display order of the structural setups being compared. */
+/** Display order of every setup the app compares, whatever the page. */
 export const PROFILE_ORDER: ScenarioProfile[] = [
   'SCI_IR',
   'SCI_IS_SEULE',
   'SCI_IS_HOLDING',
-  'LMNP_REEL',
+  'NU_MICRO',
+  'NU_REEL',
   'LMNP_MICRO',
+  'LMNP_REEL',
 ];
+
+/**
+ * « Location en direct »: held in one's own name, no company — unfurnished
+ * (micro-foncier, reel) and long-term furnished (micro-BIC, reel).
+ */
+export const PROFILS_DIRECT: ScenarioProfile[] = ['NU_MICRO', 'NU_REEL', 'LMNP_MICRO', 'LMNP_REEL'];
+
+/**
+ * « SCI / Holding »: the company setups, and the LMNP at the reel held
+ * directly as a reference column — the question an investor asks is
+ * « a company, or not? ».
+ */
+export const PROFILS_SOCIETE: ScenarioProfile[] = ['SCI_IR', 'SCI_IS_SEULE', 'SCI_IS_HOLDING', 'LMNP_REEL'];
 
 export interface ProfileMeta {
   label: string;
@@ -66,6 +81,28 @@ export const PROFILE_META: Record<ScenarioProfile, ProfileMeta> = {
     bg: 'bg-emerald-50',
     border: 'border-emerald-200',
   },
+  NU_MICRO: {
+    label: 'Location nue, micro-foncier',
+    short: 'Nu micro',
+    description:
+      'Location vide detenue en direct, au forfait : 70 % du loyer brut est impose, sans charges ni interets. Aucune comptabilite. Possible jusqu’a 15 000 EUR de loyers par foyer ; au-dela, le reel s’impose.',
+    stroke: '#d97706',
+    fill: '#fde68a',
+    text: 'text-amber-800',
+    bg: 'bg-amber-50',
+    border: 'border-amber-300',
+  },
+  NU_REEL: {
+    label: 'Location nue, reel',
+    short: 'Nu reel',
+    description:
+      'Location vide detenue en direct, au reel : charges, travaux et interets se deduisent, pas d’amortissement. Un deficit s’impute sur le revenu global jusqu’a 10 700 EUR par an, le reste sur les loyers des dix annees suivantes.',
+    stroke: '#be123c',
+    fill: '#fecdd3',
+    text: 'text-rose-700',
+    bg: 'bg-rose-50',
+    border: 'border-rose-200',
+  },
   LMNP_MICRO: {
     label: 'LMNP micro-BIC',
     short: 'LMNP micro',
@@ -99,6 +136,8 @@ export const ENTITY_SPECS: Record<ScenarioProfile, EntitySpec[]> = {
   ],
   LMNP_REEL: [{ name: 'LMNP (reel)', type: 'LMNP' }],
   LMNP_MICRO: [{ name: 'LMNP (micro-BIC)', type: 'LMNP', presetKey: 'LMNP_MICRO_BIC' }],
+  NU_MICRO: [{ name: 'Nu (micro-foncier)', type: 'INDIVIDUAL' }],
+  NU_REEL: [{ name: 'Nu (reel)', type: 'INDIVIDUAL' }],
 };
 
 export const MODE_LABELS: Record<string, string> = {

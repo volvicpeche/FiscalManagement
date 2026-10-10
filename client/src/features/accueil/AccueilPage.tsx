@@ -48,6 +48,13 @@ const ICONES: Record<Route, ReactNode> = {
       <path d="M8 11h.01M16 11h.01" />
     </Icone>
   ),
+  direct: (
+    <Icone>
+      <path d="M3 11l9-7 9 7" />
+      <path d="M6 10v10h12V10" />
+      <circle cx="12" cy="15" r="2" />
+    </Icone>
+  ),
   frontalier: (
     <Icone>
       <rect x="4" y="4" width="16" height="16" rx="3" />
@@ -81,6 +88,7 @@ const ICONES: Record<Route, ReactNode> = {
 const POINTS: Partial<Record<Route, string[]>> = {
   sci: ['SCI a l’IR, a l’IS, holding : cote a cote', 'Impot, tresorerie et TRI sur 30 ans', 'Revente et transmission chiffrees'],
   frontalier: ['Test des 90 % du quasi-resident', 'TOU contre impot a la source, pas a pas', 'Justificatifs lus automatiquement'],
+  direct: ['Nu au micro-foncier ou au reel', 'LMNP micro-BIC ou au reel', 'Sans societe, seul ou en indivision'],
   prevoyance: ['Economie d’impot du versement 3a', 'Courbe du rachat LPP, taux marginal', 'Quand la TOU devient rentable'],
   saisonnier: ['Revenus saison par saison', 'LMNP au reel ou micro-BIC', 'Annonce analysee en un clic'],
 };

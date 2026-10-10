@@ -9,6 +9,7 @@ export type Route =
   | 'rendement'
   | 'interets'
   | 'sci'
+  | 'direct'
   | 'frontalier'
   | 'prevoyance'
   | 'saisonnier'
@@ -26,6 +27,7 @@ export const CHEMINS: Record<Route, string> = {
   rendement: '/outils/rendement',
   interets: '/outils/interets-composes',
   sci: '/locatif/sci',
+  direct: '/locatif/direct',
   frontalier: '/frontalier/tou',
   prevoyance: '/frontalier/3a-lpp',
   saisonnier: '/locatif/saisonnier',

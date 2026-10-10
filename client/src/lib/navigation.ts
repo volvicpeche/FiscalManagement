@@ -30,10 +30,15 @@ export const FRONTALIERS: EntreeNav[] = [
 
 /**
  * Logged-in only, real estate held in one's own name, alone or in
- * indivision: no company to create. Filled by the « Location en direct »
- * simulator; a group with no entry is not shown.
+ * indivision: no company to create. A group with no entry is not shown.
  */
-export const LOCATIF_DIRECT: EntreeNav[] = [];
+export const LOCATIF_DIRECT: EntreeNav[] = [
+  {
+    route: 'direct',
+    titre: 'Location en direct',
+    resume: 'Location vide ou meublee en votre nom : micro-foncier, reel, LMNP micro-BIC et reel compares sur 30 ans.',
+  },
+];
 
 /**
  * Logged-in only, real estate through a company: statutes, an accountant,

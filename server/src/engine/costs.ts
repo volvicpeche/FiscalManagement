@@ -197,8 +197,9 @@ function presetFor(structureType: StructureType, regimeLMNP: RegimeLMNP = 'REEL'
     case 'SCI_IR':
       return { constitution: CONSTITUTION_SOCIETE, annuel: ANNUEL_SCI_IR };
     case 'INDIVIDUAL':
-      // Direct ownership: no company, therefore no structure cost at all.
-      return { constitution: [], annuel: [] };
+      // Direct ownership: no company, so no setup cost and no accountant; the
+      // landlord's insurance remains, as for every letting.
+      return { constitution: [], annuel: [ASSURANCE_PNO] };
     case 'LMP':
       return { constitution: CONSTITUTION_LMP, annuel: ANNUEL_LMP };
     case 'LMNP':

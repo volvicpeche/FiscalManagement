@@ -65,7 +65,14 @@ export const META: Record<Route, MetaPage> = {
   sci: {
     titre: 'Simulateur SCI à l’IR, à l’IS et holding sur 30 ans | Patrimonia',
     description:
-      'Comparez SCI à l’IR, SCI à l’IS, holding et LMNP sur 30 ans : impôts, trésorerie, TRI net de revente et coût de transmission, à partir d’une seule saisie.',
+      'Comparez SCI à l’IR, SCI à l’IS et holding sur 30 ans, avec la détention directe en LMNP en référence : impôts, trésorerie, TRI net de revente et coût de transmission.',
+    indexer: true,
+    sitemap: false,
+  },
+  direct: {
+    titre: 'Simulateur location nue ou meublée en direct : micro-foncier, réel, LMNP | Patrimonia',
+    description:
+      'Louer en votre nom, sans société : location vide au micro-foncier ou au réel, meublée en LMNP micro-BIC ou au réel, comparées sur 30 ans — impôts, trésorerie, revente et transmission.',
     indexer: true,
     sitemap: false,
   },
