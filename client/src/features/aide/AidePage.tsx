@@ -505,7 +505,8 @@ const BLOCS: Bloc[] = [
   {
     id: 'locatif',
     titre: 'Investissement locatif',
-    intro: 'De quoi lire les resultats des simulateurs SCI / Holding et Location saisonniere sans connaissance prealable.',
+    intro:
+      'Deux facons de detenir un bien : en direct, en votre nom, seul ou en indivision ; ou en societe (SCI, holding, SARL de famille), avec statuts, comptable et assemblees generales. La location saisonniere, activite commerciale, se range du cote des societes des qu’on est a plusieurs.',
     sections: ['sci', 'ir-is', 'holding', 'lmp', 'concepts', 'transmission', 'limites'],
     profils: true,
   },

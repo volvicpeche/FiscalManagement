@@ -2,7 +2,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import { Logo } from './Logo';
 import { useFermeture } from './useFermeture';
 import { Lien, useRoute, type Route } from '@/lib/router';
-import { OUTILS, RUBRIQUES, type EntreeNav } from '@/lib/navigation';
+import { OUTILS, RUBRIQUES, type GroupeNav } from '@/lib/navigation';
 import { UserMenu, useSession } from '@/features/auth';
 import { GITHUB_DEPOT } from '@/features/legal';
 
@@ -19,13 +19,13 @@ function Verrou({ visible }: { visible: boolean }) {
   ) : null;
 }
 
-/** A group of pages behind one button, for the desktop header. */
-function MenuGroupe({ titre, entrees, verrou }: { titre: string; entrees: EntreeNav[]; verrou: boolean }) {
+/** A family of pages behind one button, for the desktop header; its groups titled when there are several. */
+function MenuGroupe({ titre, groupes, verrou }: { titre: string; groupes: GroupeNav[]; verrou: boolean }) {
   const route = useRoute();
   const [ouvert, setOuvert] = useState(false);
   const racine = useRef<HTMLDivElement>(null);
   useFermeture(racine, ouvert, () => setOuvert(false));
-  const actif = entrees.some((e) => e.route === route);
+  const actif = groupes.some((g) => g.entrees.some((e) => e.route === route));
 
   return (
     <div ref={racine} className="relative">
@@ -40,20 +40,30 @@ function MenuGroupe({ titre, entrees, verrou }: { titre: string; entrees: Entree
       </button>
       {ouvert && (
         <div role="menu" className="absolute left-0 z-20 mt-2 w-80 overflow-hidden rounded-lg border bg-white shadow-lg">
-          {entrees.map((e) => (
-            <Lien
-              key={e.route}
-              vers={e.route}
-              role="menuitem"
-              onClick={() => setOuvert(false)}
-              className={`block px-4 py-3 hover:bg-gray-50 ${e.route === route ? 'bg-indigo-50' : ''}`}
-            >
-              <span className="text-sm font-medium text-gray-900">
-                {e.titre}
-                <Verrou visible={verrou} />
-              </span>
-              <span className="mt-0.5 block text-xs text-gray-500">{e.resume}</span>
-            </Lien>
+          {groupes.map((g) => (
+            <div key={g.titre} role="group" aria-label={g.titre || undefined} className="border-t first:border-t-0">
+              {g.titre && (
+                <div className="bg-gray-50 px-4 py-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{g.titre}</p>
+                  <p className="text-xs text-gray-400">{g.sousTitre}</p>
+                </div>
+              )}
+              {g.entrees.map((e) => (
+                <Lien
+                  key={e.route}
+                  vers={e.route}
+                  role="menuitem"
+                  onClick={() => setOuvert(false)}
+                  className={`block px-4 py-3 hover:bg-gray-50 ${e.route === route ? 'bg-indigo-50' : ''}`}
+                >
+                  <span className="text-sm font-medium text-gray-900">
+                    {e.titre}
+                    <Verrou visible={verrou} />
+                  </span>
+                  <span className="mt-0.5 block text-xs text-gray-500">{e.resume}</span>
+                </Lien>
+              ))}
+            </div>
           ))}
         </div>
       )}
@@ -99,7 +109,12 @@ function MenuMobile({ verrou }: { verrou: boolean }) {
           {RUBRIQUES.map((r) => (
             <div key={r.titre}>
               <p className="mt-3 px-3 text-xs font-medium uppercase tracking-wide text-gray-400">{r.titre}</p>
-              {r.entrees.map((e) => lien(e.route, e.titre, verrou))}
+              {r.groupes.map((g) => (
+                <div key={g.titre}>
+                  {g.titre && <p className="mt-1 px-3 text-xs text-gray-400">{g.titre}</p>}
+                  {g.entrees.map((e) => lien(e.route, e.titre, verrou))}
+                </div>
+              ))}
             </div>
           ))}
           <div className="mt-3 border-t pt-3">
@@ -137,9 +152,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Lien vers="accueil" className={lienPlat(route === 'accueil')}>
               Accueil
             </Lien>
-            <MenuGroupe titre="Outils rapides" entrees={OUTILS} verrou={false} />
+            <MenuGroupe titre="Outils rapides" groupes={[{ titre: '', sousTitre: '', entrees: OUTILS }]} verrou={false} />
             {RUBRIQUES.map((r) => (
-              <MenuGroupe key={r.titre} titre={r.titre} entrees={r.entrees} verrou={verrou} />
+              <MenuGroupe key={r.titre} titre={r.titre} groupes={r.groupes} verrou={verrou} />
             ))}
             <Lien vers="aide" className={lienPlat(route === 'aide')}>
               Aide
