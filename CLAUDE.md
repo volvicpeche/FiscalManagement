@@ -156,8 +156,9 @@ The entire UI must be in **French** — all labels, buttons, tooltips, error mes
 
 ## Git Workflow
 
-- **Create a new branch for each implementation phase** (e.g., `dev/phase1-setup`, `dev/phase2-engine`, `dev/phase3-api`, `dev/phase4-frontend`).
-- Commit and push at the end of each phase before starting the next one.
+- **One branch per feature or fix, named after it**: `feat/<sujet>` for a feature, `fix/<sujet>` for a bug, `docs/<sujet>` for documentation only, in short kebab-case (e.g. `feat/rgpd-compte-menus`, `fix/lmnp-sans-cca`). Never a generic or generated name (`claude/…`, `dev/…`, `patch-1`): the name must say what the branch changes. If a branch was created under such a name, rename it before pushing.
+- Branch from an up-to-date `main`; one subject per branch, so its PR reads as one change.
+- Commit and push once the change is tested (`npx vitest`, both typechecks, the client build).
 
 ## Implementation Order
 
