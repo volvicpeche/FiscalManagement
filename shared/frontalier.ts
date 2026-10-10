@@ -427,3 +427,77 @@ export interface PrevoyanceResult {
   courbe: PointRachat[];
   avertissements: string[];
 }
+
+// ─── Decompte reel ───────────────────────────────────────────────────────────
+
+/**
+ * The figures of an actual TOU assessment (bordereaux ICC and IFD), to hold
+ * the engine against. Every field is optional: a person keeps the lines of
+ * their own document. CHF, as on the bordereaux.
+ */
+export const DecompteReelSchema = z
+  .object({
+    revenuImposableIcc: montant.optional(),
+    impotBaseIcc: montant.optional(),
+    centimesCantonaux: montant.optional(),
+    reductionLdirpp: montant.optional(),
+    impotCommunal: montant.optional(),
+    icc: montant.optional(),
+    revenuImposableIfd: montant.optional(),
+    ifd: montant.optional(),
+    totalTou: montant.optional(),
+  })
+  .strict();
+export type DecompteReel = z.infer<typeof DecompteReelSchema>;
+export type ChampDecompte = keyof DecompteReel;
+
+/** One line of a comparison between the engine and an assessment. */
+export interface EcartDecompte {
+  champ: ChampDecompte;
+  libelle: string;
+  calcule: string;
+  reel: string;
+  /** calcule − reel: positive when the engine overestimates. */
+  ecart: string;
+}
+
+/**
+ * The household without anything that names anyone: first names and property
+ * labels go, the figures stay. Applied to every report and every real case.
+ */
+export function anonymiserFoyer<T extends FrontalierRequestInput>(req: T): T {
+  return {
+    ...req,
+    contribuable: { ...req.contribuable, prenom: '' },
+    conjoint: req.conjoint ? { ...req.conjoint, prenom: '' } : undefined,
+    biensFrance: (req.biensFrance ?? []).map((b) => ({ ...b, label: '' })),
+  };
+}
+
+// ─── Signalement d'ecart ─────────────────────────────────────────────────────
+
+/** « Ce chiffre me semble faux » on a TOU result. */
+export const SignalementRequestSchema = z.object({
+  requete: FrontalierRequestSchema,
+  decompte: DecompteReelSchema.default({}),
+  commentaire: z.string().trim().max(2000, '2 000 caracteres au maximum').default(''),
+  /** The user agreed to keep the household, anonymised, for checking the computation. */
+  consentement: z.literal(true, { message: 'Cochez la case pour envoyer le signalement' }),
+});
+export type SignalementRequestInput = z.input<typeof SignalementRequestSchema>;
+
+export interface SignalementCree {
+  id: string;
+  /** The engine against the assessment typed, line by line; empty when no line was given. */
+  ecarts: EcartDecompte[];
+}
+
+export interface SignalementResume {
+  id: string;
+  createdAt: string;
+  canton: string;
+  annee: number;
+  /** Lines of the assessment given. */
+  lignesDecompte: number;
+  commentaire: string;
+}

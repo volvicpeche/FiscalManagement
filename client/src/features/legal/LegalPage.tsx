@@ -102,7 +102,7 @@ export function ConfidentialitePage() {
       <Section titre="En bref">
         <ul className="list-disc space-y-1 pl-5">
           <li>Les outils rapides fonctionnent sans compte et n’envoient rien au serveur.</li>
-          <li>Avec un compte, nous gardons votre e-mail et les scenarios que vous enregistrez, rien de plus.</li>
+          <li>Avec un compte, nous gardons votre e-mail, les scenarios que vous enregistrez et les ecarts que vous signalez, rien de plus.</li>
           <li>Ni publicite, ni traceur, ni revente de donnees.</li>
           <li>
             Depuis « Mon compte », vous telechargez toutes vos donnees ou supprimez votre compte, immediatement et
@@ -154,6 +154,17 @@ export function ConfidentialitePage() {
               </tr>
               <tr className="border-b">
                 <td className="py-2 pr-4">
+                  Signalements « ce chiffre me semble faux » : votre foyer sans prenom ni nom des biens, le resultat
+                  calcule, les montants de votre decompte et votre commentaire
+                </td>
+                <td className="py-2 pr-4">
+                  Verifier et corriger le calcul. Les montants, sans rien qui vous identifie, peuvent devenir un cas de test
+                  public du projet ; votre commentaire, jamais
+                </td>
+                <td className="py-2">Jusqu’a ce que vous le supprimiez, ou avec le compte</td>
+              </tr>
+              <tr className="border-b">
+                <td className="py-2 pr-4">
                   Saisies des simulateurs avances, le temps d’un calcul (revenus, foyer, biens…)
                 </td>
                 <td className="py-2 pr-4">Faire le calcul, qui a lieu sur le serveur</td>
@@ -169,7 +180,8 @@ export function ConfidentialitePage() {
         </div>
         <p>
           Base legale : l’execution du service que vous demandez en creant un compte (RGPD, art. 6.1.b) ; votre
-          consentement pour la transmission de justificatifs a un fournisseur d’IA (art. 6.1.a) ; l’interet legitime a
+          consentement pour la transmission de justificatifs a un fournisseur d’IA et pour les signalements d’ecart
+          (art. 6.1.a) ; l’interet legitime a
           securiser le site pour les journaux (art. 6.1.f).
         </p>
       </Section>
@@ -238,7 +250,7 @@ export function ConfidentialitePage() {
           </li>
           <li>
             <strong>Effacement</strong> : « Supprimer mon compte » efface immediatement et definitivement le compte, les
-            scenarios, la cle d’IA et l’historique des analyses. Aucune copie n’est gardee.
+            scenarios, la cle d’IA, les signalements et l’historique des analyses. Aucune copie n’est gardee.
           </li>
         </ul>
         <p>

@@ -75,3 +75,27 @@ model LlmSettings {
 
   @@map("llm_settings")
 }
+
+// ─── Signalements d'ecart ────────────────────────────────────────────────────
+
+/// « Ce chiffre me semble faux » on a TOU result: the household (anonymised),
+/// the engine's result at the time, and what the user says the canton
+/// actually assessed. Read by the editor to turn it into a real test case
+/// (scripts/signalement-vers-cas.ts). Deleted with the account.
+model Signalement {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  canton      String   @db.VarChar(2)
+  annee       Int
+  /// FrontalierRequest without first names nor property labels.
+  requete     Json
+  /// FrontalierResult recomputed by the server when the report was made.
+  resultat    Json
+  /// DecompteReel: the lines of the assessment the user typed, possibly none.
+  decompte    Json
+  commentaire String   @default("") @db.VarChar(2000)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("signalements")
+}
