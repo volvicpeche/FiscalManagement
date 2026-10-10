@@ -9,6 +9,7 @@ process.env.LLM_KEYS_SECRET ??= randomBytes(32).toString('base64');
 const { authPlugin } = await import('../plugins/auth.js');
 const { compteRoutes } = await import('../routes/compte.js');
 const { scenarioRoutes } = await import('../routes/scenarios.js');
+const { signalementRoutes } = await import('../routes/signalements.js');
 const { llmSettingsRoutes } = await import('../routes/llmSettings.js');
 const { consommerQuota } = await import('../services/llmQuota.js');
 const { db, closeDb } = await import('../services/db.js');
@@ -59,6 +60,18 @@ describe.skipIf(!hasDb)('routes /api/me (Postgres)', () => {
     });
     expect(cle.statusCode).toBe(200);
     await consommerQuota(c.id, 2);
+    const signalement = await server.inject({
+      method: 'POST', url: '/api/frontalier/signalements', headers: c.auth,
+      payload: {
+        requete: {
+          annee: 2026, etatCivil: 'CELIBATAIRE', tauxChangeEurChf: '0.93', deductions: {},
+          contribuable: { activite: 'SUISSE', salaireBrut: '90000.00' },
+        },
+        decompte: { icc: '9000.00' },
+        consentement: true,
+      },
+    });
+    expect(signalement.statusCode).toBe(201);
   };
 
   beforeAll(async () => {
@@ -68,6 +81,7 @@ describe.skipIf(!hasDb)('routes /api/me (Postgres)', () => {
     await server.register(compteRoutes);
     await server.register(scenarioRoutes);
     await server.register(llmSettingsRoutes);
+    await server.register(signalementRoutes);
     await server.ready();
   });
 
@@ -81,7 +95,7 @@ describe.skipIf(!hasDb)('routes /api/me (Postgres)', () => {
     const alice = await compte();
     await remplir(alice);
     const res = await server.inject({ method: 'GET', url: '/api/me', headers: alice.auth });
-    expect(res.json()).toEqual({ scenarios: { sci: 2, saisonnier: 0, frontalier: 1 }, cleLlm: true });
+    expect(res.json()).toEqual({ scenarios: { sci: 2, saisonnier: 0, frontalier: 1 }, cleLlm: true, signalements: 1 });
   });
 
   it('should export every row of the user, and nobody else’s, without the key', async () => {
@@ -100,6 +114,7 @@ describe.skipIf(!hasDb)('routes /api/me (Postgres)', () => {
     expect(contenu.scenarios).toHaveLength(3);
     expect(contenu.scenarios[0].data).toEqual({ prix: '1' });
     expect(contenu.cleLlm).toMatchObject({ provider: 'anthropic', cleFin: 'WXYZ' });
+    expect(contenu.signalements).toEqual([expect.objectContaining({ canton: 'GE', annee: 2026, decompte: { icc: '9000.00' } })]);
     expect(contenu.consommationLlm).toEqual([{ jour: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), appels: 2 }]);
 
     // Not a trace of the key, encrypted or not, nor of Bob.
@@ -135,8 +150,9 @@ describe.skipIf(!hasDb)('routes /api/me (Postgres)', () => {
       scenarios: await db().scenario.count({ where: { userId: id } }),
       cle: await db().llmSettings.count({ where: { userId: id } }),
       usage: await db().llmUsage.count({ where: { userId: id } }),
+      signalements: await db().signalement.count({ where: { userId: id } }),
     });
-    expect(await restant(alice.id)).toEqual({ utilisateur: 0, scenarios: 0, cle: 0, usage: 0 });
-    expect(await restant(bob.id)).toEqual({ utilisateur: 1, scenarios: 3, cle: 1, usage: 1 });
+    expect(await restant(alice.id)).toEqual({ utilisateur: 0, scenarios: 0, cle: 0, usage: 0, signalements: 0 });
+    expect(await restant(bob.id)).toEqual({ utilisateur: 1, scenarios: 3, cle: 1, usage: 1, signalements: 1 });
   });
 });

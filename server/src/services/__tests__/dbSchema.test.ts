@@ -11,14 +11,28 @@ describe.skipIf(!hasDb)('schema `tax` (Postgres)', () => {
     const rows = await db().$queryRaw<{ table_name: string }[]>`
       SELECT table_name FROM information_schema.tables
       WHERE table_schema = ${DB_SCHEMA} ORDER BY table_name`;
-    expect(rows.map((r) => r.table_name)).toEqual(['_prisma_migrations', 'llm_settings', 'llm_usage', 'scenarios']);
+    expect(rows.map((r) => r.table_name)).toEqual(['_prisma_migrations', 'llm_settings', 'llm_usage', 'scenarios', 'signalements']);
   });
 
   it('should create nothing in public', async () => {
     const rows = await db().$queryRaw<{ table_name: string }[]>`
       SELECT table_name FROM information_schema.tables
-      WHERE table_schema = 'public' AND table_name IN ('_prisma_migrations', 'scenarios', 'llm_usage', 'llm_settings')`;
+      WHERE table_schema = 'public' AND table_name IN ('_prisma_migrations', 'scenarios', 'llm_usage', 'llm_settings', 'signalements')`;
     expect(rows).toEqual([]);
+  });
+
+  it('should lock every table: RLS on, nothing granted to the Data API roles', async () => {
+    const tables = await db().$queryRaw<{ tablename: string; rowsecurity: boolean }[]>`
+      SELECT tablename, rowsecurity FROM pg_tables
+      WHERE schemaname = ${DB_SCHEMA} AND tablename <> '_prisma_migrations' ORDER BY tablename`;
+    expect(tables.length).toBeGreaterThan(0);
+    for (const t of tables) {
+      expect(t.rowsecurity, t.tablename).toBe(true);
+      const [droits] = await db().$queryRaw<{ anon: boolean; authenticated: boolean }[]>`
+        SELECT has_table_privilege('anon', ${`${DB_SCHEMA}.${t.tablename}`}, 'SELECT') AS anon,
+               has_table_privilege('authenticated', ${`${DB_SCHEMA}.${t.tablename}`}, 'SELECT') AS authenticated`;
+      expect(droits, t.tablename).toEqual({ anon: false, authenticated: false });
+    }
   });
 
   it('should give the Data API roles no access to the schema', async () => {

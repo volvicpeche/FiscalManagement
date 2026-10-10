@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { FrontalierRequestSchema, type DecompteReel, type FrontalierRequestInput } from '@shared/frontalier.js';
+import { FrontalierRequestSchema, anonymiserFoyer, type DecompteReel, type FrontalierRequestInput } from '@shared/frontalier.js';
 import { buildFrontalierRequest, useFrontalierStore } from '@/store/frontalierStore';
 import { CHAMPS_DECOMPTE, simulateFrontalier } from '../src/engine/frontalier/index.js';
 import { CasReelSchema } from '../src/__tests__/cas-reels/format.js';
@@ -59,20 +59,10 @@ function depuisExport(fichier: string, nom?: string): FrontalierRequestInput {
   return buildFrontalierRequest(useFrontalierStore.getState());
 }
 
-/** Nothing that names anyone: first names and property labels go. */
-function anonymiser(req: FrontalierRequestInput): FrontalierRequestInput {
-  return {
-    ...req,
-    contribuable: { ...req.contribuable, prenom: '' },
-    conjoint: req.conjoint ? { ...req.conjoint, prenom: '' } : undefined,
-    biensFrance: (req.biensFrance ?? []).map((b) => ({ ...b, label: '' })),
-  };
-}
-
 const brute = values.export
   ? depuisExport(values.export, values.scenario)
   : (JSON.parse(fs.readFileSync(values.requete!, 'utf8')) as FrontalierRequestInput);
-const requete = anonymiser(brute);
+const requete = anonymiserFoyer(brute);
 const parsee = FrontalierRequestSchema.parse(requete);
 const resultat = simulateFrontalier(parsee);
 

@@ -1,6 +1,7 @@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { FrontalierResult } from '@shared/frontalier.js';
 import { formatChf, formatPct } from './ui';
+import { SignalerEcart } from './SignalerEcart';
 
 function Kpi({ label, value, detail, tone = 'neutral' }: { label: string; value: string; detail?: string; tone?: 'neutral' | 'cost' | 'good' }) {
   const toneClass = tone === 'cost' ? 'text-red-600' : tone === 'good' ? 'text-green-700' : 'text-gray-900';
@@ -217,6 +218,8 @@ export function FrontalierResultats({ result: r }: { result: FrontalierResult })
           </ul>
         </div>
       )}
+
+      <SignalerEcart result={r} />
 
       <p className="text-xs text-gray-400">
         Simulation indicative sur les baremes officiels {r.annee} du canton de {r.nomCanton} et de l’AFC.

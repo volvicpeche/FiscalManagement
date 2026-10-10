@@ -5,6 +5,7 @@ import { Lien } from '@/lib/router';
 import { SIMULATEURS } from '@/lib/navigation';
 import { CLE_COMPTE_SUPPRIME, viderStockageLocal } from '@/lib/stockageLocal';
 import { useExporterCompte, useResumeCompte, useSupprimerCompte } from '@/hooks/useCompte';
+import { useMesSignalements, useSupprimerSignalement } from '@/hooks/useSignalements';
 import { useConsentementsIa, useLlmDialog } from '@/features/parametres';
 import {
   Alerte,
@@ -75,6 +76,7 @@ function MesDonnees() {
           {data.cleLlm ? 'Modifier ou supprimer' : 'Renseigner'} →
         </button>
       </li>
+      {data.signalements > 0 && <MesSignalements />}
       {fournisseurs.map((f) => (
         <li key={f} className="flex items-center justify-between gap-3 px-4 py-2.5">
           <span>
@@ -87,6 +89,39 @@ function MesDonnees() {
         </li>
       ))}
     </ul>
+  );
+}
+
+/** « Ce chiffre me semble faux » reports, each deletable. */
+function MesSignalements() {
+  const { data = [] } = useMesSignalements();
+  const supprimer = useSupprimerSignalement();
+  return (
+    <li className="px-4 py-2.5">
+      <p>
+        Signalements d’ecart : <strong>{data.length}</strong>{' '}
+        <span className="text-gray-500">(foyer sans prenom ni nom des biens, montants du decompte, commentaire)</span>
+      </p>
+      <ul className="mt-2 space-y-1">
+        {data.map((s) => (
+          <li key={s.id} className="flex items-center justify-between gap-3 text-xs text-gray-600">
+            <span className="min-w-0 truncate">
+              {new Date(s.createdAt).toLocaleDateString('fr-FR')} · TOU {s.annee} ({s.canton}) ·{' '}
+              {s.lignesDecompte > 0 ? `${s.lignesDecompte} ligne(s) de decompte` : 'sans decompte'}
+              {s.commentaire && ` · « ${s.commentaire} »`}
+            </span>
+            <button
+              type="button"
+              disabled={supprimer.isPending}
+              onClick={() => supprimer.mutate(s.id)}
+              className="shrink-0 text-indigo-700 hover:text-indigo-900 disabled:opacity-50"
+            >
+              Supprimer
+            </button>
+          </li>
+        ))}
+      </ul>
+    </li>
   );
 }
 
@@ -203,8 +238,8 @@ function Supprimer() {
   return (
     <>
       <p>
-        Suppression <strong>immediate et definitive</strong> : votre compte, tous vos scenarios, votre cle d’IA et
-        l’historique de vos analyses. Rien n’est conserve, aucune restauration n’est possible. Pensez a telecharger
+        Suppression <strong>immediate et definitive</strong> : votre compte, tous vos scenarios, votre cle d’IA,
+        vos signalements d’ecart et l’historique de vos analyses. Rien n’est conserve, aucune restauration n’est possible. Pensez a telecharger
         vos donnees avant.
       </p>
       <form onSubmit={valider} className="max-w-md space-y-3" noValidate>
