@@ -321,6 +321,37 @@ const SECTIONS: Section[] = [
     ),
   },
   {
+    id: 'prevoyance',
+    titre: '3e pilier et rachat LPP',
+    contenu: (
+      <div className="space-y-3">
+        <p className="text-sm text-gray-700 leading-relaxed">
+          Le <strong>3e pilier lie (3a)</strong> et le <strong>rachat LPP</strong> se deduisent du revenu imposable
+          suisse. Pour un frontalier, seulement en <strong>TOU</strong> : l’impot a la source ne les connait pas. Ils
+          peuvent donc faire basculer la decision, une TOU plus chere que la source sans eux devenant moins chere avec.
+        </p>
+        <div className="rounded-md bg-gray-50 border border-gray-200 p-3 space-y-2">
+          <Terme mot="Plafond 3a">
+            7 258 CHF par an en 2026 pour un salarie affilie a une caisse de pension, 20 % du revenu net (36 288 CHF au
+            plus) sans caisse. Au-dela, rien n’est deductible.
+          </Terme>
+          <Terme mot="Potentiel de rachat">
+            ce que la caisse de pension accepte en rachat, inscrit sur son certificat annuel. Un rachat au-dela n’est
+            pas deductible.
+          </Terme>
+          <Terme mot="Blocage de 3 ans">
+            apres un rachat, les prestations qui en resultent ne peuvent pas etre retirees en capital pendant trois ans,
+            retrait pour le logement compris ; sinon la deduction est reprise.
+          </Terme>
+          <Terme mot="Taux marginal">
+            ce que rapporte le dernier franc verse. Il baisse a mesure que le rachat grossit : etaler un gros rachat sur
+            plusieurs annees rapporte souvent davantage.
+          </Terme>
+        </div>
+      </div>
+    ),
+  },
+  {
     id: 'concepts',
     titre: 'Les notions qui reviennent partout',
     contenu: (
@@ -469,7 +500,7 @@ const BLOCS: Bloc[] = [
     id: 'frontaliers',
     titre: 'Frontaliers',
     intro: 'Vous travaillez en Suisse et vivez en France : comment vous etes impose, et quand demander la TOU.',
-    sections: ['frontalier'],
+    sections: ['frontalier', 'prevoyance'],
   },
   {
     id: 'locatif',

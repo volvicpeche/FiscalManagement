@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import multipart from '@fastify/multipart';
-import { FrontalierRequestSchema, type DocumentExtractionResult } from '@shared/frontalier.js';
-import { CantonIndisponibleError, simulateFrontalier } from '../engine/frontalier/index.js';
+import { FrontalierRequestSchema, PrevoyanceRequestSchema, type DocumentExtractionResult } from '@shared/frontalier.js';
+import { CantonIndisponibleError, simulateFrontalier, simulerPrevoyance } from '../engine/frontalier/index.js';
 import { extractDocument, mediaTypeAccepte } from '../services/llm/documentExtractor.js';
 import { messageErreurLlm } from '../services/llm/config.js';
 import { reserverQuota, resoudreLlm } from './llmAcces.js';
@@ -29,6 +29,31 @@ export async function frontalierRoutes(server: FastifyInstance) {
       return simulateFrontalier(parsed.data);
     } catch (err) {
       // A canton on the list whose official figures are not in the engine yet.
+      if (err instanceof CantonIndisponibleError) {
+        return reply.status(422).send({ error: err.message, code: 'CANTON_INDISPONIBLE' });
+      }
+      throw err;
+    }
+  });
+
+  /** What a 3a payment and an LPP buy-back save one earner, through the TOU. */
+  server.post('/api/frontalier/prevoyance', async (request, reply) => {
+    const parsed = PrevoyanceRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      const specific = parsed.error.issues.find((i) => i.message !== 'Invalid input');
+      return reply.status(400).send({
+        error: specific?.message ?? 'Parametres invalides',
+        details: parsed.error.flatten(),
+      });
+    }
+    const personne = parsed.data.requete[parsed.data.personne];
+    if (!personne || personne.activite !== 'SUISSE') {
+      return reply.status(400).send({ error: 'Le 3e pilier et le rachat LPP se deduisent d’un salaire suisse' });
+    }
+
+    try {
+      return simulerPrevoyance(parsed.data);
+    } catch (err) {
       if (err instanceof CantonIndisponibleError) {
         return reply.status(422).send({ error: err.message, code: 'CANTON_INDISPONIBLE' });
       }

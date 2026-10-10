@@ -16,3 +16,4 @@ export {
   mesurerBien,
   simulateFrontalier,
 } from './simulation.js';
+export { simulerPrevoyance } from './prevoyance.js';

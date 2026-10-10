@@ -8,6 +8,7 @@ import { AccueilPage } from '@/features/accueil';
 import { CreditPage, InteretsPage, RendementPage } from '@/features/outils';
 import { SciPage } from '@/features/sci';
 import { FrontalierPage } from '@/features/frontalier';
+import { PrevoyancePage } from '@/features/prevoyance';
 import { SaisonnierPage } from '@/features/saisonnier';
 import { AidePage } from '@/features/aide';
 import { ConfidentialitePage, MentionsLegalesPage } from '@/features/legal';
@@ -73,6 +74,11 @@ function App() {
       {route === 'frontalier' && (
         <Protegee route="frontalier">
           <FrontalierPage />
+        </Protegee>
+      )}
+      {route === 'prevoyance' && (
+        <Protegee route="prevoyance">
+          <PrevoyancePage />
         </Protegee>
       )}
       {route === 'compte' && (

@@ -375,3 +375,55 @@ export interface DocumentExtractionResult {
   extraction: DocumentExtraction | null;
   erreur: string | null;
 }
+
+// ─── Prevoyance : 3e pilier et rachat LPP ────────────────────────────────────
+
+/**
+ * What a 3a payment and an LPP buy-back save one earner, through the TOU.
+ * The household is a full FrontalierRequest; the amounts tested replace that
+ * person's own `pilier3a` and `lppRachats`.
+ */
+export const PrevoyanceRequestSchema = z.object({
+  requete: FrontalierRequestSchema,
+  personne: z.enum(['contribuable', 'conjoint']).default('contribuable'),
+  pilier3a: zero(),
+  rachatLpp: zero(),
+  /** Potentiel de rachat du certificat LPP: above it, a buy-back is not deductible. */
+  potentielRachat: montant.optional(),
+});
+export type PrevoyanceRequest = z.infer<typeof PrevoyanceRequestSchema>;
+export type PrevoyanceRequestInput = z.input<typeof PrevoyanceRequestSchema>;
+
+/** The tax saved by a buy-back of a given size, for the curve. */
+export interface PointRachat {
+  rachat: string;
+  economie: string;
+  /** Saving on the last slice of the step, per franc: the marginal rate at that size. */
+  tauxMarginal: number;
+}
+
+export interface PrevoyanceResult {
+  annee: number;
+  /** Quasi-resident: without it, the TOU is closed and neither payment lowers any tax. */
+  eligibleTou: boolean;
+  plafond3a: string;
+  /** Payment actually deductible: capped at the ceiling. */
+  pilier3aDeductible: string;
+  rachatDeductible: string;
+  touSans: string;
+  touAvec3a: string;
+  touAvecTout: string;
+  economie3a: string;
+  economieRachat: string;
+  economieTotale: string;
+  /** Saving per franc paid, between 0 and 1. */
+  taux3a: number;
+  tauxRachat: number;
+  /** Source tax the TOU is compared with: withheld, or the tariff when none is given. */
+  impotSource: string;
+  /** Source tax − TOU, without and with the payments: positive when the TOU wins. */
+  gainTouSans: string;
+  gainTouAvec: string;
+  courbe: PointRachat[];
+  avertissements: string[];
+}

@@ -21,6 +21,11 @@ export const FRONTALIERS: EntreeNav[] = [
     titre: 'TOU ou impot a la source',
     resume: 'Taxation ordinaire ulterieure contre impot a la source, pas a pas, justificatifs lus automatiquement.',
   },
+  {
+    route: 'prevoyance',
+    titre: '3e pilier et rachat LPP',
+    resume: 'Ce que rapportent un versement 3a et un rachat LPP, et si la TOU devient avantageuse.',
+  },
 ];
 
 /** Logged-in only, for someone investing in real estate. */
