@@ -284,6 +284,18 @@ export const StructureSchema = z.object({
    * ceiling; above it the reel is compulsory that year.
    */
   regimeFoncier: RegimeFoncier.optional(),
+  /**
+   * LMP / LMNP of a meuble de tourisme — services of the para-hotel kind
+   * (breakfast, regular cleaning, linen, reception: three of the four). It
+   * raises the thresholds of the art. 151 septies exemption at the sale.
+   */
+  parahotellerie: z.boolean().optional(),
+  /**
+   * LMNP only — let the engine decide between LMNP and LMP (art. 155 IV):
+   * professional when the foyer's share of the receipts exceeds 23 000 EUR
+   * AND its other activity income. Judged on the first year.
+   */
+  statutMeubleAuto: z.boolean().optional(),
 });
 export type StructureInput = z.infer<typeof StructureSchema>;
 
@@ -420,6 +432,12 @@ export const EntityYearSchema = z.object({
   ccaSolde: z.string(),
   /** Gross dividend taken out of the company — to a parent, or to the associes. */
   dividendeVerse: z.string(),
+
+  /** Furnished letting whose status the engine decided (`statutMeubleAuto`). */
+  statutMeuble: z.enum(['LMNP', 'LMP']).optional(),
+
+  /** LMP only — the walls were exempt from IFI this year as professional assets (art. 975 V). */
+  ifiExonere: z.boolean().optional(),
 
   /** INDIVIDUAL opting for the micro-foncier only — whether it applied this year. */
   foncier: z

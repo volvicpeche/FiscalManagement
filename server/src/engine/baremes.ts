@@ -176,6 +176,34 @@ export const LMNP_DUREE_REPORT_DEFICIT = 10;
 export const LMP_SEUIL_RECETTES = new Decimal('23000');
 
 /**
+ * Exoneration de la plus-value professionnelle des petites entreprises
+ * (art. 151 septies CGI), apres cinq ans d'activite : totale si la moyenne
+ * des recettes HT des deux derniers exercices ne depasse pas le seuil bas,
+ * degressive jusqu'au seuil haut. Un loueur en meuble professionnel releve
+ * des seuils des prestations de services ; avec des services para-hoteliers,
+ * de ceux de la fourniture de logement.
+ *
+ * @aVerifier Seuils lus dans des syntheses du BOI-BIC-CHAMP-40-20 (version du
+ * 19/08/2026), pas dans le texte du BOFiP lui-meme.
+ */
+export const EXONERATION_151_SEPTIES = {
+  dureeMinimale: 5,
+  services: { totale: new Decimal('90000'), partielle: new Decimal('126000') },
+  parahotellerie: { totale: new Decimal('250000'), partielle: new Decimal('350000') },
+} as const;
+
+/**
+ * IFI : les biens d'un loueur en meuble professionnel sont des biens
+ * professionnels exoneres (art. 975 V CGI) si le foyer en tire plus de
+ * 23 000 EUR de recettes ET un benefice superieur a la moitie de ses revenus
+ * professionnels. Sans benefice (amortissements), pas d'exoneration.
+ *
+ * @aVerifier Conditions lues dans des reponses ministerielles (AN, 15e et
+ * 16e legislatures), pas dans le texte en vigueur.
+ */
+export const IFI_LMP_SEUIL_RECETTES = new Decimal('23000');
+
+/**
  * Au-dela de ce montant de recettes annuelles, la location de meubles de
  * tourisme releve des cotisations sociales des independants (SSI), meme en
  * LMNP (art. L613-1 CSS). Le statut fiscal ne change pas ; ce sont les

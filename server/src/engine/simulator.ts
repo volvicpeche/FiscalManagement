@@ -36,6 +36,8 @@ import {
   DUREE_AMORTISSEMENT_MOBILIER,
   QUOTE_PART_TERRAIN_DEFAUT,
   SSI_SEUIL_MEUBLE_TOURISME,
+  IFI_LMP_SEUIL_RECETTES,
+  LMP_SEUIL_RECETTES,
 } from './baremes.js';
 import { computeSuccessionForAssocies } from './succession.js';
 import { computeIRR } from './irr.js';
@@ -130,6 +132,12 @@ interface EntityState {
   lmnp?: LMNPState;
   /** INDIVIDUAL at the micro-foncier: each owner's share of gross rents decides, year by year. */
   microFoncier: boolean;
+  /** Gross receipts of every year so far: the art. 151 septies test reads the last two. */
+  recettesHistorique: Decimal[];
+  /** LMP / LMNP with para-hotel services: the higher art. 151 septies thresholds. */
+  parahotellerie: boolean;
+  /** The status the engine decided for a furnished letting, when asked to. */
+  statutMeuble?: 'LMNP' | 'LMP';
 }
 
 interface LMNPState {
@@ -266,6 +274,51 @@ function implicitAssocie(userProfile: UserProfile, ownershipShare: number): Asso
   };
 }
 
+/**
+ * Art. 155 IV: a furnished letting is professional when the foyer's receipts
+ * from it exceed 23 000 EUR AND its other activity income. Judged on the
+ * first year's receipts, for the declarant's foyer (themselves and their
+ * spouse; the user profile when no associe is declared). Other income is read
+ * from the declared income, Swiss salary included.
+ *
+ * Simplification: the status is decided once, not year by year — switching
+ * mid-way would change the deficit and depreciation rules retroactively.
+ */
+function resoudreStatutMeuble(entity: StructureInput, userProfile: UserProfile): StructureInput {
+  if (entity.type !== 'LMNP' || !entity.statutMeubleAuto) return entity;
+  const recettes = entity.assets.reduce(
+    (acc, a) => acc.plus(a.saisonnier ? computeSaisonnierRevenue(a.saisonnier).caAnnuelBrut : d(a.annualRent)),
+    d(0),
+  );
+  const foyer = (entity.associes ?? []).filter((a) => a.relation === 'SELF' || a.relation === 'SPOUSE');
+  const part = foyer.length > 0 ? foyer.reduce((acc, a) => acc.plus(a.partsPercent), d(0)) : d(1);
+  const autresRevenus =
+    foyer.length > 0
+      ? foyer.reduce((acc, a) => acc.plus(a.autresRevenus).plus(a.revenusExoneres ?? '0'), d(0))
+      : d(userProfile.autresRevenus ?? '0').plus(userProfile.revenusExoneres ?? '0');
+  const recettesFoyer = recettes.mul(part);
+  const professionnel = recettesFoyer.gt(LMP_SEUIL_RECETTES) && recettesFoyer.gt(autresRevenus);
+  return professionnel ? { ...entity, type: 'LMP' } : entity;
+}
+
+/**
+ * Art. 975 V: an LMP's walls leave the IFI base when the declarant's foyer
+ * (themselves and their spouse) draws more than 23 000 EUR of receipts from
+ * the letting and a profit above its other professional income. Other income
+ * is read from each member's declared income, Swiss salary included.
+ */
+function exonerationIfiLmp(state: EntityState, recettes: Decimal, benefice: Decimal): boolean {
+  const foyer = state.associes.filter((a) => a.input.relation === 'SELF' || a.input.relation === 'SPOUSE');
+  if (foyer.length === 0) return false;
+  const part = foyer.reduce((acc, a) => acc.plus(a.input.partsPercent), d(0));
+  const autresRevenus = foyer.reduce(
+    (acc, a) => acc.plus(a.input.autresRevenus).plus(a.input.revenusExoneres ?? '0'),
+    d(0),
+  );
+  const beneficeFoyer = benefice.mul(part);
+  return recettes.mul(part).gt(IFI_LMP_SEUIL_RECETTES) && beneficeFoyer.gt(0) && beneficeFoyer.gt(autresRevenus);
+}
+
 function buildAssocieStates(
   entity: StructureInput,
   taxRegime: 'IS' | 'IR',
@@ -285,7 +338,7 @@ function buildAssocieStates(
   // capital — no debt, no interest, no repayment, nothing owed at the
   // succession. The total invested is unchanged (computeFinancement adds both
   // fields).
-  const enDirect = entity.type === 'LMNP' || entity.type === 'INDIVIDUAL';
+  const enDirect = entity.type === 'LMNP' || entity.type === 'LMP' || entity.type === 'INDIVIDUAL';
 
   return inputs.map((input) => {
     const effectif = enDirect
@@ -361,7 +414,9 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
 
   // Build entity states
   const entityStates: Map<string, EntityState> = new Map();
-  for (const { entity } of flatEntities) {
+  for (const { entity: declaree } of flatEntities) {
+    // A furnished letting left to the engine becomes LMP or LMNP here, once.
+    const entity = resoudreStatutMeuble(declaree, userProfile);
     const taxRegime: 'IS' | 'IR' =
       entity.type === 'SCI_IR' ||
       entity.type === 'INDIVIDUAL' ||
@@ -396,6 +451,9 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       financement: computeFinancement(entity.assets, entity.associes ?? [], costs.constitution),
       isBic: entity.type === 'LMP',
       microFoncier: entity.type === 'INDIVIDUAL' && entity.regimeFoncier === 'MICRO_FONCIER',
+      recettesHistorique: [],
+      parahotellerie: entity.parahotellerie ?? false,
+      statutMeuble: declaree.statutMeubleAuto && declaree.type === 'LMNP' ? (entity.type as 'LMNP' | 'LMP') : undefined,
       tauxCotisationsSocialesLMP: d(entity.tauxCotisationsSocialesLMP ?? 0.35),
       cotisationsMinimalesLMP: d(entity.cotisationsMinimalesLMP ?? '1200.00'),
       lmnp:
@@ -919,8 +977,17 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       state.lastRemainingDebt = entityRemainingDebt;
 
       totalTaxPaid = totalTaxPaid.plus(entityTax);
-      totalRealEstateMarketValue = totalRealEstateMarketValue.plus(entityMarketValue);
-      totalRemainingDebt = totalRemainingDebt.plus(entityRemainingDebt);
+      state.recettesHistorique.push(entityGrossRevenue);
+
+      // An LMP's walls are professional assets, out of the IFI, when the
+      // foyer draws more than 23 000 EUR of receipts from it AND a profit above
+      // half its professional income. Depreciation often wipes the profit out:
+      // then the walls stay taxable.
+      const ifiExonere = state.isBic && exonerationIfiLmp(state, entityGrossRevenue, taxableProfit);
+      if (!ifiExonere) {
+        totalRealEstateMarketValue = totalRealEstateMarketValue.plus(entityMarketValue);
+        totalRemainingDebt = totalRemainingDebt.plus(entityRemainingDebt);
+      }
 
       entitiesResult[name] = {
         grossRevenue: entityGrossRevenue.toFixed(2),
@@ -946,6 +1013,8 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         dividendeVerse: '0.00',
         lmnp: lmnpYear,
         foncier: foncierYear,
+        ...(state.isBic ? { ifiExonere } : {}),
+        ...(state.statutMeuble ? { statutMeuble: state.statutMeuble } : {}),
         detail: Object.fromEntries(
           Object.entries(detail).map(([k, v]) => [k, v.toFixed(2)]),
         ) as EntityYear['detail'],
@@ -1284,7 +1353,13 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       : d(1);
     sortie = computeExitLMNP(sortieParams, lmnp.amortissementsDeduitsCumul.mul(partImmobiliere));
   } else if (holderPrincipal?.isBic && vendeur) {
-    sortie = computeExitLMP(sortieParams, vendeur, holderPrincipal.tauxCotisationsSocialesLMP);
+    // Article 151 septies reads the average receipts of the last two years.
+    const derniers = holderPrincipal.recettesHistorique.slice(-2);
+    const recettesAnnuelles = derniers.length > 0 ? derniers.reduce((a, x) => a.plus(x), d(0)).div(derniers.length) : d(0);
+    sortie = computeExitLMP(sortieParams, vendeur, holderPrincipal.tauxCotisationsSocialesLMP, {
+      recettesAnnuelles,
+      parahotellerie: holderPrincipal.parahotellerie,
+    });
   } else if (holderPrincipal?.taxRegime === 'IS') {
     sortie = computeExitIS(sortieParams);
   } else {
