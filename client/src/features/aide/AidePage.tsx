@@ -91,6 +91,42 @@ const SECTIONS: Section[] = [
     ),
   },
   {
+    id: 'direct',
+    titre: 'Louer en direct : vide ou meuble, sans societe',
+    contenu: (
+      <div className="space-y-3">
+        <p className="text-sm text-gray-700 leading-relaxed">
+          Le bien est a votre nom, seul ou en indivision avec vos coproprietaires. Pas de statuts, pas d’assemblee
+          generale : les loyers s’ajoutent a votre declaration. Deux choix se font : vide ou meuble, et forfait ou reel.
+        </p>
+        <Comparaison
+          colonnes={['Nu micro-foncier', 'Nu reel', 'LMNP micro-BIC', 'LMNP reel']}
+          lignes={[
+            { critere: 'Base imposee', valeurs: ['70 % des loyers', 'Loyers − charges − interets', '50 % des loyers', 'Loyers − charges − amortissements'] },
+            { critere: 'Plafond', valeurs: ['15 000 EUR de loyers', 'Aucun', '77 700 EUR', 'Aucun'] },
+            { critere: 'Deficit', valeurs: ['Impossible', 'Sur le revenu global (10 700 EUR/an)', 'Impossible', 'Sur les loyers meubles futurs'] },
+            { critere: 'Prelevements sociaux', valeurs: ['17,2 %', '17,2 %', '18,6 %', '18,6 %'] },
+            { critere: 'Paperasse', valeurs: ['Aucune', 'Declaration 2044', 'Aucune', 'Liasse BIC, souvent un comptable'] },
+          ]}
+        />
+        <div className="rounded-md bg-gray-50 border border-gray-200 p-3 space-y-2">
+          <Terme mot="Micro-foncier">
+            un abattement de 30 % remplace toutes les charges, interets compris. Simple, mais couteux des qu’un pret ou
+            des travaux pesent : le reel les deduit.
+          </Terme>
+          <Terme mot="Deficit foncier">
+            au reel, des charges superieures aux loyers creent un deficit qui baisse votre revenu global jusqu’a
+            10 700 EUR par an ; le reste s’impute sur les loyers des dix annees suivantes.
+          </Terme>
+          <Terme mot="Indivision">
+            plusieurs proprietaires d’un meme bien, sans societe. Chacun declare sa part ; le plafond du micro-foncier
+            se juge sur la part de chacun.
+          </Terme>
+        </div>
+      </div>
+    ),
+  },
+  {
     id: 'sci',
     titre: 'Qu’est-ce qu’une SCI ?',
     contenu: (
@@ -505,8 +541,9 @@ const BLOCS: Bloc[] = [
   {
     id: 'locatif',
     titre: 'Investissement locatif',
-    intro: 'De quoi lire les resultats des simulateurs SCI / Holding et Location saisonniere sans connaissance prealable.',
-    sections: ['sci', 'ir-is', 'holding', 'lmp', 'concepts', 'transmission', 'limites'],
+    intro:
+      'Deux facons de detenir un bien : en direct, en votre nom, seul ou en indivision ; ou en societe (SCI, holding, SARL de famille), avec statuts, comptable et assemblees generales. La location saisonniere, activite commerciale, se range du cote des societes des qu’on est a plusieurs.',
+    sections: ['direct', 'sci', 'ir-is', 'holding', 'lmp', 'concepts', 'transmission', 'limites'],
     profils: true,
   },
 ];

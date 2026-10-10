@@ -56,11 +56,13 @@ function MesDonnees() {
     <ul className="divide-y rounded-lg border">
       {KINDS.map((k) => {
         const s = SIMULATEURS.find((x) => x.route === k)!;
+        // One saved project feeds both « SCI / Holding » and « Location en direct ».
+        const titre = k === 'sci' ? 'Investissement locatif (SCI et en direct)' : s.titre;
         const n = data.scenarios[k];
         return (
           <li key={k} className="flex items-center justify-between gap-3 px-4 py-2.5">
             <span>
-              Scenarios « {s.titre} » : <strong>{n}</strong>
+              Scenarios « {titre} » : <strong>{n}</strong>
             </span>
             <Lien vers={k} className="shrink-0 text-indigo-700 hover:text-indigo-900">
               {n > 0 ? 'Voir ou supprimer' : 'Ouvrir'} →

@@ -48,6 +48,13 @@ const ICONES: Record<Route, ReactNode> = {
       <path d="M8 11h.01M16 11h.01" />
     </Icone>
   ),
+  direct: (
+    <Icone>
+      <path d="M3 11l9-7 9 7" />
+      <path d="M6 10v10h12V10" />
+      <circle cx="12" cy="15" r="2" />
+    </Icone>
+  ),
   frontalier: (
     <Icone>
       <rect x="4" y="4" width="16" height="16" rx="3" />
@@ -79,8 +86,9 @@ const ICONES: Record<Route, ReactNode> = {
 
 /** What each advanced simulator gives, in three concrete lines. */
 const POINTS: Partial<Record<Route, string[]>> = {
-  sci: ['Cinq montages compares cote a cote', 'Impot, tresorerie et TRI sur 30 ans', 'Revente et transmission chiffrees'],
+  sci: ['SCI a l’IR, a l’IS, holding : cote a cote', 'Impot, tresorerie et TRI sur 30 ans', 'Revente et transmission chiffrees'],
   frontalier: ['Test des 90 % du quasi-resident', 'TOU contre impot a la source, pas a pas', 'Justificatifs lus automatiquement'],
+  direct: ['Nu au micro-foncier ou au reel', 'LMNP micro-BIC ou au reel', 'Sans societe, seul ou en indivision'],
   prevoyance: ['Economie d’impot du versement 3a', 'Courbe du rachat LPP, taux marginal', 'Quand la TOU devient rentable'],
   saisonnier: ['Revenus saison par saison', 'LMNP au reel ou micro-BIC', 'Annonce analysee en un clic'],
 };
@@ -88,7 +96,7 @@ const POINTS: Partial<Record<Route, string[]>> = {
 /** The question each family of simulators answers, as a visitor would ask it. */
 const ACCROCHES: Record<string, string> = {
   Frontaliers: 'Vous travaillez en Suisse ? Demander la TOU, ou rester a l’impot a la source.',
-  'Investissement locatif': 'Vous investissez dans la pierre ? Choisir le montage et le chiffrer sur trente ans.',
+  'Investissement locatif': 'Vous investissez dans la pierre ? En direct ou en societe, chiffrer le montage sur trente ans.',
 };
 
 const eur = (v: number) =>
@@ -213,34 +221,44 @@ function SectionSimulateurs({ rubrique, visiteur, connecte }: { rubrique: Rubriq
           Comprendre →
         </Lien>
       </p>
-      <div className="mt-5 grid gap-4 lg:grid-cols-3">
-        {rubrique.entrees.map((s) => (
-          <Lien
-            key={s.route}
-            vers={s.route}
-            className="group flex flex-col rounded-2xl border bg-white p-6 transition hover:border-indigo-200 hover:shadow-md"
-          >
-            <div className="flex items-center justify-between">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900 text-white">
-                {ICONES[s.route]}
-              </span>
-              {visiteur && <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-500">Avec un compte</span>}
+      {rubrique.groupes.map((g) => (
+        <div key={g.titre} className="mt-5">
+          {g.titre && (
+            <div className="mb-3">
+              <h4 className="text-sm font-semibold uppercase tracking-wide text-gray-500">{g.titre}</h4>
+              <p className="text-sm text-gray-500">{g.sousTitre}</p>
             </div>
-            <span className="mt-4 text-lg font-semibold text-gray-900">{s.titre}</span>
-            <ul className="mt-3 flex-1 space-y-2">
-              {POINTS[s.route]?.map((p) => (
-                <li key={p} className="flex gap-2 text-sm text-gray-600">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
-                  {p}
-                </li>
-              ))}
-            </ul>
-            <span className="mt-5 text-sm font-medium text-indigo-600 group-hover:text-indigo-800">
-              {visiteur ? 'Decouvrir →' : 'Ouvrir →'}
-            </span>
-          </Lien>
-        ))}
-      </div>
+          )}
+          <div className="grid gap-4 lg:grid-cols-3">
+            {g.entrees.map((s) => (
+              <Lien
+                key={s.route}
+                vers={s.route}
+                className="group flex flex-col rounded-2xl border bg-white p-6 transition hover:border-indigo-200 hover:shadow-md"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900 text-white">
+                    {ICONES[s.route]}
+                  </span>
+                  {visiteur && <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-500">Avec un compte</span>}
+                </div>
+                <span className="mt-4 text-lg font-semibold text-gray-900">{s.titre}</span>
+                <ul className="mt-3 flex-1 space-y-2">
+                  {POINTS[s.route]?.map((p) => (
+                    <li key={p} className="flex gap-2 text-sm text-gray-600">
+                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
+                      {p}
+                    </li>
+                  ))}
+                </ul>
+                <span className="mt-5 text-sm font-medium text-indigo-600 group-hover:text-indigo-800">
+                  {visiteur ? 'Decouvrir →' : 'Ouvrir →'}
+                </span>
+              </Lien>
+            ))}
+          </div>
+        </div>
+      ))}
     </section>
   );
 }

@@ -60,10 +60,10 @@ describe('resolveCosts — annual', () => {
     expect(sci.lignesAnnuel.some((l) => l.label.includes('Consolidation'))).toBe(false);
   });
 
-  it('should reduce to zero for direct individual ownership', () => {
+  it('should charge direct ownership no setup and no accountant, only the landlord insurance', () => {
     const individual = resolveCosts('EXPERT_COMPTABLE', 'INDIVIDUAL');
     expect(individual.constitution.toNumber()).toBe(0);
-    expect(individual.annuel.toNumber()).toBe(0);
+    expect(individual.lignesAnnuel.map((l) => l.label)).toEqual(['Assurance PNO / RC']);
   });
 
   it('should still bill the accounting under NOTAIRE_AVOCAT — a notaire keeps no books', () => {

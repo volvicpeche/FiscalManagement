@@ -157,6 +157,14 @@ export const MICRO_BIC_ABATTEMENT_TOURISME_NON_CLASSE = new Decimal('0.30');
 /** Abattement minimal du micro-BIC, quel que soit le taux. */
 export const MICRO_BIC_ABATTEMENT_MINIMUM = new Decimal('305');
 
+/**
+ * Micro-foncier (art. 32 CGI) : revenus fonciers bruts du foyer jusqu'a
+ * 15 000 EUR, abattement forfaitaire de 30 % qui tient lieu de toutes les
+ * charges, interets compris. Au-dela, le reel est obligatoire.
+ */
+export const MICRO_FONCIER_SEUIL = new Decimal('15000');
+export const MICRO_FONCIER_ABATTEMENT = new Decimal('0.30');
+
 /** Un deficit BIC non professionnel se reporte sur les dix annees suivantes. */
 export const LMNP_DUREE_REPORT_DEFICIT = 10;
 

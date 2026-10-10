@@ -7,6 +7,7 @@ import { ConfirmPage, LoginPage, RequireAuth, useSession } from '@/features/auth
 import { AccueilPage } from '@/features/accueil';
 import { CreditPage, InteretsPage, RendementPage } from '@/features/outils';
 import { SciPage } from '@/features/sci';
+import { DirectPage } from '@/features/direct';
 import { FrontalierPage } from '@/features/frontalier';
 import { PrevoyancePage } from '@/features/prevoyance';
 import { SaisonnierPage } from '@/features/saisonnier';
@@ -69,6 +70,11 @@ function App() {
       {route === 'sci' && (
         <Protegee route="sci">
           <SciPage />
+        </Protegee>
+      )}
+      {route === 'direct' && (
+        <Protegee route="direct">
+          <DirectPage />
         </Protegee>
       )}
       {route === 'frontalier' && (

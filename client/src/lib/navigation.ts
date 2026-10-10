@@ -28,31 +28,75 @@ export const FRONTALIERS: EntreeNav[] = [
   },
 ];
 
-/** Logged-in only, for someone investing in real estate. */
-export const INVESTISSEMENT_LOCATIF: EntreeNav[] = [
+/**
+ * Logged-in only, real estate held in one's own name, alone or in
+ * indivision: no company to create. A group with no entry is not shown.
+ */
+export const LOCATIF_DIRECT: EntreeNav[] = [
+  {
+    route: 'direct',
+    titre: 'Location en direct',
+    resume: 'Location vide ou meublee en votre nom : micro-foncier, reel, LMNP micro-BIC et reel compares sur 30 ans.',
+  },
+];
+
+/**
+ * Logged-in only, real estate through a company: statutes, an accountant,
+ * general meetings, annual accounts. The seasonal letting sits here: a
+ * commercial activity, which several people usually run through a SARL de
+ * famille or a company at IS.
+ */
+export const LOCATIF_SOCIETE: EntreeNav[] = [
   {
     route: 'sci',
     titre: 'SCI / Holding',
-    resume: 'SCI a l’IR, a l’IS, holding et LMNP compares sur 30 ans : fiscalite, tresorerie, succession.',
+    resume: 'SCI a l’IR, SCI a l’IS et holding comparees sur 30 ans : fiscalite, tresorerie, revente, transmission.',
   },
   {
     route: 'saisonnier',
     titre: 'Location saisonniere',
-    resume: 'Meuble de tourisme saison par saison, en LMNP : tresorerie, reports et transmission, annonce analysee.',
+    resume: 'Meuble de tourisme saison par saison : tresorerie, reports et transmission, annonce analysee.',
   },
 ];
 
-/** The two families of advanced simulators, as the menus and the home page show them. */
+/** A titled set of entries inside a family, e.g. « En societe ». */
+export interface GroupeNav {
+  titre: string;
+  /** One line under the title: what sets this group apart. */
+  sousTitre: string;
+  entrees: EntreeNav[];
+}
+
+/** The families of advanced simulators, as the menus, the home page and the help show them. */
 export interface Rubrique {
   titre: string;
   /** Section of the help page that explains them. */
   ancreAide: string;
+  /** Untitled when there is a single one. Empty groups are left out. */
+  groupes: GroupeNav[];
+  /** Every entry of the family, groups flattened. */
   entrees: EntreeNav[];
 }
 
+function rubrique(titre: string, ancreAide: string, groupes: GroupeNav[]): Rubrique {
+  const pleins = groupes.filter((g) => g.entrees.length > 0);
+  return { titre, ancreAide, groupes: pleins, entrees: pleins.flatMap((g) => g.entrees) };
+}
+
 export const RUBRIQUES: Rubrique[] = [
-  { titre: 'Frontaliers', ancreAide: 'frontaliers', entrees: FRONTALIERS },
-  { titre: 'Investissement locatif', ancreAide: 'locatif', entrees: INVESTISSEMENT_LOCATIF },
+  rubrique('Frontaliers', 'frontaliers', [{ titre: '', sousTitre: '', entrees: FRONTALIERS }]),
+  rubrique('Investissement locatif', 'locatif', [
+    {
+      titre: 'En direct',
+      sousTitre: 'En votre nom, seul ou en indivision : pas de societe, pas de statuts, comptabilite legere.',
+      entrees: LOCATIF_DIRECT,
+    },
+    {
+      titre: 'En societe',
+      sousTitre: 'Une societe a creer et a faire vivre : statuts, comptable, assemblees generales, comptes annuels.',
+      entrees: LOCATIF_SOCIETE,
+    },
+  ]),
 ];
 
 /** Every advanced simulator, whatever its family. */

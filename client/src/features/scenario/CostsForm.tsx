@@ -50,17 +50,20 @@ function profileTotals(
   );
 }
 
-export function CostsForm() {
+/** `profils`: the setups of the page showing the form — the others are left out. */
+export function CostsForm({ profils = PROFILE_ORDER }: { profils?: ScenarioProfile[] }) {
   const {
     managementMode,
     setManagementMode,
-    activeProfile,
+    activeProfile: profilChoisi,
     setActiveProfile,
     costOverrides,
     setCostOverride,
     resetCostOverride,
   } = useScenarioStore();
   const { data: presets, isLoading, error } = useCostPresets();
+  // The tab chosen on the other page may not exist on this one.
+  const activeProfile = profils.includes(profilChoisi) ? profilChoisi : profils[0];
 
   if (isLoading) {
     return <p className="text-sm text-gray-400">Chargement des couts de reference…</p>;
@@ -117,7 +120,7 @@ export function CostsForm() {
 
       {/* The comparison that answers "how much does each montage cost me" */}
       <div className="space-y-1.5">
-        {PROFILE_ORDER.map((profile) => {
+        {profils.map((profile) => {
           const totals = profileTotals(presets, managementMode, profile, costOverrides[profile]);
           const meta = PROFILE_META[profile];
           return (
@@ -138,7 +141,7 @@ export function CostsForm() {
       {/* Per-profile breakdown */}
       <div>
         <div className="flex gap-1 border-b border-gray-200 mb-3">
-          {PROFILE_ORDER.map((profile) => (
+          {profils.map((profile) => (
             <button
               key={profile}
               type="button"

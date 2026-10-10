@@ -48,6 +48,7 @@ import {
   type ExitResult,
 } from './exit.js';
 import { applyLMNPReel, computeAssocieLMNP, computeMicroBIC } from './lmnp.js';
+import { computeMicroFoncier } from './foncier.js';
 
 // ─── Internal types for simulation state ─────────────────────────────────────
 
@@ -127,6 +128,8 @@ interface EntityState {
   cotisationsMinimalesLMP: Decimal;
   /** LMNP only: the carry-forwards the art. 39 C cap and the BIC deficit rules create. */
   lmnp?: LMNPState;
+  /** INDIVIDUAL at the micro-foncier: each owner's share of gross rents decides, year by year. */
+  microFoncier: boolean;
 }
 
 interface LMNPState {
@@ -277,14 +280,15 @@ function buildAssocieStates(
         ? [implicitAssocie(userProfile, entity.ownershipShare ?? 1)]
         : [];
 
-  // A furnished letting owned directly has no company to lend to: what the
-  // form calls a compte courant is a personal apport like the capital — no
-  // debt, no interest, no repayment, nothing owed at the succession. The total
-  // invested is unchanged (computeFinancement adds both fields).
-  const lmnp = entity.type === 'LMNP';
+  // A letting owned directly, furnished or not, has no company to lend to:
+  // what the form calls a compte courant is a personal apport like the
+  // capital — no debt, no interest, no repayment, nothing owed at the
+  // succession. The total invested is unchanged (computeFinancement adds both
+  // fields).
+  const enDirect = entity.type === 'LMNP' || entity.type === 'INDIVIDUAL';
 
   return inputs.map((input) => {
-    const effectif = lmnp
+    const effectif = enDirect
       ? {
           ...input,
           apportCapital: d(input.apportCapital).plus(input.apportCompteCourant).toFixed(2),
@@ -391,6 +395,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       lastRemainingDebt: d(0),
       financement: computeFinancement(entity.assets, entity.associes ?? [], costs.constitution),
       isBic: entity.type === 'LMP',
+      microFoncier: entity.type === 'INDIVIDUAL' && entity.regimeFoncier === 'MICRO_FONCIER',
       tauxCotisationsSocialesLMP: d(entity.tauxCotisationsSocialesLMP ?? 0.35),
       cotisationsMinimalesLMP: d(entity.cotisationsMinimalesLMP ?? '1200.00'),
       lmnp:
@@ -674,6 +679,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
       const chargesStructurelles = operatingCosts.plus(ccaInterestTotal);
       let taxableProfit: Decimal;
       let lmnpYear: EntityYear['lmnp'];
+      let foncierYear: EntityYear['foncier'];
 
       if (state.lmnp) {
         const lmnp = state.lmnp;
@@ -814,8 +820,27 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         // 5b. IR foncier: the SCI is translucent — each associe is taxed on
         // their own quote-part, at their own marginal rate, on top of their
         // own income.
+        //
+        // Held directly at the micro-foncier, an owner whose share of the
+        // gross rents stays within the ceiling is taxed on that share less the
+        // flat allowance instead: no charge, no interest, no new deficit. The
+        // deficits carried from reel years still absorb it. Above the ceiling
+        // the reel is compulsory for that owner, that year.
+        let baseImposable = d(0);
+        let abattementMicro = d(0);
+        let toutMicro = state.microFoncier;
         for (const a of state.associes) {
-          const quotePart = taxableProfit.mul(a.input.partsPercent);
+          let quotePart = taxableProfit.mul(a.input.partsPercent);
+          if (state.microFoncier) {
+            const micro = computeMicroFoncier(entityGrossRevenue.mul(a.input.partsPercent));
+            if (micro.eligible) {
+              quotePart = micro.revenuNet;
+              abattementMicro = abattementMicro.plus(micro.abattement);
+            } else {
+              toutMicro = false;
+            }
+          }
+          baseImposable = baseImposable.plus(quotePart);
           const deficit = applyDeficitFoncier(quotePart, a.deficitVintages, year);
           a.deficitVintages = deficit.vintages;
 
@@ -830,6 +855,11 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
             psTax: ps,
             netCashFlow: ir.neg().minus(ps),
           });
+        }
+        if (state.microFoncier) {
+          // What the owners are actually taxed on, before their carried deficits.
+          taxableProfit = baseImposable;
+          foncierYear = { regime: toutMicro ? 'MICRO_FONCIER' : 'REEL', abattementMicro: abattementMicro.toFixed(2) };
         }
       }
 
@@ -915,6 +945,7 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
         ccaSolde: state.associes.reduce((acc, a) => acc.plus(a.ccaBalance), d(0)).toFixed(2),
         dividendeVerse: '0.00',
         lmnp: lmnpYear,
+        foncier: foncierYear,
         detail: Object.fromEntries(
           Object.entries(detail).map(([k, v]) => [k, v.toFixed(2)]),
         ) as EntityYear['detail'],

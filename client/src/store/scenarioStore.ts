@@ -120,6 +120,8 @@ const EMPTY_RESULTS: Record<ScenarioProfile, SimulationResult | null> = {
   SCI_IS_HOLDING: null,
   LMNP_REEL: null,
   LMNP_MICRO: null,
+  NU_MICRO: null,
+  NU_REEL: null,
 };
 
 const EMPTY_OVERRIDES: Record<ScenarioProfile, Record<string, EntityCostsInput>> = {
@@ -128,6 +130,8 @@ const EMPTY_OVERRIDES: Record<ScenarioProfile, Record<string, EntityCostsInput>>
   SCI_IS_HOLDING: {},
   LMNP_REEL: {},
   LMNP_MICRO: {},
+  NU_MICRO: {},
+  NU_REEL: {},
 };
 
 // ─── Scenario construction ───────────────────────────────────────────────────
@@ -175,6 +179,32 @@ export function buildScenario(profile: ScenarioProfile, shared: SharedInputs): S
       // An SCI at IR distributes nothing: the associes are taxed on the
       // result whether they take the cash out or not.
       params: { ...params, dividendDistributionRate: 0 },
+    };
+  }
+
+  if (profile === 'NU_MICRO' || profile === 'NU_REEL') {
+    // Unfurnished letting owned directly — in indivision when there are
+    // several associes, each taxed on their share of the foncier income.
+    const name = profile === 'NU_MICRO' ? 'Nu (micro-foncier)' : 'Nu (reel)';
+    return {
+      userProfile,
+      structures: [
+        {
+          name,
+          type: 'INDIVIDUAL',
+          taxRegime: 'IR',
+          ownershipShare: 1,
+          tauxCotisationsSocialesLMP: 0.35,
+          cotisationsMinimalesLMP: '1200.00',
+          regimeFoncier: profile === 'NU_MICRO' ? 'MICRO_FONCIER' : 'REEL',
+          associes,
+          costs: costsFor(shared, profile, name),
+          // Let unfurnished: no furniture to buy, nothing of it to depreciate.
+          assets: [{ ...asset, mobilier: '0.00' }],
+          subsidiaries: [],
+        },
+      ],
+      params: { ...params, dividendDistributionRate: 0, illiquidityDiscount: 0 },
     };
   }
 
@@ -269,6 +299,8 @@ export function buildAllScenarios(shared: SharedInputs): Record<ScenarioProfile,
     SCI_IS_HOLDING: buildScenario('SCI_IS_HOLDING', shared),
     LMNP_REEL: buildScenario('LMNP_REEL', shared),
     LMNP_MICRO: buildScenario('LMNP_MICRO', shared),
+    NU_MICRO: buildScenario('NU_MICRO', shared),
+    NU_REEL: buildScenario('NU_REEL', shared),
   };
 }
 
@@ -396,6 +428,9 @@ export function partsAreValid(associes: AssocieInput[]): boolean {
   return Math.abs(partsTotal(associes) - 1) < 1e-6;
 }
 
-export function hasAnyResult(results: Record<ScenarioProfile, SimulationResult | null>): boolean {
-  return PROFILE_ORDER.some((p) => results[p] !== null);
+export function hasAnyResult(
+  results: Record<ScenarioProfile, SimulationResult | null>,
+  profils: ScenarioProfile[] = PROFILE_ORDER,
+): boolean {
+  return profils.some((p) => results[p] !== null);
 }

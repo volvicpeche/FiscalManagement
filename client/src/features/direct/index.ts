@@ -1,0 +1,1 @@
+export { DirectPage } from './DirectPage';
