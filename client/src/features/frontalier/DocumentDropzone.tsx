@@ -9,7 +9,7 @@ import {
   type QuiPersonne,
 } from '@/store/frontalierStore';
 import { inputClass } from './ui';
-import { LlmRequis, useLlmDisponible } from '@/features/parametres';
+import { LlmRequis, useConsentementIa, useLlmDisponible } from '@/features/parametres';
 import { ETAPES, ETAPE_DU_DOCUMENT, LIBELLES_DOCUMENTS } from './parcours';
 
 /** A certificate or an annual statement replaces; a receipt among several adds up. */
@@ -42,7 +42,10 @@ export function DocumentDropzone({ attendus, personne }: { attendus: DocumentTyp
   const [survol, setSurvol] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   // No LLM key available: nothing is sent, the zone says why instead.
-  const actif = useLlmDisponible('document');
+  const cleDisponible = useLlmDisponible('document');
+  // Nor before the user has agreed to send documents to that provider.
+  const consentement = useConsentementIa();
+  const actif = cleDisponible && consentement.accepte;
 
   const envoyer = (fichiers: File[]) => {
     if (!actif || fichiers.length === 0) return;
@@ -94,7 +97,23 @@ export function DocumentDropzone({ attendus, personne }: { attendus: DocumentTyp
         </p>
       </div>
 
-      {!actif && <LlmRequis usage="document" />}
+      {!cleDisponible && <LlmRequis usage="document" />}
+      {cleDisponible && consentement.fournisseur && !consentement.accepte && (
+        <div className="rounded-md border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-900 space-y-2">
+          <p>
+            Pour lire vos justificatifs, Patrimonia les transmet a <strong>{consentement.fournisseur.libelle}</strong>,
+            qui en extrait les montants selon sa propre politique de confidentialite, le plus souvent hors de l’Union
+            europeenne. Le serveur ne garde pas les fichiers. La saisie a la main reste toujours possible.
+          </p>
+          <button
+            type="button"
+            onClick={consentement.accepter}
+            className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+          >
+            J’accepte de transmettre mes documents a ce fournisseur
+          </button>
+        </div>
+      )}
 
       <div
         aria-disabled={!actif}
@@ -118,8 +137,10 @@ export function DocumentDropzone({ attendus, personne }: { attendus: DocumentTyp
         }`}
       >
         <p className="text-sm font-medium text-gray-700">
-          {!actif
+          {!cleDisponible
             ? 'Lecture automatique desactivee sans cle API'
+            : !actif
+              ? 'Lecture automatique en attente de votre accord'
             : extraction.isPending
               ? 'Lecture en cours...'
               : 'Deposez vos PDF ou photos ici, ou cliquez'}
@@ -141,6 +162,14 @@ export function DocumentDropzone({ attendus, personne }: { attendus: DocumentTyp
       <p className="text-xs text-gray-400">
         Les fichiers sont transmis au fournisseur de votre cle API (« Cle LLM ») pour lecture, puis oublies : le serveur ne les
         enregistre pas. Seuls les montants que vous validez rejoignent le formulaire.
+        {consentement.accepte && (
+          <>
+            {' '}
+            <button type="button" onClick={consentement.retirer} className="underline hover:text-gray-600">
+              Retirer mon accord
+            </button>
+          </>
+        )}
       </p>
 
       {extraction.error && (

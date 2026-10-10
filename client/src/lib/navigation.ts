@@ -1,4 +1,4 @@
-import type { Route } from './router';
+import type { Route } from './routes';
 
 /** One place for what the menus and the home page list. */
 export interface EntreeNav {
@@ -14,17 +14,21 @@ export const OUTILS: EntreeNav[] = [
   { route: 'interets', titre: 'Interets composes', resume: 'Ce que devient une epargne reguliere au fil des annees.' },
 ];
 
-/** Logged-in only: the engine, saved scenarios, document reading. */
-export const SIMULATEURS: EntreeNav[] = [
+/** Logged-in only, for someone working in Switzerland. */
+export const FRONTALIERS: EntreeNav[] = [
+  {
+    route: 'frontalier',
+    titre: 'TOU ou impot a la source',
+    resume: 'Taxation ordinaire ulterieure contre impot a la source, pas a pas, justificatifs lus automatiquement.',
+  },
+];
+
+/** Logged-in only, for someone investing in real estate. */
+export const INVESTISSEMENT_LOCATIF: EntreeNav[] = [
   {
     route: 'sci',
     titre: 'SCI / Holding',
     resume: 'SCI a l’IR, a l’IS, holding et LMNP compares sur 30 ans : fiscalite, tresorerie, succession.',
-  },
-  {
-    route: 'frontalier',
-    titre: 'Frontalier Suisse',
-    resume: 'Taxation ordinaire ulterieure contre impot a la source, pas a pas, justificatifs lus automatiquement.',
   },
   {
     route: 'saisonnier',
@@ -33,7 +37,21 @@ export const SIMULATEURS: EntreeNav[] = [
   },
 ];
 
-export const ROUTES_PROTEGEES = new Set<Route>(SIMULATEURS.map((s) => s.route));
+/** The two families of advanced simulators, as the menus and the home page show them. */
+export interface Rubrique {
+  titre: string;
+  /** Section of the help page that explains them. */
+  ancreAide: string;
+  entrees: EntreeNav[];
+}
+
+export const RUBRIQUES: Rubrique[] = [
+  { titre: 'Frontaliers', ancreAide: 'frontaliers', entrees: FRONTALIERS },
+  { titre: 'Investissement locatif', ancreAide: 'locatif', entrees: INVESTISSEMENT_LOCATIF },
+];
+
+/** Every advanced simulator, whatever its family. */
+export const SIMULATEURS: EntreeNav[] = RUBRIQUES.flatMap((r) => r.entrees);
 
 const CLE_DERNIER = 'patrimonia.dernierSimulateur';
 
@@ -41,7 +59,7 @@ const CLE_DERNIER = 'patrimonia.dernierSimulateur';
 export function lireDernierSimulateur(): Route | null {
   try {
     const r = localStorage.getItem(CLE_DERNIER) as Route | null;
-    return r && ROUTES_PROTEGEES.has(r) ? r : null;
+    return r && SIMULATEURS.some((s) => s.route === r) ? r : null;
   } catch {
     return null;
   }

@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react';
 import { useFermeture } from '@/components/useFermeture';
+import { Lien } from '@/lib/router';
 import { LlmSettingsDialog, useLlmDialog } from '@/features/parametres';
 import { useLlmSettings } from '@/hooks/useLlmSettings';
 import { useAuth } from './AuthContext';
 
 /**
- * Who is logged in, their LLM key and the way out, folded into one compact
+ * Who is logged in, their account page, their LLM key and the way out, folded into one compact
  * button so the header fits a medium screen. An amber dot flags a missing
  * LLM key. The « Clé LLM » dialog lives here but can be opened from anywhere
  * (useLlmDialog), e.g. from a feature that needs a key.
@@ -49,6 +50,9 @@ export function UserMenu() {
       {menu && (
         <div role="menu" className="absolute right-0 z-20 mt-2 w-64 overflow-hidden rounded-lg border bg-white shadow-lg">
           <p className="truncate border-b px-3 py-2 text-xs text-gray-500">{email}</p>
+          <Lien vers="compte" role="menuitem" className={item} onClick={() => setMenu(false)}>
+            Mon compte
+          </Lien>
           <button
             type="button"
             role="menuitem"

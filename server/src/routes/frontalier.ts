@@ -46,6 +46,16 @@ export async function frontalierRoutes(server: FastifyInstance) {
       return reply.status(400).send({ error: 'Envoyez les documents en multipart/form-data' });
     }
 
+    // The files go to the user's LLM provider: the client asks first (RGPD,
+    // a transfer to a processor mostly outside the EU) and says so here.
+    // Checked before reading anything.
+    if ((request.query as Record<string, unknown> | undefined)?.consentement !== 'oui') {
+      return reply.status(400).send({
+        code: 'CONSENTEMENT_REQUIS',
+        error: 'Acceptez la transmission des documents a votre fournisseur d’IA avant de les envoyer.',
+      });
+    }
+
     // No usable key: refuse before receiving a single byte of the files.
     const config = await resoudreLlm(request, reply, 'document');
     if (!config) return reply;

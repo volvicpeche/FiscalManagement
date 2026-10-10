@@ -40,6 +40,10 @@ server {
     # Ne pas annoncer la version de nginx.
     server_tokens off;
 
+    # Redirections relatives : derrière Caddy, nginx ne voit que du http, et
+    # une redirection absolue renverrait le visiteur vers http://.
+    absolute_redirect off;
+
     # Adresse du conteneur server, relue toutes les 10 s au lieu d'une seule
     # fois au démarrage : recréer server (déploiement, force-recreate) lui
     # donne une nouvelle IP, et nginx répondait 502 jusqu'à son propre
@@ -140,6 +144,13 @@ server {
         include /etc/nginx/conf.d/proxy-api.inc;
         include /etc/nginx/conf.d/security-headers.inc;
     }
+
+    # Anciennes adresses des simulateurs (avant la séparation Frontaliers /
+    # Investissement locatif) : les favoris continuent de fonctionner. Même
+    # table côté client, ANCIENS_CHEMINS dans src/lib/routes.ts.
+    location = /simulateurs/sci { return 301 /locatif/sci$is_args$args; }
+    location = /simulateurs/saisonnier { return 301 /locatif/saisonnier$is_args$args; }
+    location = /simulateurs/frontalier { return 301 /frontalier/tou$is_args$args; }
 
     # SPA: each public page has its own HTML (title, description, preview
     # tags generated at build time, vite.config.ts); anything else falls back

@@ -16,6 +16,7 @@ export type Route =
   | 'inscription'
   | 'mentions'
   | 'confidentialite'
+  | 'compte'
   | 'confirmation';
 
 export const CHEMINS: Record<Route, string> = {
@@ -23,13 +24,25 @@ export const CHEMINS: Record<Route, string> = {
   credit: '/outils/credit',
   rendement: '/outils/rendement',
   interets: '/outils/interets-composes',
-  sci: '/simulateurs/sci',
-  frontalier: '/simulateurs/frontalier',
-  saisonnier: '/simulateurs/saisonnier',
+  sci: '/locatif/sci',
+  frontalier: '/frontalier/tou',
+  saisonnier: '/locatif/saisonnier',
   aide: '/aide',
   connexion: '/connexion',
   inscription: '/inscription',
   mentions: '/mentions-legales',
   confidentialite: '/confidentialite',
+  compte: '/compte',
   confirmation: '/auth/confirmer',
+};
+
+/**
+ * Paths a page used to have, still recognised so a bookmark keeps working.
+ * nginx answers them with a 301 (nginx.conf.template); the router rewrites
+ * them in place for the dev server.
+ */
+export const ANCIENS_CHEMINS: Record<string, Route> = {
+  '/simulateurs/sci': 'sci',
+  '/simulateurs/frontalier': 'frontalier',
+  '/simulateurs/saisonnier': 'saisonnier',
 };

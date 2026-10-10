@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { naviguer, useRoute, type Route } from '@/lib/router';
-import { ROUTES_PROTEGEES, SIMULATEURS, lireDernierSimulateur, memoriserDernierSimulateur } from '@/lib/navigation';
+import { SIMULATEURS, lireDernierSimulateur, memoriserDernierSimulateur } from '@/lib/navigation';
 import { appliquerMeta } from '@/lib/seo';
 import { ConfirmPage, LoginPage, RequireAuth, useSession } from '@/features/auth';
 import { AccueilPage } from '@/features/accueil';
@@ -11,9 +11,12 @@ import { FrontalierPage } from '@/features/frontalier';
 import { SaisonnierPage } from '@/features/saisonnier';
 import { AidePage } from '@/features/aide';
 import { ConfidentialitePage, MentionsLegalesPage } from '@/features/legal';
+import { ComptePage } from '@/features/compte';
+
+const COMPTE = { titre: 'Mon compte', resume: 'Vos donnees, leur export et la suppression de votre compte.' };
 
 function Protegee({ route, children }: { route: Route; children: React.ReactNode }) {
-  const s = SIMULATEURS.find((x) => x.route === route)!;
+  const s = SIMULATEURS.find((x) => x.route === route) ?? COMPTE;
   return (
     <RequireAuth titre={s.titre} apport={s.resume}>
       {children}
@@ -30,7 +33,7 @@ function App() {
   // Remembered for the home page's « Mes simulateurs » button. Never used to
   // redirect on load: a refresh must stay on the page being refreshed.
   useEffect(() => {
-    if (user && ROUTES_PROTEGEES.has(route)) memoriserDernierSimulateur(route);
+    if (user && SIMULATEURS.some((s) => s.route === route)) memoriserDernierSimulateur(route);
   }, [route, user]);
 
   // The login pages have nothing to show to someone already logged in.
@@ -70,6 +73,11 @@ function App() {
       {route === 'frontalier' && (
         <Protegee route="frontalier">
           <FrontalierPage />
+        </Protegee>
+      )}
+      {route === 'compte' && (
+        <Protegee route="compte">
+          <ComptePage />
         </Protegee>
       )}
       {route === 'saisonnier' && (

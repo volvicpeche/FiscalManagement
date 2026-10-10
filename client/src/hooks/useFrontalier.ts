@@ -62,7 +62,8 @@ export function useExtractDocuments() {
     mutationFn: (fichiers: File[]) => {
       const form = new FormData();
       for (const f of fichiers) form.append('fichiers', f, f.name);
-      return send<DocumentExtractionResult[]>('/api/frontalier/documents', { method: 'POST', body: form });
+      // Only called once the user has agreed (DocumentDropzone, useConsentementIa).
+      return send<DocumentExtractionResult[]>('/api/frontalier/documents?consentement=oui', { method: 'POST', body: form });
     },
   });
 }
