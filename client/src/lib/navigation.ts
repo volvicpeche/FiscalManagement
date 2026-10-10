@@ -35,8 +35,8 @@ export const FRONTALIERS: EntreeNav[] = [
 export const LOCATIF_DIRECT: EntreeNav[] = [
   {
     route: 'direct',
-    titre: 'Location en direct',
-    resume: 'Location vide ou meublee en votre nom : micro-foncier, reel, LMNP micro-BIC et reel compares sur 30 ans.',
+    titre: 'Location nue ou meublee',
+    resume: 'En votre nom : micro-foncier, reel, LMNP micro-BIC et reel compares sur 30 ans.',
   },
 ];
 
@@ -55,11 +55,11 @@ export const LOCATIF_SOCIETE: EntreeNav[] = [
   {
     route: 'saisonnier',
     titre: 'Location saisonniere',
-    resume: 'Meuble de tourisme saison par saison : tresorerie, reports et transmission, annonce analysee.',
+    resume: 'Meuble de tourisme en direct, en SARL de famille ou en societe a l’IS : les trois compares.',
   },
 ];
 
-/** A titled set of entries inside a family, e.g. « En societe ». */
+/** A titled set of entries inside a family; untitled when the family has a single one. */
 export interface GroupeNav {
   titre: string;
   /** One line under the title: what sets this group apart. */
@@ -70,34 +70,41 @@ export interface GroupeNav {
 /** The families of advanced simulators, as the menus, the home page and the help show them. */
 export interface Rubrique {
   titre: string;
+  /** One line about the family, under its title on the home page. */
+  sousTitre: string;
   /** Section of the help page that explains them. */
   ancreAide: string;
-  /** Untitled when there is a single one. Empty groups are left out. */
+  /** Empty groups are left out. */
   groupes: GroupeNav[];
   /** Every entry of the family, groups flattened. */
   entrees: EntreeNav[];
 }
 
-function rubrique(titre: string, ancreAide: string, groupes: GroupeNav[]): Rubrique {
-  const pleins = groupes.filter((g) => g.entrees.length > 0);
-  return { titre, ancreAide, groupes: pleins, entrees: pleins.flatMap((g) => g.entrees) };
+function rubrique(titre: string, sousTitre: string, ancreAide: string, entrees: EntreeNav[]): Rubrique {
+  const groupes = entrees.length > 0 ? [{ titre: '', sousTitre: '', entrees }] : [];
+  return { titre, sousTitre, ancreAide, groupes, entrees };
 }
 
+/**
+ * One header menu per family. Real estate is split in two on purpose: held in
+ * one's own name, or through a company — two different projects, each page
+ * with its own inputs, a box on each to compare with the other.
+ */
 export const RUBRIQUES: Rubrique[] = [
-  rubrique('Frontaliers', 'frontaliers', [{ titre: '', sousTitre: '', entrees: FRONTALIERS }]),
-  rubrique('Investissement locatif', 'locatif', [
-    {
-      titre: 'En direct',
-      sousTitre: 'En votre nom, seul ou en indivision : pas de societe, pas de statuts, comptabilite legere.',
-      entrees: LOCATIF_DIRECT,
-    },
-    {
-      titre: 'En societe',
-      sousTitre: 'Une societe a creer et a faire vivre : statuts, comptable, assemblees generales, comptes annuels.',
-      entrees: LOCATIF_SOCIETE,
-    },
-  ]),
-];
+  rubrique('Frontaliers', '', 'frontaliers', FRONTALIERS),
+  rubrique(
+    'Investir en direct',
+    'En votre nom, seul ou en indivision : pas de societe, pas de statuts, comptabilite legere.',
+    'direct',
+    LOCATIF_DIRECT,
+  ),
+  rubrique(
+    'Investir en societe',
+    'Une societe a creer et a faire vivre : statuts, comptable, assemblees generales, comptes annuels.',
+    'societe',
+    LOCATIF_SOCIETE,
+  ),
+].filter((r) => r.entrees.length > 0);
 
 /** Every advanced simulator, whatever its family. */
 export const SIMULATEURS: EntreeNav[] = RUBRIQUES.flatMap((r) => r.entrees);

@@ -90,6 +90,7 @@ function withDistributedParts(associes: AssocieInput[]): AssocieInput[] {
   return redistributeParts(associes, selfIndex === -1 ? 0 : selfIndex);
 }
 
+/** A couple holding a company: capital at the incorporation, the rest lent in compte courant. */
 const DEFAULT_ASSOCIES: AssocieInput[] = withDistributedParts([
   makeAssocie({
     nom: 'Moi',
@@ -113,6 +114,13 @@ const DEFAULT_ASSOCIES: AssocieInput[] = withDistributedParts([
     apportCapital: '500.00',
   }),
 ]);
+
+/** The same couple holding the walls directly: no company to lend to, the whole apport is theirs. */
+const DEFAULT_PROPRIETAIRES: AssocieInput[] = DEFAULT_ASSOCIES.map((a) => ({
+  ...a,
+  apportCapital: (parseFloat(a.apportCapital) + parseFloat(a.apportCompteCourant)).toFixed(2),
+  apportCompteCourant: '0.00',
+}));
 
 const EMPTY_RESULTS: Record<ScenarioProfile, SimulationResult | null> = {
   SCI_IR: null,
@@ -331,17 +339,28 @@ interface ScenarioStore extends SharedInputs {
   setActiveProfile: (p: ScenarioProfile) => void;
   setResult: (p: ScenarioProfile, r: SimulationResult | null) => void;
   clearResults: () => void;
+  /** Set by the other page when it hands its inputs over: run as soon as the page opens. */
+  lancerALArrivee: boolean;
+  setLancerALArrivee: (v: boolean) => void;
 }
 
-export const useScenarioStore = create<ScenarioStore>((set) => ({
+/**
+ * One store per page: « Investir en societe » and « Investir en direct » keep
+ * their own inputs, results and saved scenarios. The forms reach the page's
+ * store through `StoreLocatifContext` (store/storeLocatif.ts).
+ */
+function creerStoreLocatif(initial: { associes: AssocieInput[]; activeProfile: ScenarioProfile }) {
+  return create<ScenarioStore>((set) => ({
   userProfile: DEFAULT_PROFILE,
   asset: DEFAULT_ASSET,
-  associes: DEFAULT_ASSOCIES,
+  associes: initial.associes,
   params: DEFAULT_PARAMS,
   managementMode: 'EN_LIGNE',
   costOverrides: EMPTY_OVERRIDES,
   results: EMPTY_RESULTS,
-  activeProfile: 'SCI_IS_SEULE',
+  activeProfile: initial.activeProfile,
+  lancerALArrivee: false,
+  setLancerALArrivee: (lancerALArrivee) => set({ lancerALArrivee }),
 
   updateUserProfile: (p) => set((s) => ({ userProfile: { ...s.userProfile, ...p } })),
   updateAsset: (a) => set((s) => ({ asset: { ...s.asset, ...a } })),
@@ -404,7 +423,16 @@ export const useScenarioStore = create<ScenarioStore>((set) => ({
   setActiveProfile: (activeProfile) => set({ activeProfile }),
   setResult: (p, r) => set((s) => ({ results: { ...s.results, [p]: r } })),
   clearResults: () => set({ results: EMPTY_RESULTS }),
-}));
+  }));
+}
+
+/** « Investir en societe »: SCI at IR, SCI at IS, holding. */
+export const useScenarioStore = creerStoreLocatif({ associes: DEFAULT_ASSOCIES, activeProfile: 'SCI_IS_SEULE' });
+
+/** « Investir en direct »: unfurnished and furnished letting in one's own name. */
+export const useDirectStore = creerStoreLocatif({ associes: DEFAULT_PROPRIETAIRES, activeProfile: 'NU_REEL' });
+
+export type StoreLocatif = typeof useScenarioStore;
 
 // ─── Derived selectors ───────────────────────────────────────────────────────
 

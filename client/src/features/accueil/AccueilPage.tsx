@@ -96,7 +96,8 @@ const POINTS: Partial<Record<Route, string[]>> = {
 /** The question each family of simulators answers, as a visitor would ask it. */
 const ACCROCHES: Record<string, string> = {
   Frontaliers: 'Vous travaillez en Suisse ? Demander la TOU, ou rester a l’impot a la source.',
-  'Investissement locatif': 'Vous investissez dans la pierre ? En direct ou en societe, chiffrer le montage sur trente ans.',
+  'Investir en direct': 'Un bien a votre nom, loue vide ou meuble : forfait ou reel, chiffre sur trente ans.',
+  'Investir en societe': 'SCI, holding, location saisonniere a plusieurs : la societe vaut-elle ses couts ?',
 };
 
 const eur = (v: number) =>

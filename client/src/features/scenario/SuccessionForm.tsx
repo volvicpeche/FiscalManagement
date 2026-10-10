@@ -1,8 +1,8 @@
-import { useScenarioStore } from '@/store/scenarioStore';
+import { useStoreLocatif } from '@/store/storeLocatif';
 import { RELATION_LABELS } from '@/lib/profiles';
 
 export function SuccessionForm() {
-  const { params, updateParams, associes } = useScenarioStore();
+  const { params, updateParams, associes } = useStoreLocatif();
 
   const defunt = associes.find((a) => a.relation === 'SELF');
   const heritiers = associes.filter((a) => a.relation !== 'SELF' && a !== defunt);

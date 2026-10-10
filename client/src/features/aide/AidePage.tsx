@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { PROFILE_META, PROFILE_ORDER } from '@/lib/profiles';
+import type { ScenarioProfile } from '@shared/schemas.js';
+import { PROFILE_META, PROFILS_DIRECT, PROFILS_SOCIETE } from '@/lib/profiles';
 
 /**
  * Plain-language guide to what the simulator compares.
@@ -522,7 +523,7 @@ interface Bloc {
   intro: string;
   sections: string[];
   /** The columns of the comparison, shown above the real-estate sections. */
-  profils?: boolean;
+  profils?: ScenarioProfile[];
 }
 
 const BLOCS: Bloc[] = [
@@ -539,21 +540,32 @@ const BLOCS: Bloc[] = [
     sections: ['frontalier', 'prevoyance'],
   },
   {
-    id: 'locatif',
-    titre: 'Investissement locatif',
+    id: 'direct',
+    titre: 'Investir en direct',
+    intro: 'Le bien a votre nom, seul ou en indivision : pas de statuts ni d’assemblee generale. Location vide ou meublee, au forfait ou au reel.',
+    sections: ['direct', 'concepts'],
+    profils: PROFILS_DIRECT,
+  },
+  {
+    id: 'societe',
+    titre: 'Investir en societe',
     intro:
-      'Deux facons de detenir un bien : en direct, en votre nom, seul ou en indivision ; ou en societe (SCI, holding, SARL de famille), avec statuts, comptable et assemblees generales. La location saisonniere, activite commerciale, se range du cote des societes des qu’on est a plusieurs.',
-    sections: ['direct', 'sci', 'ir-is', 'holding', 'lmp', 'concepts', 'transmission', 'limites'],
-    profils: true,
+      'SCI, holding, SARL de famille ou societe a l’IS : une societe a creer et a faire vivre (statuts, comptable, assemblees generales). La location saisonniere, activite commerciale, s’y range des qu’on est a plusieurs.',
+    sections: ['sci', 'ir-is', 'holding', 'lmp', 'transmission', 'limites'],
+    profils: PROFILS_SOCIETE,
   },
 ];
 
 const PAR_ID = new Map(SECTIONS.map((s) => [s.id, s]));
 
 /** The anchor of the URL: a block (`#frontaliers`) or a section (`#holding`). */
+/** Anchors that moved: the real-estate block was split in two. */
+const ANCIENNES_ANCRES: Record<string, string> = { locatif: 'societe' };
+
 function ancreInitiale(): string {
   try {
-    return decodeURIComponent(window.location.hash.slice(1));
+    const ancre = decodeURIComponent(window.location.hash.slice(1));
+    return ANCIENNES_ANCRES[ancre] ?? ancre;
   } catch {
     return '';
   }
@@ -606,7 +618,7 @@ export function AidePage() {
           {/* What the columns of the comparison actually are */}
           {b.profils && (
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {PROFILE_ORDER.map((p) => {
+              {b.profils.map((p) => {
                 const meta = PROFILE_META[p];
                 return (
                   <div key={p} className={`rounded-md border p-3 ${meta.bg} ${meta.border}`}>

@@ -1,7 +1,7 @@
-import { useScenarioStore } from '@/store/scenarioStore';
+import { useStoreLocatif } from '@/store/storeLocatif';
 
 export function UserProfileForm() {
-  const { userProfile: profile, updateUserProfile } = useScenarioStore();
+  const { userProfile: profile, updateUserProfile } = useStoreLocatif();
 
   return (
     <div className="space-y-4">
