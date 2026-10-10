@@ -30,7 +30,7 @@ export const META: Record<Route, MetaPage> = {
   accueil: {
     titre: 'Patrimonia — Simulateurs de crédit, rendement locatif et fiscalité immobilière',
     description:
-      'Crédit immobilier, rendement locatif, intérêts composés : des calculs clairs et gratuits, sans compte. Et des simulateurs SCI, holding et frontalier suisse pour comparer les montages et leur fiscalité.',
+      'Crédit immobilier, rendement locatif, intérêts composés : des calculs clairs et gratuits, sans compte. Et des simulateurs pour les frontaliers suisses (TOU ou impôt à la source) et l’investissement locatif (SCI, holding, LMNP).',
     indexer: true,
     sitemap: true,
   },
@@ -93,6 +93,12 @@ export const META: Record<Route, MetaPage> = {
     titre: 'Politique de confidentialité | Patrimonia',
     description: 'Les données collectées par Patrimonia, pourquoi, combien de temps, et vos droits.',
     indexer: true,
+    sitemap: false,
+  },
+  compte: {
+    titre: 'Mon compte | Patrimonia',
+    description: 'Vos données, leur export et la suppression de votre compte.',
+    indexer: false,
     sitemap: false,
   },
   connexion: { titre: 'Connexion | Patrimonia', description: 'Connectez-vous à Patrimonia.', indexer: false, sitemap: false },

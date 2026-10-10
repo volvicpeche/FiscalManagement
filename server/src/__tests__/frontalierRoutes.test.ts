@@ -86,10 +86,20 @@ describe('POST /api/frontalier/documents', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('should report an unsupported format per file without calling the model', async () => {
+  it('should refuse the files until the user has agreed to send them to their provider', async () => {
     const res = await server.inject({
       method: 'POST',
       url: '/api/frontalier/documents',
+      ...multipart([{ nom: 'certificat.pdf', type: 'application/pdf', contenu: '%PDF' }]),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'CONSENTEMENT_REQUIS' });
+  });
+
+  it('should report an unsupported format per file without calling the model', async () => {
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/frontalier/documents?consentement=oui',
       ...multipart([{ nom: 'notes.txt', type: 'text/plain', contenu: 'bonjour' }]),
     });
     expect(res.statusCode).toBe(200);

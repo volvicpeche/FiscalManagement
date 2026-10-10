@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PROFILE_META, PROFILE_ORDER } from '@/lib/profiles';
 
 /**
@@ -448,53 +448,133 @@ const SECTIONS: Section[] = [
   },
 ];
 
+/** The help page follows the menus: quick tools, then each family of simulators. */
+interface Bloc {
+  id: string;
+  titre: string;
+  intro: string;
+  sections: string[];
+  /** The columns of the comparison, shown above the real-estate sections. */
+  profils?: boolean;
+}
+
+const BLOCS: Bloc[] = [
+  {
+    id: 'outils-rapides',
+    titre: 'Outils rapides',
+    intro: 'Les calculettes sans compte.',
+    sections: ['outils'],
+  },
+  {
+    id: 'frontaliers',
+    titre: 'Frontaliers',
+    intro: 'Vous travaillez en Suisse et vivez en France : comment vous etes impose, et quand demander la TOU.',
+    sections: ['frontalier'],
+  },
+  {
+    id: 'locatif',
+    titre: 'Investissement locatif',
+    intro: 'De quoi lire les resultats des simulateurs SCI / Holding et Location saisonniere sans connaissance prealable.',
+    sections: ['sci', 'ir-is', 'holding', 'lmp', 'concepts', 'transmission', 'limites'],
+    profils: true,
+  },
+];
+
+const PAR_ID = new Map(SECTIONS.map((s) => [s.id, s]));
+
+/** The anchor of the URL: a block (`#frontaliers`) or a section (`#holding`). */
+function ancreInitiale(): string {
+  try {
+    return decodeURIComponent(window.location.hash.slice(1));
+  } catch {
+    return '';
+  }
+}
+
+/** The section open on arrival: the one named, the first of the block named, or the first of all. */
+function sectionInitiale(ancre: string): string {
+  if (PAR_ID.has(ancre)) return ancre;
+  return BLOCS.find((b) => b.id === ancre)?.sections[0] ?? SECTIONS[0].id;
+}
+
 export function AidePage() {
-  const [ouvert, setOuvert] = useState<string | null>(SECTIONS[0].id);
+  const [ancre] = useState(ancreInitiale);
+  const [ouvert, setOuvert] = useState<string | null>(() => sectionInitiale(ancre));
+
+  // The right section is open from the first render: the page has its final
+  // height when it scrolls.
+  useEffect(() => {
+    if (ancre) document.getElementById(ancre)?.scrollIntoView({ block: 'start' });
+  }, [ancre]);
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-8">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Comprendre les montages</h2>
+        <h2 className="text-2xl font-bold text-gray-900">Aide</h2>
         <p className="text-sm text-gray-600 mt-1">
-          De quoi lire les resultats du simulateur sans connaissance prealable. Chaque terme est
-          defini la ou il apparait.
+          Chaque terme est defini la ou il apparait.
         </p>
+        <nav aria-label="Sommaire" className="mt-3 flex flex-wrap gap-2">
+          {BLOCS.map((b) => (
+            <a
+              key={b.id}
+              href={`#${b.id}`}
+              onClick={() => setOuvert(b.sections[0])}
+              className="rounded-full border bg-white px-3 py-1 text-sm text-gray-700 hover:border-indigo-200 hover:text-indigo-700"
+            >
+              {b.titre}
+            </a>
+          ))}
+        </nav>
       </div>
 
-      {/* What the columns of the comparison actually are */}
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {PROFILE_ORDER.map((p) => {
-          const meta = PROFILE_META[p];
-          return (
-            <div key={p} className={`rounded-md border p-3 ${meta.bg} ${meta.border}`}>
-              <p className={`text-sm font-semibold ${meta.text}`}>{meta.label}</p>
-              <p className="text-xs text-gray-600 mt-1 leading-relaxed">{meta.description}</p>
-            </div>
-          );
-        })}
-      </div>
+      {BLOCS.map((b) => (
+        <section key={b.id} id={b.id} className="scroll-mt-20 space-y-3">
+          <div>
+            <h3 className="text-xl font-semibold text-gray-900">{b.titre}</h3>
+            <p className="text-sm text-gray-600 mt-1">{b.intro}</p>
+          </div>
 
-      <div className="space-y-2">
-        {SECTIONS.map((s) => {
-          const isOpen = ouvert === s.id;
-          return (
-            <div key={s.id} className="bg-white rounded-lg border overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setOuvert(isOpen ? null : s.id)}
-                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition-colors"
-              >
-                <span className="font-semibold text-gray-900">{s.titre}</span>
-                <span className="text-gray-400 text-lg leading-none">{isOpen ? '−' : '+'}</span>
-              </button>
-              {isOpen && <div className="px-4 pb-4 pt-1 border-t">{s.contenu}</div>}
+          {/* What the columns of the comparison actually are */}
+          {b.profils && (
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {PROFILE_ORDER.map((p) => {
+                const meta = PROFILE_META[p];
+                return (
+                  <div key={p} className={`rounded-md border p-3 ${meta.bg} ${meta.border}`}>
+                    <p className={`text-sm font-semibold ${meta.text}`}>{meta.label}</p>
+                    <p className="text-xs text-gray-600 mt-1 leading-relaxed">{meta.description}</p>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
-      </div>
+          )}
+
+          <div className="space-y-2">
+            {b.sections.map((id) => {
+              const s = PAR_ID.get(id)!;
+              const isOpen = ouvert === s.id;
+              return (
+                <div key={s.id} id={s.id} className="scroll-mt-20 bg-white rounded-lg border overflow-hidden">
+                  <button
+                    type="button"
+                    aria-expanded={isOpen}
+                    onClick={() => setOuvert(isOpen ? null : s.id)}
+                    className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+                  >
+                    <span className="font-semibold text-gray-900">{s.titre}</span>
+                    <span className="text-gray-400 text-lg leading-none">{isOpen ? '−' : '+'}</span>
+                  </button>
+                  {isOpen && <div className="px-4 pb-4 pt-1 border-t">{s.contenu}</div>}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ))}
 
       <p className="text-xs text-gray-400 text-center pb-4">
-        Informations generales sur la fiscalite francaise 2026. Ni conseil juridique, ni conseil
+        Informations generales sur la fiscalite francaise 2026 et suisse 2026. Ni conseil juridique, ni conseil
         fiscal.
       </p>
     </div>

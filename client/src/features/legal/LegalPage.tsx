@@ -104,7 +104,10 @@ export function ConfidentialitePage() {
           <li>Les outils rapides fonctionnent sans compte et n’envoient rien au serveur.</li>
           <li>Avec un compte, nous gardons votre e-mail et les scenarios que vous enregistrez, rien de plus.</li>
           <li>Ni publicite, ni traceur, ni revente de donnees.</li>
-          <li>Vous pouvez demander la suppression de votre compte et de toutes ses donnees a tout moment.</li>
+          <li>
+            Depuis « Mon compte », vous telechargez toutes vos donnees ou supprimez votre compte, immediatement et
+            definitivement.
+          </li>
         </ul>
       </Section>
 
@@ -149,6 +152,13 @@ export function ConfidentialitePage() {
                 <td className="py-2 pr-4">Limiter la depense</td>
                 <td className="py-2">Avec le compte</td>
               </tr>
+              <tr className="border-b">
+                <td className="py-2 pr-4">
+                  Saisies des simulateurs avances, le temps d’un calcul (revenus, foyer, biens…)
+                </td>
+                <td className="py-2 pr-4">Faire le calcul, qui a lieu sur le serveur</td>
+                <td className="py-2">Aucune conservation : seul un scenario que vous enregistrez est garde</td>
+              </tr>
               <tr>
                 <td className="py-2 pr-4">Journaux techniques : adresse IP, date, page demandee, navigateur</td>
                 <td className="py-2 pr-4">Securite du site et diagnostic des erreurs</td>
@@ -158,8 +168,9 @@ export function ConfidentialitePage() {
           </table>
         </div>
         <p>
-          Base legale : l’execution du service que vous demandez en creant un compte (RGPD, art. 6.1.b) ; l’interet
-          legitime a securiser le site pour les journaux (art. 6.1.f).
+          Base legale : l’execution du service que vous demandez en creant un compte (RGPD, art. 6.1.b) ; votre
+          consentement pour la transmission de justificatifs a un fournisseur d’IA (art. 6.1.a) ; l’interet legitime a
+          securiser le site pour les journaux (art. 6.1.f).
         </p>
       </Section>
 
@@ -172,8 +183,9 @@ export function ConfidentialitePage() {
         </p>
         <p>
           Ces fournisseurs, pour la plupart etablis aux Etats-Unis, traitent les documents selon leur propre politique
-          de confidentialite. N’envoyez pas un document si vous ne souhaitez pas qu’il leur soit transmis : la saisie a
-          la main reste toujours possible.
+          de confidentialite. Aucun document n’est envoye avant que vous l’ayez accepte, une fois par fournisseur :
+          changer de fournisseur repose la question, et l’accord se retire a tout moment, sous la zone de depot ou dans
+          « Mon compte ». La saisie a la main reste toujours possible.
         </p>
       </Section>
 
@@ -195,8 +207,8 @@ export function ConfidentialitePage() {
       <Section titre="Stockage dans votre navigateur">
         <p>
           Le site n’utilise aucun cookie publicitaire ni outil de mesure d’audience. Il garde dans le stockage local de
-          votre navigateur : votre session de connexion, les valeurs saisies dans les outils rapides et le dernier
-          simulateur ouvert. Ces elements servent uniquement au fonctionnement que vous demandez, ne quittent pas votre
+          votre navigateur : votre session de connexion, les valeurs saisies dans les outils rapides, le dernier
+          simulateur ouvert et les fournisseurs d’IA auxquels vous avez accepte d’envoyer des justificatifs. Ces elements servent uniquement au fonctionnement que vous demandez, ne quittent pas votre
           appareil (hors session) et ne necessitent donc pas de consentement. Vider les donnees du site dans votre
           navigateur les efface.
         </p>
@@ -212,9 +224,27 @@ export function ConfidentialitePage() {
       <Section titre="Vos droits">
         <p>
           Vous pouvez acceder a vos donnees, les rectifier, les supprimer, en obtenir une copie ou vous opposer a leur
-          traitement. Pour cela, contactez l’editeur via <A href={GITHUB_PROFIL}>GitHub</A> sans indiquer de donnee
-          personnelle dans un message public : un moyen d’echange prive vous sera propose. Vous pouvez aussi supprimer
-          vous-meme vos scenarios et votre cle API depuis l’application.
+          traitement. L’essentiel se fait vous-meme, depuis{' '}
+          <Lien vers="compte" className="text-indigo-700 underline hover:text-indigo-900">Mon compte</Lien> :
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>Acces et portabilite</strong> : « Telecharger mes donnees » produit un fichier JSON avec tout ce que
+            le serveur conserve pour vous et ce que votre navigateur garde pour le site.
+          </li>
+          <li>
+            <strong>Rectification</strong> : adresse e-mail et mot de passe se changent sur la meme page ; les
+            scenarios, dans chaque simulateur.
+          </li>
+          <li>
+            <strong>Effacement</strong> : « Supprimer mon compte » efface immediatement et definitivement le compte, les
+            scenarios, la cle d’IA et l’historique des analyses. Aucune copie n’est gardee.
+          </li>
+        </ul>
+        <p>
+          Pour toute autre demande, ou pour vous opposer a un traitement, contactez l’editeur via{' '}
+          <A href={GITHUB_PROFIL}>GitHub</A> sans indiquer de donnee personnelle dans un message public : un moyen
+          d’echange prive vous sera propose.
         </p>
         <p>
           Si vous estimez que vos droits ne sont pas respectes, vous pouvez saisir la CNIL :{' '}

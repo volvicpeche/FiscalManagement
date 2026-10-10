@@ -2,7 +2,7 @@ import { useRef, useState, type ReactNode } from 'react';
 import { Logo } from './Logo';
 import { useFermeture } from './useFermeture';
 import { Lien, useRoute, type Route } from '@/lib/router';
-import { OUTILS, SIMULATEURS, type EntreeNav } from '@/lib/navigation';
+import { OUTILS, RUBRIQUES, type EntreeNav } from '@/lib/navigation';
 import { UserMenu, useSession } from '@/features/auth';
 import { GITHUB_DEPOT } from '@/features/legal';
 
@@ -96,8 +96,12 @@ function MenuMobile({ verrou }: { verrou: boolean }) {
           {lien('accueil', 'Accueil')}
           <p className="mt-3 px-3 text-xs font-medium uppercase tracking-wide text-gray-400">Outils rapides</p>
           {OUTILS.map((e) => lien(e.route, e.titre))}
-          <p className="mt-3 px-3 text-xs font-medium uppercase tracking-wide text-gray-400">Simulateurs avances</p>
-          {SIMULATEURS.map((e) => lien(e.route, e.titre, verrou))}
+          {RUBRIQUES.map((r) => (
+            <div key={r.titre}>
+              <p className="mt-3 px-3 text-xs font-medium uppercase tracking-wide text-gray-400">{r.titre}</p>
+              {r.entrees.map((e) => lien(e.route, e.titre, verrou))}
+            </div>
+          ))}
           <div className="mt-3 border-t pt-3">
             {lien('aide', 'Aide')}
             {verrou && lien('connexion', 'Se connecter')}
@@ -123,7 +127,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="relative mx-auto flex max-w-[1800px] items-center justify-between gap-3 px-4 py-3">
           <Lien vers="accueil" className="flex min-w-0 items-center gap-3">
             <Logo size={36} className="shrink-0" />
-            <span className="truncate text-xl font-bold text-gray-900 sm:text-2xl">Patrimonia</span>
+            {/* Between lg and xl a visitor's header (menus + two login buttons) leaves no room for the name. */}
+            <span className={`truncate text-xl font-bold text-gray-900 sm:text-2xl ${verrou ? 'lg:max-xl:hidden' : ''}`}>
+              Patrimonia
+            </span>
           </Lien>
 
           <nav className="hidden items-center gap-1 rounded-lg bg-gray-100 p-1 lg:flex">
@@ -131,7 +138,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               Accueil
             </Lien>
             <MenuGroupe titre="Outils rapides" entrees={OUTILS} verrou={false} />
-            <MenuGroupe titre="Simulateurs avances" entrees={SIMULATEURS} verrou={verrou} />
+            {RUBRIQUES.map((r) => (
+              <MenuGroupe key={r.titre} titre={r.titre} entrees={r.entrees} verrou={verrou} />
+            ))}
             <Lien vers="aide" className={lienPlat(route === 'aide')}>
               Aide
             </Lien>

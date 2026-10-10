@@ -55,7 +55,7 @@ describe.skipIf(!hasDb)('routes /api/me/llm (Postgres)', () => {
   it('should refuse document reading without a key, before calling anything', async () => {
     const boundary = '----t';
     const res = await server.inject({
-      method: 'POST', url: '/api/frontalier/documents',
+      method: 'POST', url: '/api/frontalier/documents?consentement=oui',
       headers: { ...auth, 'content-type': `multipart/form-data; boundary=${boundary}` },
       payload: `--${boundary}\r\nContent-Disposition: form-data; name="f"; filename="a.pdf"\r\nContent-Type: application/pdf\r\n\r\n%PDF\r\n--${boundary}--\r\n`,
     });

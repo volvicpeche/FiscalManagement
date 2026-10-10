@@ -22,7 +22,7 @@ const TITRES: Record<Onglet, string> = {
  * `type` is ours: with the default templates, Supabase appends only a `code`.
  * Must be listed in the project's Redirect URLs (DEPLOY.md).
  */
-export const URL_CONFIRMATION = (type: 'signup' | 'recovery') =>
+export const URL_CONFIRMATION = (type: 'signup' | 'recovery' | 'email_change') =>
   `${window.location.origin}/auth/confirmer?type=${type}`;
 
 export type OngletConnexion = Onglet;

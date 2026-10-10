@@ -1,7 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { CLE_COMPTE_SUPPRIME } from '@/lib/stockageLocal';
 import { mensualite } from '@shared/outils/credit.js';
 import { Lien } from '@/lib/router';
-import { OUTILS, SIMULATEURS, lireDernierSimulateur } from '@/lib/navigation';
+import { OUTILS, RUBRIQUES, lireDernierSimulateur, type Rubrique } from '@/lib/navigation';
 import type { Route } from '@/lib/router';
 import { useSession } from '@/features/auth';
 import { useOutilsStore } from '@/store/outilsStore';
@@ -65,6 +66,7 @@ const ICONES: Record<Route, ReactNode> = {
   inscription: null,
   mentions: null,
   confidentialite: null,
+  compte: null,
   confirmation: null,
 };
 
@@ -73,6 +75,12 @@ const POINTS: Partial<Record<Route, string[]>> = {
   sci: ['Cinq montages compares cote a cote', 'Impot, tresorerie et TRI sur 30 ans', 'Revente et transmission chiffrees'],
   frontalier: ['Test des 90 % du quasi-resident', 'TOU contre impot a la source, pas a pas', 'Justificatifs lus automatiquement'],
   saisonnier: ['Revenus saison par saison', 'LMNP au reel ou micro-BIC', 'Annonce analysee en un clic'],
+};
+
+/** The question each family of simulators answers, as a visitor would ask it. */
+const ACCROCHES: Record<string, string> = {
+  Frontaliers: 'Vous travaillez en Suisse ? Demander la TOU, ou rester a l’impot a la source.',
+  'Investissement locatif': 'Vous investissez dans la pierre ? Choisir le montage et le chiffrer sur trente ans.',
 };
 
 const eur = (v: number) =>
@@ -180,6 +188,55 @@ function MiniCredit() {
   );
 }
 
+// ─── Advanced simulators ─────────────────────────────────────────────────────
+
+function SectionSimulateurs({ rubrique, visiteur, connecte }: { rubrique: Rubrique; visiteur: boolean; connecte: boolean }) {
+  return (
+    <section>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-xl font-semibold text-gray-900">{rubrique.titre}</h3>
+        <p className="text-sm text-gray-500">
+          {visiteur ? 'Avec un compte gratuit : vos scenarios sont enregistres.' : connecte ? 'Vos scenarios sont enregistres.' : ''}
+        </p>
+      </div>
+      <p className="mt-1 text-sm text-gray-600">
+        {ACCROCHES[rubrique.titre]}{' '}
+        <Lien vers="aide" ancre={rubrique.ancreAide} className="font-medium text-indigo-700 hover:text-indigo-900">
+          Comprendre →
+        </Lien>
+      </p>
+      <div className="mt-5 grid gap-4 lg:grid-cols-3">
+        {rubrique.entrees.map((s) => (
+          <Lien
+            key={s.route}
+            vers={s.route}
+            className="group flex flex-col rounded-2xl border bg-white p-6 transition hover:border-indigo-200 hover:shadow-md"
+          >
+            <div className="flex items-center justify-between">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900 text-white">
+                {ICONES[s.route]}
+              </span>
+              {visiteur && <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-500">Avec un compte</span>}
+            </div>
+            <span className="mt-4 text-lg font-semibold text-gray-900">{s.titre}</span>
+            <ul className="mt-3 flex-1 space-y-2">
+              {POINTS[s.route]?.map((p) => (
+                <li key={p} className="flex gap-2 text-sm text-gray-600">
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
+                  {p}
+                </li>
+              ))}
+            </ul>
+            <span className="mt-5 text-sm font-medium text-indigo-600 group-hover:text-indigo-800">
+              {visiteur ? 'Decouvrir →' : 'Ouvrir →'}
+            </span>
+          </Lien>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 const PROMESSES = [
@@ -192,12 +249,32 @@ const PROMESSES = [
  * Landing page: something useful first (the mini calculator), then what the
  * site offers, free tools before what an account unlocks.
  */
+/** Shown once, on the reload that follows an account deletion (ComptePage). */
+function lireCompteSupprime(): boolean {
+  try {
+    const oui = sessionStorage.getItem(CLE_COMPTE_SUPPRIME) === '1';
+    sessionStorage.removeItem(CLE_COMPTE_SUPPRIME);
+    return oui;
+  } catch {
+    return false;
+  }
+}
+
 export function AccueilPage() {
   const { user, chargement } = useSession();
   const visiteur = !user && !chargement;
+  const [compteSupprime, setCompteSupprime] = useState(lireCompteSupprime);
 
   return (
     <div className="mx-auto max-w-6xl space-y-16 pb-8">
+      {compteSupprime && (
+        <div role="status" className="flex items-start justify-between gap-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          <p>Votre compte et toutes ses donnees ont ete supprimes.</p>
+          <button type="button" onClick={() => setCompteSupprime(false)} aria-label="Fermer" className="text-green-700 hover:text-green-900">
+            ✕
+          </button>
+        </div>
+      )}
       {/* Hero */}
       <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600 via-indigo-600 to-indigo-800 px-6 py-10 text-white sm:px-10 sm:py-14">
         {/* A faint roof line, echo of the logo — texture, not decoration to read. */}
@@ -218,7 +295,7 @@ export function AccueilPage() {
           <div>
             <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-indigo-100">
               <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-              Immobilier, fiscalite, epargne
+              Immobilier, frontaliers, epargne
             </p>
             <h2 className="mt-4 text-3xl font-bold leading-tight tracking-tight sm:text-4xl lg:text-5xl">
               Les bons chiffres, <br className="hidden sm:block" />
@@ -226,7 +303,7 @@ export function AccueilPage() {
             </h2>
             <p className="mt-4 max-w-xl text-base text-indigo-100 sm:text-lg">
               Credit, rendement d’un bien, epargne : des calculs clairs, sans compte. Et quand le projet se precise,
-              des simulateurs qui comparent les montages et leur fiscalite sur trente ans.
+              des simulateurs pour les frontaliers suisses et pour l’investissement locatif.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Lien
@@ -274,45 +351,10 @@ export function AccueilPage() {
         </div>
       </section>
 
-      {/* Advanced simulators */}
-      <section>
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="text-xl font-semibold text-gray-900">Simulateurs avances</h3>
-          <p className="text-sm text-gray-500">
-            {visiteur ? 'Avec un compte gratuit : vos scenarios sont enregistres.' : user ? 'Vos scenarios sont enregistres.' : ''}
-          </p>
-        </div>
-        <div className="mt-5 grid gap-4 lg:grid-cols-3">
-          {SIMULATEURS.map((s) => (
-            <Lien
-              key={s.route}
-              vers={s.route}
-              className="group flex flex-col rounded-2xl border bg-white p-6 transition hover:border-indigo-200 hover:shadow-md"
-            >
-              <div className="flex items-center justify-between">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-900 text-white">
-                  {ICONES[s.route]}
-                </span>
-                {visiteur && (
-                  <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-500">Avec un compte</span>
-                )}
-              </div>
-              <span className="mt-4 text-lg font-semibold text-gray-900">{s.titre}</span>
-              <ul className="mt-3 flex-1 space-y-2">
-                {POINTS[s.route]?.map((p) => (
-                  <li key={p} className="flex gap-2 text-sm text-gray-600">
-                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
-                    {p}
-                  </li>
-                ))}
-              </ul>
-              <span className="mt-5 text-sm font-medium text-indigo-600 group-hover:text-indigo-800">
-                {visiteur ? 'Decouvrir →' : 'Ouvrir →'}
-              </span>
-            </Lien>
-          ))}
-        </div>
-      </section>
+      {/* Advanced simulators, one section per family */}
+      {RUBRIQUES.map((r) => (
+        <SectionSimulateurs key={r.titre} rubrique={r} visiteur={visiteur} connecte={!!user} />
+      ))}
 
       {/* Promises */}
       <section className="grid gap-6 border-y py-8 sm:grid-cols-3">
@@ -327,7 +369,7 @@ export function AccueilPage() {
       {visiteur && (
         <section className="flex flex-col items-start justify-between gap-4 rounded-2xl bg-gray-900 px-6 py-8 text-white sm:flex-row sm:items-center sm:px-10">
           <div>
-            <p className="text-lg font-semibold">SCI, holding, frontalier : allez plus loin.</p>
+            <p className="text-lg font-semibold">Frontalier ou investisseur : allez plus loin.</p>
             <p className="mt-1 text-sm text-gray-300">Un compte gratuit, et vos simulations vous attendent sur tous vos appareils.</p>
           </div>
           <Lien
