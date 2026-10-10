@@ -8,6 +8,7 @@ import { frontalierRoutes } from './routes/frontalier.js';
 import { configRoutes } from './routes/config.js';
 import { llmSettingsRoutes } from './routes/llmSettings.js';
 import { compteRoutes } from './routes/compte.js';
+import { signalementRoutes } from './routes/signalements.js';
 import { closeBrowser } from './services/browserFetch.js';
 import { closeDb } from './services/db.js';
 import { authPlugin } from './plugins/auth.js';
@@ -41,6 +42,7 @@ await server.register(simulationRoutes);
 await server.register(listingRoutes);
 await server.register(scenarioRoutes);
 await server.register(frontalierRoutes);
+await server.register(signalementRoutes);
 
 server.get('/api/health', async () => {
   return { status: 'ok' };

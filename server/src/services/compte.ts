@@ -14,12 +14,13 @@ import { db } from './db.js';
 export const MOT_CONFIRMATION = 'SUPPRIMER';
 
 export async function resumerCompte(userId: string): Promise<ResumeCompte> {
-  const [parKind, cle] = await Promise.all([
+  const [parKind, cle, signalements] = await Promise.all([
     db().scenario.groupBy({ by: ['kind'], where: { userId }, _count: { _all: true } }),
     db().llmSettings.count({ where: { userId } }),
+    db().signalement.count({ where: { userId } }),
   ]);
   const n = (kind: string) => parKind.find((g) => g.kind === kind)?._count._all ?? 0;
-  return { scenarios: { sci: n('sci'), saisonnier: n('saisonnier'), frontalier: n('frontalier') }, cleLlm: cle > 0 };
+  return { scenarios: { sci: n('sci'), saisonnier: n('saisonnier'), frontalier: n('frontalier') }, cleLlm: cle > 0, signalements };
 }
 
 /**
@@ -28,10 +29,11 @@ export async function resumerCompte(userId: string): Promise<ResumeCompte> {
  * format no longer reads. The LLM key is left out, even encrypted.
  */
 export async function exporterCompte(user: AuthUser, now: Date = new Date()): Promise<ExportCompte> {
-  const [scenarios, cle, usage] = await Promise.all([
+  const [scenarios, cle, usage, signalements] = await Promise.all([
     db().scenario.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'asc' } }),
     db().llmSettings.findUnique({ where: { userId: user.id } }),
     db().llmUsage.findMany({ where: { userId: user.id }, orderBy: { jour: 'asc' } }),
+    db().signalement.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'asc' } }),
   ]);
   return {
     format: EXPORT_FORMAT_VERSION,
@@ -56,6 +58,16 @@ export async function exporterCompte(user: AuthUser, now: Date = new Date()): Pr
         }
       : null,
     consommationLlm: usage.map((u) => ({ jour: u.jour.toISOString().slice(0, 10), appels: u.appels })),
+    signalements: signalements.map((s) => ({
+      id: s.id,
+      createdAt: s.createdAt.toISOString(),
+      canton: s.canton,
+      annee: s.annee,
+      requete: s.requete,
+      resultat: s.resultat,
+      decompte: s.decompte,
+      commentaire: s.commentaire,
+    })),
   };
 }
 
@@ -79,6 +91,7 @@ export async function supprimerCompte(userId: string): Promise<void> {
     db().scenario.deleteMany({ where: { userId } }),
     db().llmSettings.deleteMany({ where: { userId } }),
     db().llmUsage.deleteMany({ where: { userId } }),
+    db().signalement.deleteMany({ where: { userId } }),
     db().$executeRaw`DELETE FROM auth.users WHERE id = ${userId}::uuid`,
   ]);
 }

@@ -16,3 +16,4 @@ export {
   mesurerBien,
   simulateFrontalier,
 } from './simulation.js';
+export { CHAMPS_DECOMPTE, comparerAuDecompte } from './decompte.js';

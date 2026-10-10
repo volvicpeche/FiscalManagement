@@ -1,0 +1,47 @@
+{
+  "id": "2026-ge-exemple-celibataire",
+  "description": "Celibataire, sans enfant, 95 000 CHF brut a Geneve, 3a plein, cantine. Exemple : chiffres du moteur, pas un decompte.",
+  "exemple": true,
+  "source": {
+    "annee": 2026,
+    "canton": "GE",
+    "documents": [
+      "aucun : exemple de format"
+    ]
+  },
+  "requete": {
+    "annee": 2026,
+    "etatCivil": "CELIBATAIRE",
+    "canton": "GE",
+    "communeTravail": "GENEVE",
+    "tauxChangeEurChf": "0.93",
+    "contribuable": {
+      "prenom": "",
+      "activite": "SUISSE",
+      "salaireBrut": "95000.00",
+      "cotisationsSociales": "6080.00",
+      "lppOrdinaire": "4800.00",
+      "pilier3a": "7258.00",
+      "fraisDeplacement": "3200.00",
+      "repas": "CANTINE",
+      "codeTarifIS": "A0",
+      "impotSourceRetenu": "11800.00"
+    },
+    "deductions": {
+      "primesAssuranceMaladie": "3600.00"
+    },
+    "biensFrance": []
+  },
+  "attendu": {
+    "revenuImposableIcc": "71445.00",
+    "impotBaseIcc": "6185.47",
+    "centimesCantonaux": "2999.95",
+    "reductionLdirpp": "1102.25",
+    "impotCommunal": "2813.77",
+    "icc": "10896.95",
+    "revenuImposableIfd": "67738.40",
+    "ifd": "900.05",
+    "totalTou": "11797.00"
+  },
+  "tolerance": "5.00"
+}

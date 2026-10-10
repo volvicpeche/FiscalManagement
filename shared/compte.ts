@@ -12,6 +12,8 @@ export const EXPORT_FORMAT_VERSION = 1;
 export const ResumeCompteSchema = z.object({
   scenarios: z.object({ sci: z.number(), saisonnier: z.number(), frontalier: z.number() }),
   cleLlm: z.boolean(),
+  /** « Ce chiffre me semble faux » reports. */
+  signalements: z.number(),
 });
 export type ResumeCompte = z.infer<typeof ResumeCompteSchema>;
 
@@ -44,6 +46,18 @@ export const ExportCompteSchema = z.object({
     })
     .nullable(),
   consommationLlm: z.array(z.object({ jour: z.string(), appels: z.number() })),
+  signalements: z.array(
+    z.object({
+      id: z.string().uuid(),
+      createdAt: z.string().datetime(),
+      canton: z.string(),
+      annee: z.number(),
+      requete: z.unknown(),
+      resultat: z.unknown(),
+      decompte: z.unknown(),
+      commentaire: z.string(),
+    }),
+  ),
 });
 export type ExportCompte = z.infer<typeof ExportCompteSchema>;
 

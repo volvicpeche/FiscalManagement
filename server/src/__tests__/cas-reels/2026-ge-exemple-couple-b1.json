@@ -1,0 +1,66 @@
+{
+  "id": "2026-ge-exemple-couple-b1",
+  "description": "Couple marie a un revenu suisse (Meyrin), un enfant garde, rachat LPP, un studio loue en France. Exemple : chiffres du moteur, pas un decompte.",
+  "exemple": true,
+  "source": {
+    "annee": 2026,
+    "canton": "GE",
+    "documents": [
+      "aucun : exemple de format"
+    ]
+  },
+  "requete": {
+    "annee": 2026,
+    "etatCivil": "MARIE",
+    "canton": "GE",
+    "communeTravail": "MEYRIN",
+    "tauxChangeEurChf": "0.93",
+    "contribuable": {
+      "prenom": "",
+      "activite": "SUISSE",
+      "salaireBrut": "120000.00",
+      "cotisationsSociales": "7680.00",
+      "lppOrdinaire": "7200.00",
+      "lppRachats": "10000.00",
+      "pilier3a": "7258.00",
+      "fraisDeplacement": "4500.00",
+      "codeTarifIS": "B1",
+      "impotSourceRetenu": "14200.00"
+    },
+    "conjoint": {
+      "prenom": "",
+      "activite": "AUCUNE"
+    },
+    "enfants": [
+      {
+        "age": 4,
+        "fraisGarde": "9000.00"
+      }
+    ],
+    "deductions": {
+      "primesAssuranceMaladie": "9800.00"
+    },
+    "biensFrance": [
+      {
+        "label": "",
+        "usage": "LOCATIF",
+        "loyersBrutsEur": "7200.00",
+        "chargesCoproEur": "900.00",
+        "taxeFonciereEur": "700.00",
+        "interetsEmpruntEur": "1500.00"
+      }
+    ]
+  },
+  "attendu": {
+    "revenuImposableIcc": "56709.00",
+    "impotBaseIcc": "1875.10",
+    "centimesCantonaux": "909.42",
+    "reductionLdirpp": "334.14",
+    "impotCommunal": "787.54",
+    "icc": "3237.92",
+    "revenuImposableIfd": "58408.40",
+    "ifd": "136.25",
+    "totalTou": "3374.17"
+  },
+  "tolerance": "5.00"
+}
