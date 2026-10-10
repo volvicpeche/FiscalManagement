@@ -5,11 +5,8 @@ import type { ResultsProps } from './KpiCards';
 import { FluxTable, useFluxTooltip } from './FluxTable';
 import { toRows, visibleColumns } from './projectionColumns';
 import { exportSimulationCsv, nomFichier, telechargerCsv } from '@/lib/csv';
-import {
-  useScenarioStore,
-  selectSharedInputs,
-  buildScenario,
-} from '@/store/scenarioStore';
+import { selectSharedInputs, buildScenario } from '@/store/scenarioStore';
+import { useStoreLocatif } from '@/store/storeLocatif';
 
 // ─── Associe recap ───────────────────────────────────────────────────────────
 
@@ -66,7 +63,7 @@ export function ProjectionTable({ results }: ResultsProps) {
 
   // Every hook runs before the early return below.
   const tooltip = useFluxTooltip();
-  const store = useScenarioStore();
+  const store = useStoreLocatif();
 
   const result = results[profile] ?? results[available[0]];
   if (!result) return null;

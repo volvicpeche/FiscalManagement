@@ -1,24 +1,20 @@
-import { Lien } from '@/lib/router';
-import { PROFILS_DIRECT } from '@/lib/profiles';
+import { PROFILS_DIRECT, PROFILS_SOCIETE } from '@/lib/profiles';
+import { useDirectStore, useScenarioStore } from '@/store/scenarioStore';
 import { ComparateurLocatif } from '@/features/sci/ComparateurLocatif';
 
 /**
- * Location en direct: the property held in one's own name, alone or in
+ * « Investir en direct »: the property held in one's own name, alone or in
  * indivision — unfurnished (micro-foncier, reel) and long-term furnished
- * (micro-BIC, reel). Same inputs as the SCI page.
+ * (micro-BIC, reel). Its own inputs, apart from the company page.
  */
 export function DirectPage() {
   return (
     <ComparateurLocatif
+      store={useDirectStore}
+      kind="direct"
       profils={PROFILS_DIRECT}
-      intro={
-        <>
-          Le bien en votre nom, seul ou en indivision : pas de societe. Location vide ou meublee longue duree, au
-          forfait ou au reel. Les associes sont ici les coproprietaires, et un apport en compte courant compte comme un
-          apport personnel. Meme saisie que la page{' '}
-          <Lien vers="sci" className="text-indigo-700 underline">SCI / Holding</Lien> : comparez les deux.
-        </>
-      }
+      intro="Le bien en votre nom, seul ou en indivision : pas de societe. Location vide ou meublee longue duree, au forfait ou au reel. Les associes sont ici les coproprietaires ; un apport en compte courant compte comme un apport personnel."
+      autre={{ store: useScenarioStore, profils: PROFILS_SOCIETE, route: 'sci', libelle: 'SCI / Holding' }}
     />
   );
 }

@@ -1,7 +1,7 @@
-import { useScenarioStore } from '@/store/scenarioStore';
+import { useStoreLocatif } from '@/store/storeLocatif';
 
 export function LoanForm() {
-  const { asset, updateLoan } = useScenarioStore();
+  const { asset, updateLoan } = useStoreLocatif();
   const loan = asset.loan;
 
   if (!loan) return null;

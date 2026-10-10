@@ -1,13 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ScenarioProfile } from '@shared/schemas.js';
-import type { SharedInputs } from '@/store/scenarioStore';
-import {
-  useScenarioStore,
-  selectSharedInputs,
-  buildScenario,
-  partsAreValid,
-  hasAnyResult,
-} from '@/store/scenarioStore';
+import type { ScenarioKind } from '@shared/scenario.js';
+import type { SharedInputs, StoreLocatif } from '@/store/scenarioStore';
+import { selectSharedInputs, buildScenario, partsAreValid, hasAnyResult } from '@/store/scenarioStore';
+import { StoreLocatifContext, useStoreLocatif } from '@/store/storeLocatif';
+import { naviguer, type Route } from '@/lib/router';
+import { ComparaisonAutrePage } from './ComparaisonAutrePage';
 import { useSimulation } from '@/hooks/useSimulation';
 import { PROFILE_META, PROFILE_ORDER } from '@/lib/profiles';
 import {
@@ -44,20 +42,42 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]['key'];
 
+/** The other page, for the side-by-side box: its store, setups, address and name. */
+export interface AutrePage {
+  store: StoreLocatif;
+  profils: ScenarioProfile[];
+  route: Route;
+  libelle: string;
+}
+
 export interface ComparateurProps {
+  /** This page's own inputs and results. */
+  store: StoreLocatif;
+  /** Saved scenarios of this page, apart from the other's. */
+  kind: ScenarioKind;
   /** The setups this page compares, in display order. */
   profils: ScenarioProfile[];
   /** One line above the comparison: what the page is for. */
   intro: React.ReactNode;
+  autre: AutrePage;
 }
 
 /**
- * Several setups compared from one set of inputs. The inputs (property, loan,
- * owners, household) are shared by every page built on it: the same project
- * can be read held directly or through a company.
+ * Several setups compared from one set of inputs. Each page built on it keeps
+ * its own store (« Investir en direct », « Investir en societe »); the forms
+ * reach it through StoreLocatifContext. A folded box compares with the other
+ * page, and hands the inputs over when they differ.
  */
-export function ComparateurLocatif({ profils, intro }: ComparateurProps) {
-  const store = useScenarioStore();
+export function ComparateurLocatif(props: ComparateurProps) {
+  return (
+    <StoreLocatifContext.Provider value={props.store}>
+      <Contenu {...props} />
+    </StoreLocatifContext.Provider>
+  );
+}
+
+function Contenu({ kind, profils, intro, autre }: ComparateurProps) {
+  const store = useStoreLocatif();
   const { associes, setResult } = store;
   const [tab, setTab] = useState<TabKey>('synthese');
 
@@ -101,6 +121,23 @@ export function ComparateurLocatif({ profils, intro }: ComparateurProps) {
     }
   };
 
+  // Arriving from the other page with its inputs: run at once, as asked there.
+  useEffect(() => {
+    if (store.lancerALArrivee && validParts) {
+      store.setLancerALArrivee(false);
+      handleRun();
+    }
+    // Once, on arrival: the flag is cleared before running.
+  }, [store.lancerALArrivee]);
+
+  /** Copies these inputs to the other page, which runs on arrival. */
+  const comparerAilleurs = () => {
+    const cible = autre.store.getState();
+    cible.hydrate(selectSharedInputs(store));
+    cible.setLancerALArrivee(true);
+    naviguer(autre.route);
+  };
+
   return (
     <>
       {error && (
@@ -116,7 +153,7 @@ export function ComparateurLocatif({ profils, intro }: ComparateurProps) {
           <>
             <Panel>
               <ScenarioManager
-                kind="sci"
+                kind={kind}
                 getData={() => selectSharedInputs(store) as unknown as Record<string, unknown>}
                 onLoad={(data) => store.hydrate(data as Partial<SharedInputs>)}
               />
@@ -147,6 +184,8 @@ export function ComparateurLocatif({ profils, intro }: ComparateurProps) {
               </p>
             )}
           </div>
+
+          <ComparaisonAutrePage mesProfils={profils} autre={autre} onComparer={comparerAilleurs} />
 
           {hasAnyResult(results, profils) ? (
             <>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { AssocieInput } from '@shared/schemas.js';
-import { useScenarioStore, partsTotal, partsAreValid } from '@/store/scenarioStore';
+import { partsTotal, partsAreValid } from '@/store/scenarioStore';
+import { useStoreLocatif } from '@/store/storeLocatif';
 import { RELATION_LABELS, formatEur } from '@/lib/profiles';
 
 const inputClass = 'w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm';
@@ -11,7 +12,7 @@ function toDecimalStr(value: string): string {
   return isNaN(num) ? '0.00' : num.toFixed(2);
 }
 
-/** Where the associes live and how to change them — the SCI store by default. */
+/** Where the associes live and how to change them — the page's locatif store by default. */
 export interface SourceAssocies {
   associes: AssocieInput[];
   addAssocie: () => void;
@@ -226,8 +227,8 @@ function AssocieCard({ source, associe, index, expanded, canRemove, onToggle }: 
 }
 
 export function AssociesForm({ source, titre = 'Associes' }: { source?: SourceAssocies; titre?: string }) {
-  const sci = useScenarioStore();
-  const src = source ?? sci;
+  const page = useStoreLocatif();
+  const src = source ?? page;
   const { associes, addAssocie, redistribute } = src;
   const [expanded, setExpanded] = useState<number | null>(0);
 

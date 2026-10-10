@@ -34,7 +34,7 @@ model Scenario {
   id        String   @id @default(uuid()) @db.Uuid
   userId    String   @map("user_id") @db.Uuid
   nom       String   @db.VarChar(120)
-  /// 'sci' | 'saisonnier' | 'frontalier', validated by ScenarioKind (Zod).
+  /// 'sci' | 'direct' | 'saisonnier' | 'frontalier', validated by ScenarioKind (Zod).
   kind      String
   version   Int
   data      Json

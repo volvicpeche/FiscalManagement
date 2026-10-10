@@ -95,7 +95,7 @@ describe.skipIf(!hasDb)('routes /api/me (Postgres)', () => {
     const alice = await compte();
     await remplir(alice);
     const res = await server.inject({ method: 'GET', url: '/api/me', headers: alice.auth });
-    expect(res.json()).toEqual({ scenarios: { sci: 2, saisonnier: 0, frontalier: 1 }, cleLlm: true, signalements: 1 });
+    expect(res.json()).toEqual({ scenarios: { sci: 2, direct: 0, saisonnier: 0, frontalier: 1 }, cleLlm: true, signalements: 1 });
   });
 
   it('should export every row of the user, and nobody else’s, without the key', async () => {

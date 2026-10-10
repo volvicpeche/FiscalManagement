@@ -1,5 +1,5 @@
 import { computeAssetYields } from '@shared/yield.js';
-import { useScenarioStore } from '@/store/scenarioStore';
+import { useStoreLocatif } from '@/store/storeLocatif';
 import { formatEur } from '@/lib/profiles';
 
 function toDecimalStr(value: string): string {
@@ -41,7 +41,7 @@ function YieldRow({
 }
 
 export function AssetForm() {
-  const { asset, updateAsset } = useScenarioStore();
+  const { asset, updateAsset } = useStoreLocatif();
 
   if (!asset) return null;
 

@@ -43,7 +43,7 @@ function libelleFournisseur(cle: string): string {
   return LLM_PROVIDER_LABELS[cle as LlmProvider] ?? cle;
 }
 
-const KINDS: ScenarioKind[] = ['sci', 'saisonnier', 'frontalier'];
+const KINDS: ScenarioKind[] = ['direct', 'sci', 'saisonnier', 'frontalier'];
 
 function MesDonnees() {
   const { data, isLoading, error } = useResumeCompte();
@@ -56,8 +56,7 @@ function MesDonnees() {
     <ul className="divide-y rounded-lg border">
       {KINDS.map((k) => {
         const s = SIMULATEURS.find((x) => x.route === k)!;
-        // One saved project feeds both « SCI / Holding » and « Location en direct ».
-        const titre = k === 'sci' ? 'Investissement locatif (SCI et en direct)' : s.titre;
+        const titre = s.titre;
         const n = data.scenarios[k];
         return (
           <li key={k} className="flex items-center justify-between gap-3 px-4 py-2.5">

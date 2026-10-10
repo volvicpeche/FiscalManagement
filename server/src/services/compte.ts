@@ -20,7 +20,11 @@ export async function resumerCompte(userId: string): Promise<ResumeCompte> {
     db().signalement.count({ where: { userId } }),
   ]);
   const n = (kind: string) => parKind.find((g) => g.kind === kind)?._count._all ?? 0;
-  return { scenarios: { sci: n('sci'), saisonnier: n('saisonnier'), frontalier: n('frontalier') }, cleLlm: cle > 0, signalements };
+  return {
+    scenarios: { sci: n('sci'), direct: n('direct'), saisonnier: n('saisonnier'), frontalier: n('frontalier') },
+    cleLlm: cle > 0,
+    signalements,
+  };
 }
 
 /**

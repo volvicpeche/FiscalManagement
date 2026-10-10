@@ -1,7 +1,7 @@
-import { useScenarioStore } from '@/store/scenarioStore';
+import { useStoreLocatif } from '@/store/storeLocatif';
 
 export function ParamsForm() {
-  const { params, updateParams } = useScenarioStore();
+  const { params, updateParams } = useStoreLocatif();
 
   const pctField = (
     label: string,

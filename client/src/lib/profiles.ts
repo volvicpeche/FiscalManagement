@@ -17,12 +17,8 @@ export const PROFILE_ORDER: ScenarioProfile[] = [
  */
 export const PROFILS_DIRECT: ScenarioProfile[] = ['NU_MICRO', 'NU_REEL', 'LMNP_MICRO', 'LMNP_REEL'];
 
-/**
- * « SCI / Holding »: the company setups, and the LMNP at the reel held
- * directly as a reference column — the question an investor asks is
- * « a company, or not? ».
- */
-export const PROFILS_SOCIETE: ScenarioProfile[] = ['SCI_IR', 'SCI_IS_SEULE', 'SCI_IS_HOLDING', 'LMNP_REEL'];
+/** « Investir en societe »: the company setups only. Direct holding is the other page. */
+export const PROFILS_SOCIETE: ScenarioProfile[] = ['SCI_IR', 'SCI_IS_SEULE', 'SCI_IS_HOLDING'];
 
 export interface ProfileMeta {
   label: string;

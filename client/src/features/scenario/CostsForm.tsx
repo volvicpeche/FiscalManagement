@@ -1,5 +1,5 @@
 import type { CostLine, EntityCostsInput, ManagementMode, ScenarioProfile } from '@shared/schemas.js';
-import { useScenarioStore } from '@/store/scenarioStore';
+import { useStoreLocatif } from '@/store/storeLocatif';
 import { useCostPresets, type CostPresets } from '@/hooks/useCostPresets';
 import {
   ENTITY_SPECS,
@@ -60,7 +60,7 @@ export function CostsForm({ profils = PROFILE_ORDER }: { profils?: ScenarioProfi
     costOverrides,
     setCostOverride,
     resetCostOverride,
-  } = useScenarioStore();
+  } = useStoreLocatif();
   const { data: presets, isLoading, error } = useCostPresets();
   // The tab chosen on the other page may not exist on this one.
   const activeProfile = profils.includes(profilChoisi) ? profilChoisi : profils[0];

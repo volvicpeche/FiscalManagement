@@ -10,7 +10,7 @@ export const EXPORT_FORMAT_VERSION = 1;
 
 /** What the account page lists, without the payloads. */
 export const ResumeCompteSchema = z.object({
-  scenarios: z.object({ sci: z.number(), saisonnier: z.number(), frontalier: z.number() }),
+  scenarios: z.object({ sci: z.number(), direct: z.number(), saisonnier: z.number(), frontalier: z.number() }),
   cleLlm: z.boolean(),
   /** « Ce chiffre me semble faux » reports. */
   signalements: z.number(),

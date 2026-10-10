@@ -6,18 +6,11 @@ import { FRONTALIERS, LOCATIF_DIRECT, LOCATIF_SOCIETE, RUBRIQUES, SIMULATEURS } 
 import { META, sitemapXml } from '@/lib/seo';
 
 describe('menus', () => {
-  it('should split the advanced simulators into Frontaliers and Investissement locatif', () => {
-    expect(RUBRIQUES.map((r) => r.titre)).toEqual(['Frontaliers', 'Investissement locatif']);
+  it('should give real estate two menus of its own, direct and company, next to Frontaliers', () => {
+    expect(RUBRIQUES.map((r) => r.titre)).toEqual(['Frontaliers', 'Investir en direct', 'Investir en societe']);
     expect(FRONTALIERS.map((e) => e.route)).toEqual(['frontalier', 'prevoyance']);
+    expect(LOCATIF_DIRECT.map((e) => e.route)).toEqual(['direct']);
     expect(LOCATIF_SOCIETE.map((e) => e.route)).toEqual(['sci', 'saisonnier']);
-  });
-
-  it('should split real estate into « En direct » and « En societe », hiding a group with no page', () => {
-    const locatif = RUBRIQUES.find((r) => r.titre === 'Investissement locatif')!;
-    const attendus = [...(LOCATIF_DIRECT.length > 0 ? ['En direct'] : []), 'En societe'];
-    expect(locatif.groupes.map((g) => g.titre)).toEqual(attendus);
-    expect(locatif.entrees.map((e) => e.route)).toEqual([...LOCATIF_DIRECT, ...LOCATIF_SOCIETE].map((e) => e.route));
-    for (const g of locatif.groupes) expect(g.sousTitre.length).toBeGreaterThan(10);
   });
 
   it('should list each simulator once, under the path of its family', () => {
@@ -25,6 +18,10 @@ describe('menus', () => {
     expect(new Set(routes).size).toBe(routes.length);
     for (const e of FRONTALIERS) expect(CHEMINS[e.route]).toMatch(/^\/frontalier\//);
     for (const e of [...LOCATIF_DIRECT, ...LOCATIF_SOCIETE]) expect(CHEMINS[e.route]).toMatch(/^\/locatif\//);
+  });
+
+  it('should point each family to its own block of the help', () => {
+    expect(RUBRIQUES.map((r) => r.ancreAide)).toEqual(['frontaliers', 'direct', 'societe']);
   });
 });
 
