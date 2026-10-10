@@ -1,5 +1,5 @@
 import type { GestionSaisonniere, SaisonnierSaisonInput } from '@shared/schemas.js';
-import { useSaisonnierStore } from '@/store/saisonnierStore';
+import { caDeSaison, useSaisonnierStore } from '@/store/saisonnierStore';
 import { formatEur } from '@/lib/profiles';
 
 const inputClass = 'w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm';
@@ -16,15 +16,22 @@ const SEASONS: { key: 'hauteSaison' | 'moyenneSaison' | 'basseSaison'; label: st
   { key: 'basseSaison', label: 'Basse saison', accent: 'border-l-4 border-l-orange-100' },
 ];
 
+const caDe = caDeSaison;
+
+/** A year of 365 nights: two summer months, four shoulder months, the rest. */
+const NUITS_PAR_DEFAUT = { hauteSaison: 62, moyenneSaison: 122, basseSaison: 181 } as const;
+
 function SeasonRow({
   label,
   accent,
   value,
+  parNuit,
   onChange,
 }: {
   label: string;
   accent: string;
   value: SaisonnierSaisonInput;
+  parNuit: boolean;
   onChange: (patch: Partial<SaisonnierSaisonInput>) => void;
 }) {
   return (
@@ -46,17 +53,50 @@ function SeasonRow({
             }}
           />
         </div>
-        <div>
-          <label className={labelClass}>CA sur la periode (EUR)</label>
-          <input
-            type="number"
-            step={500}
-            min={0}
-            className={inputClass}
-            value={parseFloat(value.caPeriode)}
-            onChange={(e) => onChange({ caPeriode: toDecimalStr(e.target.value) })}
-          />
-        </div>
+        {parNuit ? (
+          <div>
+            <label className={labelClass}>Prix moyen par nuit (EUR)</label>
+            <input
+              type="number"
+              step={5}
+              min={0}
+              className={inputClass}
+              value={parseFloat(value.prixNuit ?? '0')}
+              onChange={(e) => onChange({ prixNuit: toDecimalStr(e.target.value) })}
+            />
+          </div>
+        ) : (
+          <div>
+            <label className={labelClass}>CA sur la periode (EUR)</label>
+            <input
+              type="number"
+              step={500}
+              min={0}
+              className={inputClass}
+              value={parseFloat(value.caPeriode)}
+              onChange={(e) => onChange({ caPeriode: toDecimalStr(e.target.value) })}
+            />
+          </div>
+        )}
+        {parNuit && (
+          <div>
+            <label className={labelClass}>Nuits dans la saison</label>
+            <input
+              type="number"
+              step={1}
+              min={0}
+              max={366}
+              className={inputClass}
+              value={value.nuits ?? 0}
+              onChange={(e) => onChange({ nuits: Math.min(366, Math.max(0, parseInt(e.target.value) || 0)) })}
+            />
+          </div>
+        )}
+        {parNuit && (
+          <div className="flex items-end pb-1.5 text-xs text-gray-500">
+            CA : <span className="ml-1 font-mono text-gray-800">{formatEur(caDe(value))}</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -67,21 +107,39 @@ export function SaisonnierSaisonsForm() {
   const saisonnier = asset.saisonnier;
   if (!saisonnier) return null;
 
-  const caAnnuelBrut =
-    parseFloat(saisonnier.hauteSaison.caPeriode) +
-    parseFloat(saisonnier.moyenneSaison.caPeriode) +
-    parseFloat(saisonnier.basseSaison.caPeriode);
+  const caAnnuelBrut = caDe(saisonnier.hauteSaison) + caDe(saisonnier.moyenneSaison) + caDe(saisonnier.basseSaison);
 
   const isConciergerie = saisonnier.gestion === 'CONCIERGERIE';
+  // Priced by the night as soon as one season carries a price.
+  const parNuit = SEASONS.some(({ key }) => saisonnier[key].prixNuit !== undefined);
+  const basculer = () => {
+    for (const { key } of SEASONS) {
+      const s = saisonnier[key];
+      if (parNuit) {
+        // Back to typed amounts: keep the CA the nights gave.
+        updateSaison(key, { caPeriode: caDe(s).toFixed(2), nuits: undefined, prixNuit: undefined });
+      } else {
+        // Start from the typed CA: the year split into its seasons (summer,
+        // shoulder months, winter), the price that matches.
+        const nuits = s.nuits ?? NUITS_PAR_DEFAUT[key];
+        const occupees = nuits * s.tauxOccupation;
+        updateSaison(key, { nuits, prixNuit: (occupees > 0 ? parseFloat(s.caPeriode) / occupees : 0).toFixed(2) });
+      }
+    }
+  };
 
   return (
     <div className="space-y-4">
       <div>
         <h3 className="text-lg font-semibold text-gray-900">Exploitation saisonniere</h3>
         <p className="text-xs text-gray-500 mt-0.5">
-          Taux d’occupation et CA saisis directement par periode — a affiner plus tard avec une
-          estimation automatique par localite.
+          {parNuit
+            ? 'Nuits × taux d’occupation × prix par nuit : baisser l’occupation baisse le CA.'
+            : 'CA saisi directement par periode ; le taux d’occupation est alors indicatif.'}
         </p>
+        <button type="button" onClick={basculer} className="mt-1 text-xs text-orange-700 hover:underline">
+          {parNuit ? 'Saisir le CA directement' : 'Calculer le CA a partir des nuits et du prix'}
+        </button>
       </div>
 
       <div className="space-y-2">
@@ -91,6 +149,7 @@ export function SaisonnierSaisonsForm() {
             label={label}
             accent={accent}
             value={saisonnier[key]}
+            parNuit={parNuit}
             onChange={(patch) => updateSaison(key, patch)}
           />
         ))}
@@ -122,10 +181,27 @@ export function SaisonnierSaisonsForm() {
           ))}
         </div>
 
+        <div>
+          <label className={labelClass}>Commission plateforme (% du CA, frais hote)</label>
+          <input
+            type="number"
+            step={1}
+            min={0}
+            max={100}
+            className={inputClass}
+            value={Math.round(saisonnier.commissionPlateforme * 100)}
+            onChange={(e) => {
+              const pct = parseFloat(e.target.value);
+              if (!isNaN(pct)) updateSaisonnierParams({ commissionPlateforme: pct / 100 });
+            }}
+          />
+          <p className="text-xs text-gray-400 mt-1">Prelevee par Airbnb, Booking ou Abritel, avec ou sans conciergerie.</p>
+        </div>
+
         {isConciergerie ? (
           <div>
             <label className={labelClass}>
-              Commission conciergerie (% du CA — mise en location, menage, linge, entretien)
+              Commission conciergerie (% du CA net de la plateforme — mise en location, menage, linge, entretien)
             </label>
             <input
               type="number"
@@ -139,27 +215,9 @@ export function SaisonnierSaisonsForm() {
                 if (!isNaN(pct)) updateSaisonnierParams({ fraisConciergeriePercent: pct / 100 });
               }}
             />
-            <p className="text-xs text-gray-400 mt-1">
-              Ce pourcentage remplace la commission plateforme : elle n’est pas facturee en plus.
-            </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className={labelClass}>Commission plateforme (%)</label>
-              <input
-                type="number"
-                step={1}
-                min={0}
-                max={100}
-                className={inputClass}
-                value={Math.round(saisonnier.commissionPlateforme * 100)}
-                onChange={(e) => {
-                  const pct = parseFloat(e.target.value);
-                  if (!isNaN(pct)) updateSaisonnierParams({ commissionPlateforme: pct / 100 });
-                }}
-              />
-            </div>
+          <div>
             <div>
               <label className={labelClass}>Menage / linge (EUR/an)</label>
               <input

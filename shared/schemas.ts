@@ -197,7 +197,15 @@ export type LoanInput = z.infer<typeof LoanSchema>;
  */
 export const SaisonnierSaisonSchema = z.object({
   tauxOccupation: z.number().min(0).max(1),
+  /** Used as typed when the nights and the price are absent. */
   caPeriode: decimalString,
+  /**
+   * Nights the season offers, and the average price per night. Given both,
+   * the CA follows from them: nights × occupancy × price — so the occupancy
+   * finally weighs on the result.
+   */
+  nuits: z.number().int().min(0).max(366).optional(),
+  prixNuit: decimalString.optional(),
 });
 export type SaisonnierSaisonInput = z.infer<typeof SaisonnierSaisonSchema>;
 
@@ -206,13 +214,16 @@ export const SaisonnierParamsSchema = z.object({
   moyenneSaison: SaisonnierSaisonSchema,
   basseSaison: SaisonnierSaisonSchema,
   gestion: GestionSaisonniere.default('SOI_MEME'),
-  /** SOI_MEME only — platform commission (Airbnb/Abritel/Booking ~15-20%). */
+  /**
+   * Platform commission on the CA (Airbnb/Abritel/Booking), charged to the
+   * host whoever manages the letting — the conciergerie comes on top.
+   */
   commissionPlateforme: z.number().min(0).max(1).default(0.15),
   /** SOI_MEME only — menage/linge/entretien organized directly by the owner. */
   fraisMenageLingeAnnuel: decimalString.default('0.00'),
   /**
-   * CONCIERGERIE only — a single percentage covering mise en location,
-   * menage, linge and entretien. No platform commission applies on top.
+   * CONCIERGERIE only — a percentage of the CA net of the platform
+   * commission, covering mise en location, menage, linge and entretien.
    */
   fraisConciergeriePercent: z.number().min(0).max(1).default(0.25),
 });

@@ -537,10 +537,11 @@ describe('runSimulation — LMP saisonnier', () => {
     expect(parseFloat(y1.entities['LMP Provence'].charges)).toBeCloseTo(baseCharges + exploitationFees, 2);
   });
 
-  it('should charge only the conciergerie fee in CONCIERGERIE mode — no platform commission on top', () => {
+  it('should charge the platform commission, then the conciergerie on the CA net of it', () => {
     const y1 = yearOf(runSimulation(lmpRequest({ gestion: 'CONCIERGERIE' })), 1);
     const baseCharges = 2400 + 1200;
-    const exploitationFees = 30000 * 0.25;
+    const commission = 30000 * 0.15;
+    const exploitationFees = commission + (30000 - commission) * 0.25;
     expect(parseFloat(y1.entities['LMP Provence'].charges)).toBeCloseTo(baseCharges + exploitationFees, 2);
   });
 

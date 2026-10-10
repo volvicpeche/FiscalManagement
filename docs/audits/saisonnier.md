@@ -7,6 +7,20 @@ Les points marqués **(à vérifier)** reposent sur ma connaissance des textes,
 pas sur une lecture faite pour cet audit : chacun sera relu dans le texte
 officiel avant d'être codé, comme les barèmes (`@aVerifier`).
 
+## Suite donnée (branche `feat/saisonnier-montages`)
+
+- Fait : plusieurs associés ; trois montages comparés (direct, SARL de
+  famille, société à l'IS), la SCI signalée comme non adaptée ; statut
+  LMNP/LMP déduit par le moteur ; art. 151 septies et IFI du LMP ;
+  commission de plateforme et conciergerie séparées ; CA en nuits ×
+  occupation × prix ; avertissements légaux ; anciens scénarios repris en
+  direct.
+- Décidé de reporter : rémunération du gérant de la société à l'IS
+  (dividendes seulement), micro-social et régime général (avertissement en
+  attendant).
+- Non modifié faute de source lue : la sortie du micro-BIC (point 8). Le
+  BOFiP annonce une révision des seuils au 19/08/2026, à relire.
+
 ## En bref
 
 Le module calcule correctement **un seul propriétaire, en direct, en LMNP**,

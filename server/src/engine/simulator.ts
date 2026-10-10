@@ -642,14 +642,26 @@ export function runSimulation(request: SimulationRequest): SimulationResult {
             hauteSaison: {
               ...asset.saisonnier.hauteSaison,
               caPeriode: d(asset.saisonnier.hauteSaison.caPeriode).mul(caGrowth).toFixed(2),
+              // Priced by the night: the price grows, not the nights.
+              ...(asset.saisonnier.hauteSaison.prixNuit !== undefined
+                ? { prixNuit: d(asset.saisonnier.hauteSaison.prixNuit).mul(caGrowth).toFixed(2) }
+                : {}),
             },
             moyenneSaison: {
               ...asset.saisonnier.moyenneSaison,
               caPeriode: d(asset.saisonnier.moyenneSaison.caPeriode).mul(caGrowth).toFixed(2),
+              // Priced by the night: the price grows, not the nights.
+              ...(asset.saisonnier.moyenneSaison.prixNuit !== undefined
+                ? { prixNuit: d(asset.saisonnier.moyenneSaison.prixNuit).mul(caGrowth).toFixed(2) }
+                : {}),
             },
             basseSaison: {
               ...asset.saisonnier.basseSaison,
               caPeriode: d(asset.saisonnier.basseSaison.caPeriode).mul(caGrowth).toFixed(2),
+              // Priced by the night: the price grows, not the nights.
+              ...(asset.saisonnier.basseSaison.prixNuit !== undefined
+                ? { prixNuit: d(asset.saisonnier.basseSaison.prixNuit).mul(caGrowth).toFixed(2) }
+                : {}),
             },
             fraisMenageLingeAnnuel: d(asset.saisonnier.fraisMenageLingeAnnuel).mul(feeGrowth).toFixed(2),
           };

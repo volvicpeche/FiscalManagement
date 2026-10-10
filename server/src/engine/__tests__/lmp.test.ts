@@ -150,3 +150,16 @@ describe('LMP a la revente et a l’IFI', () => {
     expect(an1(r).ifiExonere).toBe(false);
   });
 });
+
+describe('chiffre d’affaires a la nuitee dans la projection', () => {
+  it('should index the price per night, not the nights', () => {
+    const req = gite(30000);
+    req.params.rentGrowthRate = 0.02;
+    const s = req.structures[0].assets[0].saisonnier!;
+    s.hauteSaison = { tauxOccupation: 0.5, caPeriode: '0.00', nuits: 100, prixNuit: '200.00' };
+    const r = runSimulation(req);
+    const detail = (an: number) => r.yearlyData.find((y) => y.year === an)!.entities['Gite'].detail;
+    expect(detail(1).caHauteSaison).toBe('10000.00');
+    expect(detail(2).caHauteSaison).toBe('10200.00');
+  });
+});

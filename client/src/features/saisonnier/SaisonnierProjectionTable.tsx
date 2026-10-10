@@ -46,7 +46,8 @@ export function SaisonnierProjectionTable({
   statut,
 }: {
   result: SimulationResult;
-  statut: 'LMNP' | 'LMP';
+  /** IS: a company pays the tax itself, the default wording applies. */
+  statut: 'LMNP' | 'LMP' | 'IS';
 }) {
   const rows = toRows(result);
 
@@ -55,7 +56,7 @@ export function SaisonnierProjectionTable({
       <FluxTable
         rows={rows}
         columns={visibleColumns(rows)}
-        overrides={statut === 'LMNP' ? LMNP_OVERRIDES : LMP_OVERRIDES}
+        overrides={statut === 'LMNP' ? LMNP_OVERRIDES : statut === 'LMP' ? LMP_OVERRIDES : undefined}
         footerClass="bg-orange-50 text-orange-900"
       />
     </div>
