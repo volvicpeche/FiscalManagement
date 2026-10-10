@@ -77,6 +77,7 @@ The engine is the heart of the app — pure TypeScript functions, fully tested, 
 - **lmnp.ts** — Loueur en Meuble Non Professionnel (`StructureType` `LMNP`), translucent like an LMP but taxed differently:
   - Reel: depreciation capped by art. 39 C — it never creates a deficit, the excess is deferred with no time limit. Order: the year's depreciation, then carried deficits (10 years, oldest first), then the deferred stock.
   - A real-charge deficit offsets LMNP profits only — never the global income, unlike an LMP.
+  - No compte courant: the walls are owned directly, there is no company to lend to. `buildAssocieStates` requalifies an `apportCompteCourant` as `apportCapital` for an `LMNP` entity — no debt, no CCA interest, no repayment, nothing owed at the succession; the total invested is unchanged.
   - PS on capital income at 18.6 % (`getLmnpSocialChargeRate`, LFSS 2026: LMNP income is in the CSG rise, foncier income and real-estate gains are not), no TNS contribution.
   - SSI: a meuble de tourisme (seasonal asset) above €23,000 of receipts, judged on each associe's share, pays SSI contributions instead of the PS (`tauxCotisationsSocialesLMP`, floor `cotisationsMinimalesLMP`), deductible from the IR base at the reel only. A `SWISS_EXEMPT` associe stays out. Flagged per year in `lmnp.affiliationSSI`.
   - Micro-BIC (`regimeLMNP: 'MICRO_BIC'`): 50 % up to €77,700, 30 % up to €15,000 for an unclassified tourist letting (`meubleTourismeClasse`). Judged on the previous year's receipts; above the threshold the reel applies.

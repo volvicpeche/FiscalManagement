@@ -615,6 +615,22 @@ describe('runSimulation — LMNP', () => {
     expect(parseFloat(y1.lmnp!.amortissementsDifferes)).toBeGreaterThan(0);
   });
 
+  it('should treat a compte courant as a plain apport — an LMNP has no company to owe it', () => {
+    const avecCca = runSimulation(
+      lmnpRequest({ associes: [associe({ nom: 'Florian', autresRevenus: '40000.00', apportCompteCourant: '40000.00', tauxInteretCCA: 0.03 })] }),
+    );
+    const enCapital = runSimulation(
+      lmnpRequest({ associes: [associe({ nom: 'Florian', autresRevenus: '40000.00', apportCapital: '40000.00' })] }),
+    );
+    for (const y of avecCca.yearlyData) {
+      expect(parseFloat(y.entities['LMNP'].ccaSolde ?? '0')).toBe(0);
+      expect(parseFloat(y.associes['Florian']?.ccaInterest ?? '0')).toBe(0);
+    }
+    // Same money in, same result: only the label differed.
+    expect(avecCca.summary.totalNetWealth).toBe(enCapital.summary.totalNetWealth);
+    expect(avecCca.summary.successionCost).toBe(enCapital.summary.successionCost);
+  });
+
   // Under 23 000 EUR of receipts: a plain LMNP, no SSI.
   const petitSaisonnier: SaisonnierParams = {
     ...saisonnier,
