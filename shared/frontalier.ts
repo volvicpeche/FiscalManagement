@@ -375,3 +375,36 @@ export interface DocumentExtractionResult {
   extraction: DocumentExtraction | null;
   erreur: string | null;
 }
+
+// ─── Decompte reel ───────────────────────────────────────────────────────────
+
+/**
+ * The figures of an actual TOU assessment (bordereaux ICC and IFD), to hold
+ * the engine against. Every field is optional: a person keeps the lines of
+ * their own document. CHF, as on the bordereaux.
+ */
+export const DecompteReelSchema = z
+  .object({
+    revenuImposableIcc: montant.optional(),
+    impotBaseIcc: montant.optional(),
+    centimesCantonaux: montant.optional(),
+    reductionLdirpp: montant.optional(),
+    impotCommunal: montant.optional(),
+    icc: montant.optional(),
+    revenuImposableIfd: montant.optional(),
+    ifd: montant.optional(),
+    totalTou: montant.optional(),
+  })
+  .strict();
+export type DecompteReel = z.infer<typeof DecompteReelSchema>;
+export type ChampDecompte = keyof DecompteReel;
+
+/** One line of a comparison between the engine and an assessment. */
+export interface EcartDecompte {
+  champ: ChampDecompte;
+  libelle: string;
+  calcule: string;
+  reel: string;
+  /** calcule − reel: positive when the engine overestimates. */
+  ecart: string;
+}
