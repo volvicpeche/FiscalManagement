@@ -54,6 +54,13 @@ const ICONES: Record<Route, ReactNode> = {
       <path d="M12 8v8M8 12h8" />
     </Icone>
   ),
+  prevoyance: (
+    <Icone>
+      <path d="M12 3v18" />
+      <path d="M5 10l7-7 7 7" />
+      <path d="M5 21h14" />
+    </Icone>
+  ),
   saisonnier: (
     <Icone>
       <circle cx="12" cy="12" r="4" />
@@ -74,6 +81,7 @@ const ICONES: Record<Route, ReactNode> = {
 const POINTS: Partial<Record<Route, string[]>> = {
   sci: ['Cinq montages compares cote a cote', 'Impot, tresorerie et TRI sur 30 ans', 'Revente et transmission chiffrees'],
   frontalier: ['Test des 90 % du quasi-resident', 'TOU contre impot a la source, pas a pas', 'Justificatifs lus automatiquement'],
+  prevoyance: ['Economie d’impot du versement 3a', 'Courbe du rachat LPP, taux marginal', 'Quand la TOU devient rentable'],
   saisonnier: ['Revenus saison par saison', 'LMNP au reel ou micro-BIC', 'Annonce analysee en un clic'],
 };
 

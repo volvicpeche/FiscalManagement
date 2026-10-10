@@ -8,7 +8,7 @@ import { META, sitemapXml } from '@/lib/seo';
 describe('menus', () => {
   it('should split the advanced simulators into Frontaliers and Investissement locatif', () => {
     expect(RUBRIQUES.map((r) => r.titre)).toEqual(['Frontaliers', 'Investissement locatif']);
-    expect(FRONTALIERS.map((e) => e.route)).toEqual(['frontalier']);
+    expect(FRONTALIERS.map((e) => e.route)).toEqual(['frontalier', 'prevoyance']);
     expect(INVESTISSEMENT_LOCATIF.map((e) => e.route)).toEqual(['sci', 'saisonnier']);
   });
 

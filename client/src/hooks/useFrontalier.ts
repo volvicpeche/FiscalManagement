@@ -3,6 +3,8 @@ import type {
   DocumentExtractionResult,
   FrontalierRequestInput,
   FrontalierResult,
+  PrevoyanceRequestInput,
+  PrevoyanceResult,
 } from '@shared/frontalier.js';
 import { apiFetch } from '@/lib/api';
 
@@ -65,5 +67,16 @@ export function useExtractDocuments() {
       // Only called once the user has agreed (DocumentDropzone, useConsentementIa).
       return send<DocumentExtractionResult[]>('/api/frontalier/documents?consentement=oui', { method: 'POST', body: form });
     },
+  });
+}
+
+export function usePrevoyanceSimulation() {
+  return useMutation({
+    mutationFn: (request: PrevoyanceRequestInput) =>
+      send<PrevoyanceResult>('/api/frontalier/prevoyance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      }),
   });
 }

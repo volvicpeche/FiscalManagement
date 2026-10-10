@@ -1,0 +1,1 @@
+export { PrevoyancePage } from './PrevoyancePage';

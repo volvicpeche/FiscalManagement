@@ -76,6 +76,13 @@ export const META: Record<Route, MetaPage> = {
     indexer: true,
     sitemap: false,
   },
+  prevoyance: {
+    titre: 'Frontalier : économie d’impôt du 3e pilier et du rachat LPP | Patrimonia',
+    description:
+      'Combien rapporte un versement 3a ou un rachat LPP à un frontalier de Genève : économie d’impôt par la TOU, courbe du rachat, et le moment où la TOU devient plus avantageuse que l’impôt à la source.',
+    indexer: true,
+    sitemap: false,
+  },
   saisonnier: {
     titre: 'Simulateur location saisonnière et meublé de tourisme (LMNP) | Patrimonia',
     description:

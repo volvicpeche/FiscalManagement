@@ -80,6 +80,41 @@ describe('POST /api/frontalier/run', () => {
   });
 });
 
+describe('POST /api/frontalier/prevoyance', () => {
+  it('should answer the savings of a 3a payment and a buy-back', async () => {
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/frontalier/prevoyance',
+      payload: { requete: requete, pilier3a: '7258.00', rachatLpp: '10000.00' },
+    });
+    expect(res.statusCode).toBe(200);
+    const r = res.json();
+    expect(parseFloat(r.economie3a)).toBeGreaterThan(0);
+    expect(parseFloat(r.economieRachat)).toBeGreaterThan(0);
+    expect(r.courbe.length).toBeGreaterThan(2);
+  });
+
+  it('should refuse a person without a Swiss salary', async () => {
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/frontalier/prevoyance',
+      payload: { requete: { ...requete, etatCivil: 'MARIE', conjoint: { activite: 'FRANCE' } }, personne: 'conjoint', pilier3a: '7258.00' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toMatch(/salaire suisse/);
+  });
+
+  it('should answer 422 for a canton not computed yet', async () => {
+    const res = await server.inject({
+      method: 'POST',
+      url: '/api/frontalier/prevoyance',
+      payload: { requete: { ...requete, canton: 'ZH' }, pilier3a: '7258.00' },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().code).toBe('CANTON_INDISPONIBLE');
+  });
+});
+
 describe('POST /api/frontalier/documents', () => {
   it('should refuse a request that is not multipart', async () => {
     const res = await server.inject({ method: 'POST', url: '/api/frontalier/documents', payload: {} });
