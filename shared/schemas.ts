@@ -197,7 +197,15 @@ export type LoanInput = z.infer<typeof LoanSchema>;
  */
 export const SaisonnierSaisonSchema = z.object({
   tauxOccupation: z.number().min(0).max(1),
+  /** Used as typed when the nights and the price are absent. */
   caPeriode: decimalString,
+  /**
+   * Nights the season offers, and the average price per night. Given both,
+   * the CA follows from them: nights × occupancy × price — so the occupancy
+   * finally weighs on the result.
+   */
+  nuits: z.number().int().min(0).max(366).optional(),
+  prixNuit: decimalString.optional(),
 });
 export type SaisonnierSaisonInput = z.infer<typeof SaisonnierSaisonSchema>;
 
@@ -206,13 +214,16 @@ export const SaisonnierParamsSchema = z.object({
   moyenneSaison: SaisonnierSaisonSchema,
   basseSaison: SaisonnierSaisonSchema,
   gestion: GestionSaisonniere.default('SOI_MEME'),
-  /** SOI_MEME only — platform commission (Airbnb/Abritel/Booking ~15-20%). */
+  /**
+   * Platform commission on the CA (Airbnb/Abritel/Booking), charged to the
+   * host whoever manages the letting — the conciergerie comes on top.
+   */
   commissionPlateforme: z.number().min(0).max(1).default(0.15),
   /** SOI_MEME only — menage/linge/entretien organized directly by the owner. */
   fraisMenageLingeAnnuel: decimalString.default('0.00'),
   /**
-   * CONCIERGERIE only — a single percentage covering mise en location,
-   * menage, linge and entretien. No platform commission applies on top.
+   * CONCIERGERIE only — a percentage of the CA net of the platform
+   * commission, covering mise en location, menage, linge and entretien.
    */
   fraisConciergeriePercent: z.number().min(0).max(1).default(0.25),
 });
@@ -284,6 +295,18 @@ export const StructureSchema = z.object({
    * ceiling; above it the reel is compulsory that year.
    */
   regimeFoncier: RegimeFoncier.optional(),
+  /**
+   * LMP / LMNP of a meuble de tourisme — services of the para-hotel kind
+   * (breakfast, regular cleaning, linen, reception: three of the four). It
+   * raises the thresholds of the art. 151 septies exemption at the sale.
+   */
+  parahotellerie: z.boolean().optional(),
+  /**
+   * LMNP only — let the engine decide between LMNP and LMP (art. 155 IV):
+   * professional when the foyer's share of the receipts exceeds 23 000 EUR
+   * AND its other activity income. Judged on the first year.
+   */
+  statutMeubleAuto: z.boolean().optional(),
 });
 export type StructureInput = z.infer<typeof StructureSchema>;
 
@@ -420,6 +443,12 @@ export const EntityYearSchema = z.object({
   ccaSolde: z.string(),
   /** Gross dividend taken out of the company — to a parent, or to the associes. */
   dividendeVerse: z.string(),
+
+  /** Furnished letting whose status the engine decided (`statutMeubleAuto`). */
+  statutMeuble: z.enum(['LMNP', 'LMP']).optional(),
+
+  /** LMP only — the walls were exempt from IFI this year as professional assets (art. 975 V). */
+  ifiExonere: z.boolean().optional(),
 
   /** INDIVIDUAL opting for the micro-foncier only — whether it applied this year. */
   foncier: z

@@ -7,6 +7,7 @@ import {
   computePFU,
   getSocialChargeRate,
 } from './tax.js';
+import { EXONERATION_151_SEPTIES } from './baremes.js';
 
 /**
  * What selling at the end of the horizon actually costs.
@@ -204,23 +205,28 @@ export function computeExitIR(p: ExitParams): ExitResult {
  * after the article 151 septies B abatement of 10 % per year of holding
  * beyond the fifth, which exempts it entirely at fifteen years.
  *
- * Simplification: the article 151 septies exemption (available below roughly
- * 90 000 EUR of annual receipts after five years of activity) is NOT applied.
- * For a small operation that qualifies, the real tax may be far lower — the
- * figure here is the unfavourable end of the range.
+ * Before both, the article 151 septies exemption of small businesses: after
+ * five years of activity, the whole gain (short and long term) is exempt when
+ * the receipts stay below the lower threshold, partly up to the upper one.
+ * For most gites it is the end of the story: no tax at all on the sale.
  */
 export function computeExitLMP(
   p: ExitParams,
   associe: AssocieInput,
   tauxCotisationsTNS: Decimal,
+  activite: { recettesAnnuelles: Decimal; parahotellerie?: boolean } = { recettesAnnuelles: new Decimal(Infinity) },
 ): ExitResult {
   const vnc = p.baseAmortissable.minus(p.cumulAmortissements);
   const plusValue = p.prixVente.minus(vnc);
 
   if (plusValue.lte(0)) return empty('LMP', p);
 
-  const courtTerme = Decimal.min(plusValue, p.cumulAmortissements);
-  const longTermeBrut = plusValue.minus(courtTerme);
+  // Article 151 septies: the exempt share of the gain, the rest is taxed below.
+  const exonere = tauxExoneration151Septies(activite.recettesAnnuelles, p.dureeDetention, activite.parahotellerie ?? false);
+  const imposable = new Decimal(1).minus(exonere);
+
+  const courtTerme = Decimal.min(plusValue, p.cumulAmortissements).mul(imposable);
+  const longTermeBrut = plusValue.mul(imposable).minus(courtTerme);
 
   // Article 151 septies B: the long-term share of a gain on a building used
   // for the business is abated 10 % per year of holding beyond the fifth, so
@@ -261,6 +267,21 @@ export function computeExitLMP(
     detteResiduelle: p.detteResiduelle,
     produitNet: p.prixVente.minus(impot).minus(p.detteResiduelle),
   };
+}
+
+/**
+ * Share of a professional gain exempt under article 151 septies: 1 below the
+ * lower threshold, 0 above the upper one, linear in between, and 0 before
+ * five years of activity.
+ *
+ * @param recettes - Average receipts excluding VAT of the last two years.
+ */
+export function tauxExoneration151Septies(recettes: Decimal, dureeActivite: number, parahotellerie: boolean): Decimal {
+  if (dureeActivite < EXONERATION_151_SEPTIES.dureeMinimale) return new Decimal(0);
+  const { totale, partielle } = parahotellerie ? EXONERATION_151_SEPTIES.parahotellerie : EXONERATION_151_SEPTIES.services;
+  if (recettes.lte(totale)) return new Decimal(1);
+  if (recettes.gte(partielle)) return new Decimal(0);
+  return partielle.minus(recettes).div(partielle.minus(totale));
 }
 
 /**

@@ -37,21 +37,38 @@ describe('computeSaisonnierRevenue — SOI_MEME', () => {
 });
 
 describe('computeSaisonnierRevenue — CONCIERGERIE', () => {
-  it('should charge only the conciergerie percentage, never a platform commission', () => {
+  it('should keep the platform commission and charge the conciergerie on the CA net of it', () => {
     const result = computeSaisonnierRevenue(baseParams({ gestion: 'CONCIERGERIE' }));
-    expect(result.commissionPlateforme.toNumber()).toBe(0);
+    expect(result.commissionPlateforme.toNumber()).toBe(30000 * 0.15);
     expect(result.fraisMenageLinge.toNumber()).toBe(0);
-    expect(result.fraisConciergerie.toNumber()).toBe(30000 * 0.25);
-    expect(result.totalFraisExploitation.toNumber()).toBe(30000 * 0.25);
+    expect(result.fraisConciergerie.toNumber()).toBe((30000 - 4500) * 0.25);
+    expect(result.totalFraisExploitation.toNumber()).toBe(4500 + 6375);
   });
 
-  it('should be cheaper than SOI_MEME when the conciergerie rate undercuts commission + menage/linge', () => {
+  it('should cost more than running it oneself on these numbers', () => {
     const soiMeme = computeSaisonnierRevenue(baseParams());
     const conciergerie = computeSaisonnierRevenue(baseParams({ gestion: 'CONCIERGERIE' }));
-    // 30000*0.25 = 7500 vs 30000*0.15 + 2000 = 6500 here — conciergerie is
-    // pricier on these numbers; assert the actual relationship, not a guess.
-    expect(conciergerie.totalFraisExploitation.toNumber()).toBe(7500);
+    // 4 500 + 6 375 = 10 875 against 4 500 + 2 000 = 6 500.
+    expect(conciergerie.totalFraisExploitation.toNumber()).toBe(10875);
     expect(soiMeme.totalFraisExploitation.toNumber()).toBe(6500);
+  });
+});
+
+describe('computeSaisonnierRevenue — nuits × occupation × prix', () => {
+  it('should derive the CA of a season from its nights, occupancy and price', () => {
+    const result = computeSaisonnierRevenue(
+      baseParams({
+        hauteSaison: { tauxOccupation: 0.8, caPeriode: '0.00', nuits: 90, prixNuit: '150.00' },
+      }),
+    );
+    expect(result.caParSaison.hauteSaison.toNumber()).toBe(90 * 0.8 * 150);
+  });
+
+  it('should keep the typed CA when the price per night is missing', () => {
+    const result = computeSaisonnierRevenue(
+      baseParams({ hauteSaison: { tauxOccupation: 0.8, caPeriode: '18000.00', nuits: 90 } }),
+    );
+    expect(result.caParSaison.hauteSaison.toNumber()).toBe(18000);
   });
 });
 

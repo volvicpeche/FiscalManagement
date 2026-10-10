@@ -11,7 +11,17 @@ function toDecimalStr(value: string): string {
   return isNaN(num) ? '0.00' : num.toFixed(2);
 }
 
+/** Where the associes live and how to change them — the SCI store by default. */
+export interface SourceAssocies {
+  associes: AssocieInput[];
+  addAssocie: () => void;
+  removeAssocie: (index: number) => void;
+  updateAssocie: (index: number, a: Partial<AssocieInput>) => void;
+  redistribute: () => void;
+}
+
 interface CardProps {
+  source: SourceAssocies;
   associe: AssocieInput;
   index: number;
   expanded: boolean;
@@ -19,8 +29,8 @@ interface CardProps {
   onToggle: () => void;
 }
 
-function AssocieCard({ associe, index, expanded, canRemove, onToggle }: CardProps) {
-  const { updateAssocie, removeAssocie } = useScenarioStore();
+function AssocieCard({ source, associe, index, expanded, canRemove, onToggle }: CardProps) {
+  const { updateAssocie, removeAssocie } = source;
   const set = (patch: Partial<AssocieInput>) => updateAssocie(index, patch);
 
   return (
@@ -215,8 +225,10 @@ function AssocieCard({ associe, index, expanded, canRemove, onToggle }: CardProp
   );
 }
 
-export function AssociesForm() {
-  const { associes, addAssocie, redistribute } = useScenarioStore();
+export function AssociesForm({ source, titre = 'Associes' }: { source?: SourceAssocies; titre?: string }) {
+  const sci = useScenarioStore();
+  const src = source ?? sci;
+  const { associes, addAssocie, redistribute } = src;
   const [expanded, setExpanded] = useState<number | null>(0);
 
   const total = partsTotal(associes);
@@ -233,7 +245,7 @@ export function AssociesForm() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">Associes</h3>
+        <h3 className="text-lg font-semibold text-gray-900">{titre}</h3>
         <span className="text-xs text-gray-500">{associes.length} personne(s)</span>
       </div>
 
@@ -241,6 +253,7 @@ export function AssociesForm() {
         {associes.map((a, i) => (
           <AssocieCard
             key={i}
+            source={src}
             associe={a}
             index={i}
             canRemove={associes.length > 1}

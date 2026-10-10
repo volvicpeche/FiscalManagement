@@ -1,19 +1,17 @@
 import Decimal from 'decimal.js';
-import type { SaisonnierParams } from '@shared/schemas.js';
+import type { SaisonnierParams, SaisonnierSaisonInput } from '@shared/schemas.js';
 
 /**
  * Location saisonniere revenue and operating charges for one year.
  *
- * CA per season bucket is entered directly by the user (see
- * SaisonnierSaisonSchema) — this module only aggregates it and applies the
- * operating-mode charges. `tauxOccupation` is informational (reporting) and
- * does not feed back into `caPeriode`.
+ * The CA of a season follows from its nights, occupancy and price per night
+ * when both are given; otherwise the amount typed (`caPeriode`) is used and
+ * the occupancy stays informational.
  *
- * Mutually exclusive by `gestion`:
- *   SOI_MEME     -> commissionPlateforme (% of CA) + fraisMenageLingeAnnuel (flat)
- *   CONCIERGERIE -> fraisConciergeriePercent (% of CA) only — it already covers
- *                   mise en location, menage, linge and entretien, so no
- *                   platform commission is charged on top.
+ * The platform takes its commission on the CA whoever runs the letting. Then:
+ *   SOI_MEME     -> the owner pays cleaning and linen (flat yearly amount)
+ *   CONCIERGERIE -> a percentage of the CA net of the platform commission,
+ *                   covering mise en location, menage, linge and entretien.
  */
 
 export interface SaisonnierRevenue {
@@ -30,22 +28,26 @@ export interface SaisonnierRevenue {
   caNetExploitation: Decimal;
 }
 
+/** CA of one season: nights × occupancy × price when known, the typed amount otherwise. */
+export function caSaison(s: SaisonnierSaisonInput): Decimal {
+  if (s.nuits !== undefined && s.prixNuit !== undefined) {
+    return new Decimal(s.nuits).mul(s.tauxOccupation).mul(s.prixNuit);
+  }
+  return new Decimal(s.caPeriode);
+}
+
 export function computeSaisonnierRevenue(params: SaisonnierParams): SaisonnierRevenue {
-  const hauteSaison = new Decimal(params.hauteSaison.caPeriode);
-  const moyenneSaison = new Decimal(params.moyenneSaison.caPeriode);
-  const basseSaison = new Decimal(params.basseSaison.caPeriode);
+  const hauteSaison = caSaison(params.hauteSaison);
+  const moyenneSaison = caSaison(params.moyenneSaison);
+  const basseSaison = caSaison(params.basseSaison);
   const caAnnuelBrut = hauteSaison.plus(moyenneSaison).plus(basseSaison);
 
   const isConciergerie = params.gestion === 'CONCIERGERIE';
 
-  const commissionPlateforme = isConciergerie
-    ? new Decimal(0)
-    : caAnnuelBrut.mul(params.commissionPlateforme);
-
+  const commissionPlateforme = caAnnuelBrut.mul(params.commissionPlateforme);
   const fraisMenageLinge = isConciergerie ? new Decimal(0) : new Decimal(params.fraisMenageLingeAnnuel);
-
   const fraisConciergerie = isConciergerie
-    ? caAnnuelBrut.mul(params.fraisConciergeriePercent)
+    ? caAnnuelBrut.minus(commissionPlateforme).mul(params.fraisConciergeriePercent)
     : new Decimal(0);
 
   const totalFraisExploitation = commissionPlateforme.plus(fraisMenageLinge).plus(fraisConciergerie);

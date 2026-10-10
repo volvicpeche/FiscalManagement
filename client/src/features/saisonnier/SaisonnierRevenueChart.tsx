@@ -1,6 +1,7 @@
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { SaisonnierParams } from '@shared/schemas.js';
 import { formatEur } from '@/lib/profiles';
+import { caDeSaison } from '@/store/saisonnierStore';
 
 // Sequential shades of the same hue: haute -> basse reads as an intensity
 // gradient, matching the ordinal nature of the three season buckets.
@@ -8,9 +9,9 @@ const SEASON_COLORS = ['#ea580c', '#fb923c', '#fed7aa'];
 
 export function SaisonnierRevenueChart({ saisonnier }: { saisonnier: SaisonnierParams }) {
   const data = [
-    { saison: 'Haute', ca: parseFloat(saisonnier.hauteSaison.caPeriode) },
-    { saison: 'Moyenne', ca: parseFloat(saisonnier.moyenneSaison.caPeriode) },
-    { saison: 'Basse', ca: parseFloat(saisonnier.basseSaison.caPeriode) },
+    { saison: 'Haute', ca: caDeSaison(saisonnier.hauteSaison) },
+    { saison: 'Moyenne', ca: caDeSaison(saisonnier.moyenneSaison) },
+    { saison: 'Basse', ca: caDeSaison(saisonnier.basseSaison) },
   ];
 
   return (
