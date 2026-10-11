@@ -40,8 +40,15 @@ function YieldRow({
   );
 }
 
-export function AssetForm() {
+/**
+ * `achat`: what buying costs (the « Bien » step); `exploitation`: what it
+ * brings in and costs each year, with the yields (the « Loyers » step).
+ * Both by default, for the detailed view.
+ */
+export function AssetForm({ partie = 'tout' }: { partie?: 'achat' | 'exploitation' | 'tout' }) {
   const { asset, updateAsset } = useStoreLocatif();
+  const achat = partie !== 'exploitation';
+  const exploitation = partie !== 'achat';
 
   if (!asset) return null;
 
@@ -53,9 +60,11 @@ export function AssetForm() {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-gray-900">Bien immobilier</h3>
+      {partie === 'tout' && <h3 className="text-lg font-semibold text-gray-900">Bien immobilier</h3>}
 
       <div className="grid grid-cols-2 gap-4">
+        {achat && (
+        <>
         <div className="col-span-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Designation
@@ -123,6 +132,11 @@ export function AssetForm() {
           />
         </div>
 
+        </>
+        )}
+
+        {exploitation && (
+        <>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Loyer annuel (EUR)
@@ -161,9 +175,12 @@ export function AssetForm() {
             onChange={(e) => handleChange('propertyTax', e.target.value)}
           />
         </div>
+        </>
+        )}
       </div>
 
       {/* Yields — before financing and before tax: they measure the walls. */}
+      {exploitation && (
       <div className="rounded-md border border-gray-200 bg-gray-50 p-3 space-y-2.5">
         <div className="flex items-baseline justify-between">
           <h4 className="text-sm font-semibold text-gray-800">Rentabilite</h4>
@@ -196,6 +213,7 @@ export function AssetForm() {
           voir la comparaison des montages.
         </p>
       </div>
+      )}
     </div>
   );
 }

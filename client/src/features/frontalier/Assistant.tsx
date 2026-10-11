@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { selectInputs, useFrontalierStore } from '@/store/frontalierStore';
 import { ScenarioManager } from '@/features/scenarios';
-import { BarreEtapes } from './BarreEtapes';
+import { BarreEtapes } from '@/components/BarreEtapes';
 import { BiensFranceForm } from './BiensFranceForm';
 import { DeductionsForm } from './DeductionsForm';
 import { DocumentDropzone } from './DocumentDropzone';

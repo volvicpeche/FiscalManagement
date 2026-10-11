@@ -1,21 +1,29 @@
-import type { Etape, EtapeId } from './parcours';
+/** What the bar needs of a step: any wizard's step list fits. */
+export interface EtapeBarre<Id extends string = string> {
+  id: Id;
+  /** Short label for the bar. */
+  court: string;
+  /** Tooltip. */
+  aide: string;
+}
 
 /**
  * Every visible step, all clickable: the wizard guides but never locks. A
- * step already seen that still has alerts shows an amber dot.
+ * step already seen that still has alerts shows an amber dot. Shared by the
+ * TOU and the real-estate pages.
  */
-export function BarreEtapes({
+export function BarreEtapes<Id extends string>({
   etapes,
   courante,
   vues,
   avecAlertes,
   onSelect,
 }: {
-  etapes: Etape[];
-  courante: EtapeId;
-  vues: EtapeId[];
-  avecAlertes: (id: EtapeId) => boolean;
-  onSelect: (id: EtapeId) => void;
+  etapes: EtapeBarre<Id>[];
+  courante: Id;
+  vues: Id[];
+  avecAlertes: (id: Id) => boolean;
+  onSelect: (id: Id) => void;
 }) {
   const index = etapes.findIndex((e) => e.id === courante);
   return (
