@@ -12,6 +12,7 @@ export function DirectPage() {
     <ComparateurLocatif
       store={useDirectStore}
       kind="direct"
+      titre="Investir en direct"
       profils={PROFILS_DIRECT}
       intro="Le bien en votre nom, seul ou en indivision : pas de societe. Location vide ou meublee longue duree, au forfait ou au reel. Les associes sont ici les coproprietaires ; un apport en compte courant compte comme un apport personnel."
       autre={{ store: useScenarioStore, profils: PROFILS_SOCIETE, route: 'sci', libelle: 'SCI / Holding' }}

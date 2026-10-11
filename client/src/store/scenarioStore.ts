@@ -11,6 +11,7 @@ import type {
   UserProfile,
 } from '@shared/schemas.js';
 import { redistributeParts } from '@shared/parts.js';
+import { ETAPES_IMMO, type EtapeImmoId, type VueLocatif } from './parcoursImmo';
 import { PROFILE_ORDER } from '@/lib/profiles';
 
 /**
@@ -20,6 +21,16 @@ import { PROFILE_ORDER } from '@/lib/profiles';
  */
 
 // ─── Defaults ────────────────────────────────────────────────────────────────
+
+/** The loan a new project starts with, and the one « oui, un pret » brings back. */
+export const PRET_PAR_DEFAUT: NonNullable<AssetInput['loan']> = {
+  principal: '180000.00',
+  interestRate: 0.035,
+  insuranceRate: 0.0035,
+  durationMonths: 240,
+  startDate: '2026-01-01T00:00:00.000Z',
+  type: 'AMORTISSABLE',
+};
 
 const DEFAULT_ASSET: AssetInput = {
   type: 'REAL_ESTATE',
@@ -32,14 +43,7 @@ const DEFAULT_ASSET: AssetInput = {
   chargesYearly: '2400.00',
   propertyTax: '1200.00',
   landRatio: 0.15,
-  loan: {
-    principal: '180000.00',
-    interestRate: 0.035,
-    insuranceRate: 0.0035,
-    durationMonths: 240,
-    startDate: '2026-01-01T00:00:00.000Z',
-    type: 'AMORTISSABLE',
-  },
+  loan: PRET_PAR_DEFAUT,
 };
 
 const DEFAULT_PARAMS: SimulationParams = {
@@ -342,6 +346,22 @@ interface ScenarioStore extends SharedInputs {
   /** Set by the other page when it hands its inputs over: run as soon as the page opens. */
   lancerALArrivee: boolean;
   setLancerALArrivee: (v: boolean) => void;
+
+  // ── Page navigation (store/parcoursImmo.ts) ────────────────────────────────
+  /** The saved scenarios, the step-by-step entry, or the results. */
+  vue: VueLocatif;
+  etape: EtapeImmoId;
+  /** Steps already opened: the bar marks them, and their alerts. */
+  etapesVues: EtapeImmoId[];
+  /** The saved scenario these inputs come from, if any: « Enregistrer » updates it. */
+  scenarioCourant: { id: string; nom: string } | null;
+  setVue: (v: VueLocatif) => void;
+  setEtape: (e: EtapeImmoId) => void;
+  setScenarioCourant: (s: { id: string; nom: string } | null) => void;
+  /** A blank project: default inputs, no result, first step. */
+  nouveau: () => void;
+  /** A saved project: its inputs, straight to the results, computed on arrival. */
+  ouvrir: (data: Partial<SharedInputs>, scenario: { id: string; nom: string }) => void;
 }
 
 /**
@@ -350,13 +370,51 @@ interface ScenarioStore extends SharedInputs {
  * store through `StoreLocatifContext` (store/storeLocatif.ts).
  */
 function creerStoreLocatif(initial: { associes: AssocieInput[]; activeProfile: ScenarioProfile }) {
+  const saisieInitiale = {
+    userProfile: DEFAULT_PROFILE,
+    asset: DEFAULT_ASSET,
+    associes: initial.associes,
+    params: DEFAULT_PARAMS,
+    managementMode: 'EN_LIGNE' as ManagementMode,
+    costOverrides: EMPTY_OVERRIDES,
+  };
   return create<ScenarioStore>((set) => ({
-  userProfile: DEFAULT_PROFILE,
-  asset: DEFAULT_ASSET,
-  associes: initial.associes,
-  params: DEFAULT_PARAMS,
-  managementMode: 'EN_LIGNE',
-  costOverrides: EMPTY_OVERRIDES,
+  vue: 'accueil',
+  etape: 'projet',
+  etapesVues: [],
+  scenarioCourant: null,
+  setVue: (vue) => set({ vue }),
+  setEtape: (etape) =>
+    set((s) => ({ etape, etapesVues: s.etapesVues.includes(etape) ? s.etapesVues : [...s.etapesVues, etape] })),
+  setScenarioCourant: (scenarioCourant) => set({ scenarioCourant }),
+  nouveau: () =>
+    set({
+      ...saisieInitiale,
+      results: EMPTY_RESULTS,
+      vue: 'parcours',
+      etape: 'projet',
+      etapesVues: ['projet'],
+      scenarioCourant: null,
+      lancerALArrivee: false,
+    }),
+  ouvrir: (data, scenario) =>
+    set((s) => ({
+      ...saisieInitiale,
+      userProfile: data.userProfile ?? saisieInitiale.userProfile,
+      asset: data.asset ?? saisieInitiale.asset,
+      associes: data.associes ?? saisieInitiale.associes,
+      params: data.params ?? saisieInitiale.params,
+      managementMode: data.managementMode ?? saisieInitiale.managementMode,
+      costOverrides: data.costOverrides ? { ...EMPTY_OVERRIDES, ...data.costOverrides } : EMPTY_OVERRIDES,
+      results: EMPTY_RESULTS,
+      vue: 'resultats',
+      etapesVues: ETAPES_IMMO.map((e) => e.id),
+      scenarioCourant: scenario,
+      lancerALArrivee: true,
+      activeProfile: s.activeProfile,
+    })),
+
+  ...saisieInitiale,
   results: EMPTY_RESULTS,
   activeProfile: initial.activeProfile,
   lancerALArrivee: false,
@@ -447,14 +505,7 @@ export function selectSharedInputs(s: ScenarioStore): SharedInputs {
   };
 }
 
-export function partsTotal(associes: AssocieInput[]): number {
-  return associes.reduce((sum, a) => sum + a.partsPercent, 0);
-}
-
-export function partsAreValid(associes: AssocieInput[]): boolean {
-  if (associes.length === 0) return true;
-  return Math.abs(partsTotal(associes) - 1) < 1e-6;
-}
+export { partsAreValid, partsTotal } from './partsAssocies';
 
 export function hasAnyResult(
   results: Record<ScenarioProfile, SimulationResult | null>,

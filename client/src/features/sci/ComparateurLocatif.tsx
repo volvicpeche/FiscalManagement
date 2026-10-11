@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ScenarioProfile } from '@shared/schemas.js';
 import type { ScenarioKind } from '@shared/scenario.js';
-import type { SharedInputs, StoreLocatif } from '@/store/scenarioStore';
+import type { StoreLocatif } from '@/store/scenarioStore';
 import { selectSharedInputs, buildScenario, partsAreValid, hasAnyResult } from '@/store/scenarioStore';
 import { StoreLocatifContext, useStoreLocatif } from '@/store/storeLocatif';
 import { naviguer, type Route } from '@/lib/router';
@@ -29,7 +29,12 @@ import {
   BilanCard,
 } from '@/features/dashboard';
 import { SidebarLayout } from '@/components/SidebarLayout';
-import { ScenarioManager } from '@/features/scenarios';
+import { BarreEtapes } from '@/components/BarreEtapes';
+import { alertes, etapesVisibles } from '@/store/parcoursImmo';
+import { AccueilScenarios } from '@/features/locatif/AccueilScenarios';
+import { BarreScenario } from '@/features/locatif/BarreScenario';
+import { Leviers } from '@/features/locatif/Leviers';
+import { ParcoursImmo } from '@/features/locatif/ParcoursImmo';
 
 function Panel({ children }: { children: React.ReactNode }) {
   return <div className="bg-white rounded-lg border p-4">{children}</div>;
@@ -57,6 +62,8 @@ export interface ComparateurProps {
   kind: ScenarioKind;
   /** The setups this page compares, in display order. */
   profils: ScenarioProfile[];
+  /** The page's name, on the scenario list. */
+  titre: string;
   /** One line above the comparison: what the page is for. */
   intro: React.ReactNode;
   autre: AutrePage;
@@ -65,7 +72,9 @@ export interface ComparateurProps {
 /**
  * Several setups compared from one set of inputs. Each page built on it keeps
  * its own store (« Investir en direct », « Investir en societe »); the forms
- * reach it through StoreLocatifContext. A folded box compares with the other
+ * reach it through StoreLocatifContext. Three views (`store.vue`): the saved
+ * scenarios, the step-by-step entry, and the results with a few levers that
+ * re-run the comparison on their own. A folded box compares with the other
  * page, and hands the inputs over when they differ.
  */
 export function ComparateurLocatif(props: ComparateurProps) {
@@ -76,7 +85,7 @@ export function ComparateurLocatif(props: ComparateurProps) {
   );
 }
 
-function Contenu({ kind, profils, intro, autre }: ComparateurProps) {
+function Contenu({ kind, profils, titre, intro, autre }: ComparateurProps) {
   const store = useStoreLocatif();
   const { associes, setResult } = store;
   const [tab, setTab] = useState<TabKey>('synthese');
@@ -105,15 +114,19 @@ function Contenu({ kind, profils, intro, autre }: ComparateurProps) {
   // The projection table opens with the panel folded because it needs the
   // width, but the choice stays the user's from then on.
   const [panelOpen, setPanelOpen] = useState(true);
-  const showForms = panelOpen || !hasAnyResult(results, profils);
 
   const selectTab = (key: TabKey) => {
     setTab(key);
     setPanelOpen(key === 'synthese');
   };
 
+  // The inputs last computed: a lever re-runs only when they really changed.
+  const empreinte = JSON.stringify(selectSharedInputs(store));
+  const dernierCalcul = useRef(empreinte);
+
   const handleRun = () => {
     const shared = selectSharedInputs(store);
+    dernierCalcul.current = JSON.stringify(shared);
     for (const profile of profils) {
       simulations[profile].mutate(buildScenario(profile, shared), {
         onSuccess: (data) => setResult(profile, data),
@@ -121,7 +134,7 @@ function Contenu({ kind, profils, intro, autre }: ComparateurProps) {
     }
   };
 
-  // Arriving from the other page with its inputs: run at once, as asked there.
+  // A saved scenario opened, or the other page's inputs handed over: run at once.
   useEffect(() => {
     if (store.lancerALArrivee && validParts) {
       store.setLancerALArrivee(false);
@@ -130,18 +143,70 @@ function Contenu({ kind, profils, intro, autre }: ComparateurProps) {
     // Once, on arrival: the flag is cleared before running.
   }, [store.lancerALArrivee]);
 
+  // On the results, every change re-runs the comparison a moment later.
+  // Elsewhere the inputs move freely: the last step's button runs.
+  useEffect(() => {
+    if (store.vue !== 'resultats') {
+      dernierCalcul.current = empreinte;
+      return;
+    }
+    if (empreinte === dernierCalcul.current || !validParts) return;
+    const t = setTimeout(handleRun, 600);
+    return () => clearTimeout(t);
+  }, [empreinte, store.vue, validParts]);
+
   /** Copies these inputs to the other page, which runs on arrival. */
   const comparerAilleurs = () => {
     const cible = autre.store.getState();
     cible.hydrate(selectSharedInputs(store));
+    cible.setScenarioCourant(null);
+    cible.setVue('resultats');
     cible.setLancerALArrivee(true);
     naviguer(autre.route);
   };
 
+  if (store.vue === 'accueil') {
+    return <AccueilScenarios kind={kind} titre={titre} intro={intro} />;
+  }
+
+  if (store.vue === 'parcours') {
+    return (
+      <div className="space-y-4">
+        <div className="mx-auto max-w-4xl">
+          <BarreScenario kind={kind} />
+        </div>
+        <ParcoursImmo
+          societe={kind === 'sci'}
+          profils={profils}
+          onComparer={() => {
+            handleRun();
+            store.setVue('resultats');
+            window.scrollTo({ top: 0 });
+          }}
+        />
+      </div>
+    );
+  }
+
+  const showForms = panelOpen || !hasAnyResult(results, profils);
+
   return (
-    <>
+    <div className="space-y-4">
+      <BarreScenario kind={kind} />
+      <BarreEtapes
+        etapes={etapesVisibles(store)}
+        courante="resultat"
+        vues={etapesVisibles(store).map((e) => e.id)}
+        avecAlertes={(id) => alertes(id, store).length > 0}
+        onSelect={(id) => {
+          store.setEtape(id);
+          store.setVue('parcours');
+          window.scrollTo({ top: 0 });
+        }}
+      />
+
       {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
           Erreur: {error.message}
         </div>
       )}
@@ -151,39 +216,36 @@ function Contenu({ kind, profils, intro, autre }: ComparateurProps) {
         onToggle={() => setPanelOpen(!panelOpen)}
         sidebar={
           <>
-            <Panel>
-              <ScenarioManager
-                kind={kind}
-                getData={() => selectSharedInputs(store) as unknown as Record<string, unknown>}
-                onLoad={(data) => store.hydrate(data as Partial<SharedInputs>)}
-              />
-            </Panel>
-            <Panel><AssociesForm /></Panel>
-            <Panel><AssetForm /></Panel>
-            <Panel><LoanForm /></Panel>
-            <Panel><CostsForm profils={profils} /></Panel>
-            <Panel><SuccessionForm /></Panel>
-            <Panel><UserProfileForm /></Panel>
-            <Panel><ParamsForm /></Panel>
+            <Panel><Leviers /></Panel>
+            <details className="bg-white rounded-lg border">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-gray-900">
+                Vue detaillee : toutes les saisies
+              </summary>
+              <div className="space-y-4 border-t p-4">
+                <AssociesForm titre={kind === 'sci' ? 'Associes' : 'Proprietaires'} />
+                <AssetForm />
+                <LoanForm />
+                <CostsForm profils={profils} />
+                <SuccessionForm />
+                <UserProfileForm />
+                <ParamsForm />
+              </div>
+            </details>
           </>
         }
       >
         <div className="space-y-6">
-          <div className="text-sm text-gray-600">{intro}</div>
-          <div className="space-y-1">
-            <button
-              onClick={handleRun}
-              disabled={isPending || !validParts}
-              className="w-full px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isPending ? 'Calcul en cours...' : 'Comparer les montages'}
-            </button>
-            {!validParts && (
-              <p className="text-xs text-red-600 text-center">
-                La repartition des parts doit totaliser 100 %.
-              </p>
-            )}
+          <div className="flex items-start justify-between gap-4">
+            <div className="text-sm text-gray-600">{intro}</div>
+            <span className="shrink-0 text-xs text-gray-400" aria-live="polite">
+              {isPending ? 'Calcul en cours…' : ''}
+            </span>
           </div>
+          {!validParts && (
+            <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              La repartition des parts doit totaliser 100 % : le calcul attend.
+            </p>
+          )}
 
           <ComparaisonAutrePage mesProfils={profils} autre={autre} onComparer={comparerAilleurs} />
 
@@ -221,9 +283,7 @@ function Contenu({ kind, profils, intro, autre }: ComparateurProps) {
             </>
           ) : (
             <div className="bg-white rounded-lg border p-12 text-center text-gray-400">
-              <p className="text-lg">
-                Cliquez sur « Comparer les montages » pour lancer la simulation
-              </p>
+              <p className="text-lg">{isPending ? 'Calcul en cours…' : 'Pas encore de resultat'}</p>
               <p className="text-sm mt-2">
                 {profils.map((p) => PROFILE_META[p].label).join(' · ')}, sur {store.params.horizonYears} ans
               </p>
@@ -231,6 +291,6 @@ function Contenu({ kind, profils, intro, autre }: ComparateurProps) {
           )}
         </div>
       </SidebarLayout>
-    </>
+    </div>
   );
 }
